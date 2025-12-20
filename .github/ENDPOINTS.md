@@ -35,3 +35,6 @@ uvicorn app.main:app --reload --port 8000
 Notes:
 - Behaviour is deterministic and side-effect free (no storage).
 - Validation is handled with Pydantic to preserve a stable JSON contract.
+
+## Notes
+This document describes the initial MVP endpoints and may evolve as the system grows.
