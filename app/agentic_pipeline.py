@@ -128,20 +128,45 @@ def run_agentic_action(
         log_action_result(result)
         return (result, None)
     
-    # Step 3C: AG-03 — Validate action version (skip if already routed successfully)
+    # Step 3: Get action metadata from registry (ALWAYS, not skipped)
     action_meta = None
-    if not action_routed:
-        try:
-            registry = get_action_registry()
-            action_meta = registry.actions.get(action)
-            
-            if action_meta is None:
+    try:
+        registry = get_action_registry()
+        action_meta = registry.actions.get(action)
+    except Exception:
+        # Registry not available - proceed with routing only
+        pass
+    
+    # Step 3A: Validate action exists (if we have registry)
+    if action_meta is None and not action_routed:
+        # Action not in registry and not routed successfully
+        status = "BLOCKED"
+        reason_codes = ["ACTION_UNKNOWN"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version="unknown",
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+    
+    # Step 3B: Validate action_version (ALWAYS for non-legacy, never skip)
+    if action_meta is not None:
+        action_version = action_meta.get("action_version")
+        if action_version is None:
+            if action not in LEGACY_ACTIONS:
                 status = "BLOCKED"
-                reason_codes = ["ACTION_UNKNOWN"]
+                reason_codes = ["ACTION_VERSION_MISSING"]
                 result = ActionResult(
                     action=action,
                     executor_id=executor_id,
-                    executor_version=executor_version,
+                    executor_version="unknown",
                     status=status,
                     reason_codes=reason_codes,
                     input_digest=input_digest,
@@ -151,51 +176,13 @@ def run_agentic_action(
                 )
                 log_action_result(result)
                 return (result, None)
-            
-            # Check action_version (strict for new actions, lenient for legacy)
-            action_version = action_meta.get("action_version")
-            if action_version is None:
-                if action not in LEGACY_ACTIONS:
-                    status = "BLOCKED"
-                    reason_codes = ["ACTION_VERSION_MISSING"]
-                    result = ActionResult(
-                        action=action,
-                        executor_id=executor_id,
-                        executor_version=executor_version,
-                        status=status,
-                        reason_codes=reason_codes,
-                        input_digest=input_digest,
-                        output_digest=output_digest,
-                        trace_id=trace_id,
-                        ts_utc=datetime.now(timezone.utc),
-                    )
-                    log_action_result(result)
-                    return (result, None)
-            elif not _is_valid_semver(action_version):
-                status = "BLOCKED"
-                reason_codes = ["ACTION_VERSION_INVALID"]
-                result = ActionResult(
-                    action=action,
-                    executor_id=executor_id,
-                    executor_version=executor_version,
-                    status=status,
-                    reason_codes=reason_codes,
-                    input_digest=input_digest,
-                    output_digest=output_digest,
-                    trace_id=trace_id,
-                    ts_utc=datetime.now(timezone.utc),
-                )
-                log_action_result(result)
-                return (result, None)
-        
-        except Exception as e:
-            # If action_meta lookup fails, treat as unknown action
+        elif not _is_valid_semver(action_version):
             status = "BLOCKED"
-            reason_codes = ["ACTION_UNKNOWN"]
+            reason_codes = ["ACTION_VERSION_INVALID"]
             result = ActionResult(
                 action=action,
                 executor_id=executor_id,
-                executor_version=executor_version,
+                executor_version="unknown",
                 status=status,
                 reason_codes=reason_codes,
                 input_digest=input_digest,
@@ -210,14 +197,19 @@ def run_agentic_action(
     executor = None
     try:
         executor = get_executor(executor_id)
-        executor_version = executor.version
+        # Ensure executor_version is a string (not MagicMock)
+        exec_version_raw = getattr(executor, "version", None)
+        if isinstance(exec_version_raw, str):
+            executor_version = exec_version_raw
+        else:
+            executor_version = None
     except UnknownExecutorError:
         status = "BLOCKED"
         reason_codes = ["EXECUTOR_NOT_FOUND"]
         result = ActionResult(
             action=action,
             executor_id=executor_id,
-            executor_version=executor_version,
+            executor_version="unknown",
             status=status,
             reason_codes=reason_codes,
             input_digest=input_digest,
@@ -239,7 +231,7 @@ def run_agentic_action(
                 result = ActionResult(
                     action=action,
                     executor_id=executor_id,
-                    executor_version=executor_version,
+                    executor_version="unknown",
                     status=status,
                     reason_codes=reason_codes,
                     input_digest=input_digest,
@@ -266,23 +258,43 @@ def run_agentic_action(
                 log_action_result(result)
                 return (result, None)
 
-    # Step 3D: Validate executor capabilities (AG-03)
+    # Step 4B: Validate executor capabilities (AG-03)
     # Check that executor has all required_capabilities
     if action_meta and action not in LEGACY_ACTIONS:
         required_capabilities = action_meta.get("required_capabilities", [])
         if required_capabilities:
-            executor_capabilities = getattr(executor, "capabilities", None) or []
-            normalized_executor_caps = _normalize_capabilities(executor_capabilities)
-            normalized_required_caps = _normalize_capabilities(required_capabilities)
+            executor_capabilities = getattr(executor, "capabilities", None)
             
-            missing_capabilities = set(normalized_required_caps) - set(normalized_executor_caps)
-            if missing_capabilities:
+            # If executor has no capabilities attribute at all -> MISSING
+            if executor_capabilities is None:
                 status = "BLOCKED"
                 reason_codes = ["EXECUTOR_CAPABILITY_MISSING"]
                 result = ActionResult(
                     action=action,
                     executor_id=executor_id,
-                    executor_version=executor_version,
+                    executor_version=executor_version or "unknown",
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+            
+            # If executor has capabilities but insufficient -> MISMATCH
+            normalized_executor_caps = _normalize_capabilities(executor_capabilities)
+            normalized_required_caps = _normalize_capabilities(required_capabilities)
+
+            missing_capabilities = set(normalized_required_caps) - set(normalized_executor_caps)
+            if missing_capabilities:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_CAPABILITY_MISMATCH"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version or "unknown",
                     status=status,
                     reason_codes=reason_codes,
                     input_digest=input_digest,
