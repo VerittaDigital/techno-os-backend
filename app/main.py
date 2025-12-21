@@ -24,7 +24,8 @@ from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
 from app.contracts.gate_v1 import GateDecision, GateInput
-from app.decision_record import DecisionRecord
+from app.decision_record import DecisionRecord, make_input_digest
+from app.digests import sha256_json_or_none
 from app.gate_engine import evaluate_gate as evaluate_gate
 from app.schemas import ProcessRequest, ProcessResponse
 
@@ -51,12 +52,8 @@ async def gate_request(request: Request) -> Dict[str, Any]:
 
     action = "process"
     
-    # Compute input digest
-    try:
-        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        input_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    except (TypeError, ValueError):
-        input_digest = ""
+    # Compute input digest using canonical rule (None for non-JSON, privacy-first)
+    input_digest = sha256_json_or_none(body)
 
     # Build gate input and evaluate
     try:
