@@ -26,6 +26,7 @@ from app.action_contracts import ActionRequest, ActionResult
 from app.action_registry import get_action_registry
 from app.action_router import route_action as route_action_deterministic
 from app.audit_log import AuditLogError
+from app.digests import sha256_json_or_none
 from app.executors.registry import get_executor
 from app.executors.registry import UnknownExecutorError
 
@@ -82,25 +83,21 @@ def _compare_semver(version_a: str, version_b: str) -> int:
 
 
 def _compute_input_digest(payload: Dict[str, Any]) -> Optional[str]:
-    """Compute SHA256 digest of payload. Return None if payload is not JSON-serializable."""
-    try:
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    except (TypeError, ValueError):
-        # Payload contains non-JSON-serializable objects
-        return None
+    """Compute SHA256 digest of payload. Return None if payload is not JSON-serializable.
+    
+    Uses canonical sha256_json_or_none() for consistency with Gate.
+    """
+    return sha256_json_or_none(payload)
 
 
 def _compute_output_digest(output: Any) -> Optional[str]:
-    """Compute SHA256 digest of output, or None if no output."""
+    """Compute SHA256 digest of output, or None if no output.
+    
+    Uses canonical sha256_json_or_none() for consistency with Gate.
+    """
     if output is None:
         return None
-    try:
-        canonical = json.dumps(output, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    except TypeError:
-        # Non-serializable output
-        return None
+    return sha256_json_or_none(output)
 
 
 def _safe_log_action_result(result: ActionResult) -> ActionResult:

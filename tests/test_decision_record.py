@@ -142,9 +142,8 @@ class TestInputDigest:
         obj = CustomObj()
         digest = make_input_digest(obj)
 
-        # Should not raise, should produce valid hex
-        assert len(digest) == 64
-        assert all(c in "0123456789abcdef" for c in digest)
+        # P1.4: Non-JSON-serializable objects return None (privacy-first, no str() fallback)
+        assert digest is None
 
     def test_digest_different_payloads_differ(self):
         """Different payloads produce different digests."""

@@ -5,13 +5,13 @@ All fields are non-sensitive; payload digest only (no raw data).
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Literal
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.digests import sha256_json_or_none
 
 
 class DecisionRecord(BaseModel):
@@ -22,7 +22,7 @@ class DecisionRecord(BaseModel):
     - profile_hash: fingerprint of the policy profile used (or empty)
     - matched_rules: names of rules that ran (without being denied)
     - reason_codes: list of GateReasonCode values that led to the decision
-    - input_digest: SHA256 hex of canonicalized input (never raw data)
+    - input_digest: SHA256 hex of canonicalized input (None if non-JSON, privacy-first)
     - trace_id: UUID linking this decision to HTTP request/log context
     - ts_utc: datetime (timezone-aware UTC) when decision was made
     """
@@ -34,7 +34,7 @@ class DecisionRecord(BaseModel):
     profile_hash: str
     matched_rules: List[str]
     reason_codes: List[str]
-    input_digest: str
+    input_digest: Optional[str]  # ← Can be None for non-JSON payloads
     trace_id: str
     ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -58,24 +58,16 @@ class DecisionRecord(BaseModel):
         return v
 
 
-def make_input_digest(payload: Any) -> str:
+def make_input_digest(payload: Any) -> Optional[str]:
     """Compute SHA256 digest of canonicalized input.
 
     - Sorts dict keys and uses compact JSON separators for determinism
     - Returns hex digest of canonical JSON string
-    - If not JSON-serializable, uses str() representation as fallback
+    - If not JSON-serializable, returns None (privacy-first, no str() fallback)
     - Ensures no loss of Unicode characters (ensure_ascii=False)
+    
+    Rule (P1.4):
+        Non-JSON payloads get None (not str() fallback).
+        This aligns with pipeline digest rule.
     """
-    try:
-        canonical = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        )
-    except (TypeError, ValueError):
-        # Fallback: non-JSON-serializable values use str representation
-        canonical = str(payload)
-
-    blob = canonical.encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()
+    return sha256_json_or_none(payload)
