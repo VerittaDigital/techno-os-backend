@@ -1,0 +1,362 @@
+"""
+Agentic pipeline with V-COF governance (AG-03: Action Versioning & Executor Capabilities).
+
+This pipeline orchestrates:
+1. Payload validation (Gate)
+2. Action version check (AG-03)
+3. Executor resolution (AG-03) 
+4. Executor capability & version check (AG-03)
+5. Payload limit enforcement
+6. Executor invocation
+7. Audit logging
+
+Supports legacy actions for retrocompatibility while enforcing AG-03 for new actions.
+"""
+
+import hashlib
+import json
+import re
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Tuple
+
+from app.action_audit_log import log_action_result
+from app.action_registry import get_action_registry
+from app.action_contracts import ActionResult
+from app.executors.registry import get_executor
+from app.executors.registry import UnknownExecutorError
+
+
+# Legacy actions exempt from strict AG-03 version/capability checks
+LEGACY_ACTIONS = {"process"}
+
+# Semver pattern: X.Y.Z
+SEMVER_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+
+def route_action(action: str) -> str:
+    """Map action name to executor_id via ActionRegistry.
+    
+    Args:
+        action: action name
+    
+    Returns:
+        executor_id from action_meta["executor"]
+    
+    Raises:
+        KeyError if action not in registry
+    """
+    registry = get_action_registry()
+    action_meta = registry.actions.get(action)
+    if action_meta is None:
+        raise KeyError(f"Action '{action}' not in registry")
+    return action_meta["executor"]
+
+
+def _normalize_capabilities(caps):
+    """Normalize capability list (uppercase, deduplicate, sort)."""
+    if not caps:
+        return []
+    return sorted(set(c.strip().upper() for c in caps if c.strip()))
+
+
+def _is_valid_semver(version_str):
+    """Check if version string matches semantic versioning (X.Y.Z)."""
+    return bool(SEMVER_PATTERN.match(version_str))
+
+
+def _compute_input_digest(payload: Dict[str, Any]) -> str:
+    """Compute SHA256 digest of payload."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _compute_output_digest(output: Any) -> Optional[str]:
+    """Compute SHA256 digest of output, or None if no output."""
+    if output is None:
+        return None
+    try:
+        canonical = json.dumps(output, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    except TypeError:
+        # Non-serializable output
+        return None
+
+
+def run_agentic_action(
+    action: str,
+    payload: Dict[str, Any],
+    trace_id: str,
+    executor_id: str = "unknown",
+    executor_version: str = "unknown",
+) -> Tuple[ActionResult, Optional[Any]]:
+    """
+    Run action through governance pipeline.
+    
+    Returns:
+        (ActionResult, output) where output is None on BLOCKED/FAILED
+    """
+    
+    # Compute input digest for audit
+    input_digest = _compute_input_digest(payload)
+    output_digest = None
+    output = None
+    
+    # Step 3C: AG-03 — Validate action version
+    try:
+        registry = get_action_registry()
+        action_meta = registry.actions.get(action)
+        
+        if action_meta is None:
+            status = "BLOCKED"
+            reason_codes = ["ACTION_UNKNOWN"]
+            result = ActionResult(
+                action=action,
+                executor_id=executor_id,
+                executor_version=executor_version,
+                status=status,
+                reason_codes=reason_codes,
+                input_digest=input_digest,
+                output_digest=output_digest,
+                trace_id=trace_id,
+                ts_utc=datetime.now(timezone.utc),
+            )
+            log_action_result(result)
+            return (result, None)
+        
+        # Check action_version (strict for new actions, lenient for legacy)
+        action_version = action_meta.get("action_version")
+        if action_version is None:
+            if action not in LEGACY_ACTIONS:
+                status = "BLOCKED"
+                reason_codes = ["ACTION_VERSION_MISSING"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+        elif not _is_valid_semver(action_version):
+            status = "BLOCKED"
+            reason_codes = ["ACTION_VERSION_INVALID"]
+            result = ActionResult(
+                action=action,
+                executor_id=executor_id,
+                executor_version=executor_version,
+                status=status,
+                reason_codes=reason_codes,
+                input_digest=input_digest,
+                output_digest=output_digest,
+                trace_id=trace_id,
+                ts_utc=datetime.now(timezone.utc),
+            )
+            log_action_result(result)
+            return (result, None)
+    
+    except Exception as e:
+        # If action_meta lookup fails, treat as unknown action
+        status = "BLOCKED"
+        reason_codes = ["ACTION_UNKNOWN"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+
+    # Step 4: Resolve executor via registry
+    try:
+        executor = get_executor(executor_id)
+        executor_version = executor.version
+    except UnknownExecutorError:
+        status = "BLOCKED"
+        reason_codes = ["EXECUTOR_NOT_FOUND"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+
+    # Step 4A: Validate executor version (AG-03)
+    # Only check min_executor_version for non-legacy actions
+    if action_meta and action not in LEGACY_ACTIONS:
+        min_executor_version = action_meta.get("min_executor_version")
+        if min_executor_version is not None:
+            if executor_version is None:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_VERSION_MISSING"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+            elif executor_version < min_executor_version:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+
+    # Step 3D: Validate executor capabilities (AG-03)
+    # Check that executor has all required_capabilities
+    if action_meta and action not in LEGACY_ACTIONS:
+        required_capabilities = action_meta.get("required_capabilities", [])
+        if required_capabilities:
+            executor_capabilities = getattr(executor, "capabilities", None) or []
+            normalized_executor_caps = _normalize_capabilities(executor_capabilities)
+            normalized_required_caps = _normalize_capabilities(required_capabilities)
+            
+            missing_capabilities = set(normalized_required_caps) - set(normalized_executor_caps)
+            if missing_capabilities:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_CAPABILITY_MISSING"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+
+    # Step 5: Enforce payload limits
+    try:
+        from app.payload_limits import check_payload_limits, LimitExceeded
+        check_payload_limits(
+            payload,
+            max_bytes=executor.limits.max_payload_bytes,
+            max_depth_limit=executor.limits.max_depth,
+            max_list_limit=executor.limits.max_list_items,
+        )
+    except TypeError:
+        # Non-JSON-serializable payload
+        status = "BLOCKED"
+        reason_codes = ["NON_JSON_PAYLOAD"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+    except LimitExceeded:
+        status = "BLOCKED"
+        reason_codes = ["LIMIT_EXCEEDED"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+
+    # Step 6: Execute executor
+    try:
+        output = executor.execute(payload)
+    except TimeoutError:
+        # Simulated timeout (for tests; real timeout requires async)
+        status = "FAILED"
+        reason_codes = ["EXECUTOR_TIMEOUT"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+    except Exception as e:
+        # Any other exception during execution
+        status = "FAILED"
+        reason_codes = ["EXECUTOR_EXCEPTION"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest,
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+
+    # Step 7: Success — Compute output digest and return
+    output_digest = _compute_output_digest(output)
+    status = "SUCCESS"
+    reason_codes = []
+    result = ActionResult(
+        action=action,
+        executor_id=executor_id,
+        executor_version=executor_version,
+        status=status,
+        reason_codes=reason_codes,
+        input_digest=input_digest,
+        output_digest=output_digest,
+        trace_id=trace_id,
+        ts_utc=datetime.now(timezone.utc),
+    )
+    log_action_result(result)
+    return (result, output)

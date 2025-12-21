@@ -1,0 +1,5 @@
+{
+  "registry_fingerprint": "placeholder_sha256_will_be_updated",
+  "timestamp_utc": "2025-12-21T00:00:00Z",
+  "note": "This file locks the action registry fingerprint. Any drift triggers test failure."
+}

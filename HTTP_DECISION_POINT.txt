@@ -1,0 +1,301 @@
+================================================================================
+AUDITORIA: PONTO DE DECISÃO HTTP PARA ACTION_RESULT
+Data: 21 de dezembro de 2025
+Objetivo: Localizar onde ActionResult é convertido em resposta HTTP
+================================================================================
+
+PARTE 1: LOCALIZAÇÃO DO ENDPOINT /process
+================================================================================
+
+ENDPOINT DEFINITION
+PATH: app/main.py
+SYMBOL: process (função)
+LINE: 121
+EVIDENCE:
+    @app.post("/process", tags=["processing"])
+    def process(request: Request, _: str = Depends(gate_request)):
+
+DETALHE:
+- POST endpoint em /process
+- Dependency injection: gate_request (função que valida gate)
+- Retorna dict com: status, trace_id, action, output_digest
+- Sem ProcessResponse (schema antigo não é usado aqui)
+- HTTP status code: IMPLÍCITO (FastAPI default 200 para dict retornado)
+
+STATUS: Encontrado
+
+PARTE 2: FLUXO DO ENDPOINT /process
+================================================================================
+
+PASSO 1: GATE EVALUATION (Dependency)
+PATH: app/main.py
+SYMBOL: gate_request (função)
+LINE: 29-113
+EVIDÊNCIA:
+    async def gate_request(request: Request) -> str:
+        trace_id = str(uuid.uuid4())
+        # ... gate logic ...
+        if gate_result.decision.value == "DENY":
+            raise HTTPException(status_code=403, detail="Forbidden")
+        request.state.cached_payload = payload_dict
+        request.state.trace_id = trace_id
+        return trace_id
+
+CONTEXTO:
+- Se DENY: HTTPException(403) lançada, endpoint nunca executado
+- Se ALLOW: request.state preenchido, trace_id retornado, endpoint executado
+
+HTTP STATUS RESULT: 403 se DENY (via HTTPException)
+
+PASSO 2: AGENTIC PIPELINE EXECUTION
+PATH: app/main.py
+SYMBOL: process (função)
+LINE: 144-146
+EVIDENCE:
+    result, _ = run_agentic_action(
+        action="process",
+        payload=cached_payload,
+        trace_id=trace_id,
+    )
+
+CONTEXTO:
+- run_agentic_action sempre retorna (ActionResult, None)
+- Nunca levanta exceção
+- result.status pode ser: SUCCESS, FAILED, BLOCKED
+- result.reason_codes pode conter: ACTION_UNKNOWN, NON_JSON_PAYLOAD, LIMIT_EXCEEDED, PROFILE_ACTION_MISMATCH, EXECUTOR_TIMEOUT, EXECUTOR_EXCEPTION, etc.
+
+HTTP STATUS RESULT: Nenhuma influência (ActionResult não afeta HTTP status hoje)
+
+PASSO 3: HTTP RESPONSE CONSTRUCTION
+PATH: app/main.py
+SYMBOL: process (função)
+LINE: 148-154
+EVIDENCE:
+    return {
+        "status": result.status,
+        "trace_id": trace_id,
+        "action": "process",
+        "output_digest": result.output_digest,
+    }
+
+CONTEXTO:
+- Dict retornado como dict simples (Pydantic converte automaticamente para JSON)
+- FastAPI retorna HTTP 200 por default (implícito)
+- Nenhuma verificação condicional de result.status, result.reason_codes
+- Nenhuma HTTPException lançada baseado em ActionResult
+
+HTTP STATUS RESULT: SEMPRE 200 (implícito, não condicional)
+
+PARTE 3: BUSCA POR LEITURA DE ACTIONRESULT.STATUS
+================================================================================
+
+OCORRÊNCIA 1: Docstring do endpoint
+PATH: app/main.py
+LINE: 131
+EVIDENCE:
+    - status: SUCCESS/FAILED/BLOCKED
+
+CONTEXTO:
+- Apenas documentação, não lógica
+
+OCORRÊNCIA 2: Retorno do dict
+PATH: app/main.py
+LINE: 149
+EVIDENCE:
+    "status": result.status,
+
+CONTEXTO:
+- result.status serializado no response body
+- Não afeta HTTP status code
+- Cliente recebe {"status": "BLOCKED", ...} com HTTP 200
+
+STATUS: NENHUMA LEITURA CONDICIONAL ENCONTRADA
+
+PARTE 4: BUSCA POR LÓGICA CONDICIONAL BASEADA EM ACTIONRESULT
+================================================================================
+
+PROCURA: if result.status == ...
+RESULTADO: NOT FOUND
+
+PROCURA: if result.reason_codes contains ...
+RESULTADO: NOT FOUND
+
+PROCURA: if "PROFILE_ACTION_MISMATCH" in result.reason_codes
+RESULTADO: NOT FOUND
+
+PROCURA: if result.status != "SUCCESS"
+RESULTADO: NOT FOUND
+
+CONCLUSÃO: Nenhuma lógica condicional baseada em ActionResult existe hoje
+
+PARTE 5: DECISÃO DE HTTP STATUS CODE HOJE
+================================================================================
+
+CENÁRIO 1: Cliente faz POST /process com payload válido
+PATH: app/main.py
+FLOW: gate_request sucede → run_agentic_action executado → dict retornado
+RESULT: HTTP 200
+OBSERVAÇÃO: Mesmo que result.status == "BLOCKED"
+
+CENÁRIO 2: Cliente faz POST /process, gate nega
+PATH: app/main.py
+FLOW: gate_request levanta HTTPException(403)
+RESULT: HTTP 403
+OBSERVAÇÃO: Baseado em gate, não em ActionResult
+
+CENÁRIO 3: ActionResult retorna status=FAILED
+PATH: app/main.py
+FLOW: run_agentic_action sucede com FAILED → dict retornado
+RESULT: HTTP 200
+OBSERVAÇÃO: Cliente recebe {"status": "FAILED", ...} com HTTP 200
+
+RESUMO:
+- HTTP 403: SOMENTE via Gate DENY (HTTPException)
+- HTTP 200: SEMPRE quando pipeline é executado (implícito FastAPI default)
+- ActionResult.status: NUNCA afeta HTTP status code (apenas body)
+- ActionResult.reason_codes: NUNCA lido/verificado no endpoint
+
+PARTE 6: CAMINHO RECOMENDADO PARA PROFILE_ACTION_MISMATCH → HTTP 403
+================================================================================
+
+OPÇÃO 1: Modificar endpoint /process (MENOS RECOMENDADO)
+Vantagens: Lógica no endpoint
+Desvantagens: Mistura responsabilidades, coloca HTTP decision fora do gate
+
+OPÇÃO 2: Lançar HTTPException no pipeline quando PROFILE_ACTION_MISMATCH (MENOS RECOMENDADO)
+Vantagens: Fail-fast
+Desvantagens: Perde ActionResult na auditoria, quebra fail-closed guarantee
+
+OPÇÃO 3: Extender gate_request para verificar ActionResult ANTES de retorno (RECOMENDADO)
+Vantagens:
+  - Lógica HTTP centralizada (gate)
+  - Mantém fail-closed no pipeline
+  - ActionResult continua auditado
+  - Extensível para outras reasons em futuro (AG-03)
+
+Pseudocódigo:
+    async def gate_request(...):
+        # ... existente ...
+        if gate_result.decision.value == "DENY":
+            raise HTTPException(403)
+        
+        request.state.cached_payload = payload
+        request.state.trace_id = trace_id
+        request.state.initial_gate_allowed = True  # NOVA MARCAÇÃO
+        
+        return trace_id
+    
+    @app.post("/process")
+    def process(request: Request, trace_id: str = Depends(gate_request)):
+        result, _ = run_agentic_action(...)
+        
+        # NOVA LÓGICA: Verificar se ActionResult rejeita após gate permitir
+        if result.status == "BLOCKED" and "PROFILE_ACTION_MISMATCH" in result.reason_codes:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        
+        return {...}
+
+JUSTIFICATIVA:
+- O gate permite (ALLOW)
+- Pipeline executa
+- Pipeline descobre que ação não permitida no profile (novo em AG-02)
+- HTTP 403 emitido como "permissão revogada"
+- trace_id e auditoria mantidas
+
+ALTERNATIVA 3B: Fazer em um middleware (NÃO RECOMENDADO)
+Desvantagens:
+  - Middleware tem acesso limitado a ActionResult
+  - Acoplamento com request.state
+  - Mais complexo
+
+PARTE 7: LOCALIZAÇÃO EXATA PARA INSERÇÃO
+================================================================================
+
+PONTO DE DECISÃO ÚNICO: endpoint /process, após run_agentic_action
+
+PATH: app/main.py
+SYMBOL: process (função)
+CURRENT LINE: 148 (depois que result é recebido)
+
+CÓDIGO ATUAL:
+    result, _ = run_agentic_action(...)
+    return {
+        "status": result.status,
+        ...
+    }
+
+CÓDIGO PROPOSTO (AG-03+):
+    result, _ = run_agentic_action(...)
+    
+    # AG-02+ Governance Check: if action blocked in profile, deny HTTP access
+    if result.status == "BLOCKED" and "PROFILE_ACTION_MISMATCH" in result.reason_codes:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    return {
+        "status": result.status,
+        ...
+    }
+
+JUSTIFICATIVA:
+- Ponto único de inserção (sem dispersão)
+- Mantém fail-closed (ActionResult preservado antes de exceção)
+- Auditoria completa (action_audit emitido antes do 403)
+- Extensível (outras reason_codes podem ser adicionadas aqui)
+- Não quebra comportamento existente (ALLOW → SUCCESS/FAILED continua retornando 200)
+
+ALTERNATIVA COMPLEMENTAR: Adicionar comment explicativo no gate_request
+
+PATH: app/main.py
+SYMBOL: gate_request (função)
+LINE: ~36-38 (docstring)
+
+ADICIONAR:
+    """... Dependency: gate the HTTP request and log decision.
+    
+    NOTE: Gate checks PROFILE vs ROLE (high-level).
+    ACTION_RESULT may additionally check PROFILE vs ACTION (low-level, AG-02+).
+    If action blocked after gate allows, HTTP 403 emitted in endpoint.
+    """
+
+JUSTIFICATIVA:
+- Documenta separação de responsabilidades
+- Explica que há 2 nivéis de gates (entrada + saída)
+- Facilita futura manutenção (AG-03)
+
+================================================================================
+DECISION SUMMARY
+================================================================================
+
+HOJE (AG-01):
+- HTTP status code decidido pelo Gate (DENY → 403)
+- ActionResult.status NUNCA afeta HTTP status code
+- ActionResult retornado no body com HTTP 200 sempre
+- Nenhuma verificação de reason_codes no endpoint
+
+OBSERVAÇÃO:
+- ActionResult.status é informativo (não decisório em HTTP)
+- Auditoria captura BLOCKED/FAILED, mas endpoint retorna 200 OK
+
+SE IMPLEMENTAR PROFILE_ACTION_MISMATCH → HTTP 403 (AG-03):
+- Ponto de inserção: app/main.py, função process, após run_agentic_action (linha ~148)
+- Padrão: if result.status == "BLOCKED" and "PROFILE_ACTION_MISMATCH" in reason_codes
+- Ação: raise HTTPException(status_code=403, detail="Forbidden")
+- Benefício: Auditoria emitida ANTES do 403 (fail-closed)
+
+PONTO ÚNICO RECOMENDADO:
+- PATH: app/main.py
+- SYMBOL: process (função endpoint)
+- LINE: After run_agentic_action call, before return statement (current line 148-154)
+- LÓGICA: 1-2 linhas para verificar status + reason_codes
+- NÃO modifique: gate_request (já trata HTTP 403 para Gate DENY)
+- NÃO modifique: agentic_pipeline (já emite ActionResult com BLOCKED)
+
+ISTO MANTÉM:
+- Responsabilidade clara (gate → entrada, pipeline → saída)
+- Auditoria completa (action_audit emitido antes do 403)
+- Fail-closed (ActionResult preservado)
+- Extensibilidade (outras reason_codes adicionáveis no mesmo local)
+
+================================================================================
+FIM DA AUDITORIA
+================================================================================
