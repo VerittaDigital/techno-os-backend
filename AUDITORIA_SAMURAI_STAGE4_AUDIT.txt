@@ -1,0 +1,1375 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 4: AUDIT AND TRACEABILITY ANALYSIS
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, metrológico
+ESCOPO: Audit model, trace_id propagation, digest usage, auditability gaps
+AUDIÊNCIA: Auditores de governança, responsáveis pela trilha de auditoria
+
+AVISO: Este documento mapeia EXATAMENTE como a auditoria ocorre no pipeline.
+Enfoque em integridade de eventos, não-repúdio, rastreabilidade e lacunas.
+
+================================================================================
+1. AUDIT MODEL: DUAL AUDIT TRAIL (GATE + ACTION)
+================================================================================
+
+The system implements TWO separate, independent audit logs:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ AUDIT STREAM 1: GATE AUDIT (gate_audit logger)                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Location: app/audit_log.py → logging.getLogger("gate_audit")            │
+│ Record Type: DecisionRecord (dataclass, immutable)                       │
+│ Trigger: BEFORE and AFTER gate evaluation in gate_request() dependency │
+│ Frequency: One record per HTTP request to /process endpoint             │
+│ Source of Truth: evaluate_gate(GateInput) in gate_engine.py            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+GATE AUDIT RECORD SCHEMA (DecisionRecord):
+
+  decision: Literal["ALLOW", "DENY"]
+    ↳ The gate decision outcome (ALLOW or DENY)
+    ↳ Immutable once recorded
+
+  profile_id: str
+    ↳ Action identifier that matched a profile
+    ↳ Currently hardcoded to "default" in main.py
+    ↳ NOT the profile name, but the action key used for lookup
+
+  profile_hash: str
+    ↳ Fingerprint of policy profile used (SHA256 or empty string)
+    ↳ Currently empty "" in main.py (not computed)
+    ↳ No runtime integrity check
+
+  matched_rules: List[str]
+    ↳ Names of rules that evaluated successfully (no denial)
+    ↳ Currently empty [] in main.py (not populated)
+    ↳ Evaluation details not preserved
+
+  reason_codes: List[str]
+    ↳ GateReasonCode values that led to the decision
+    ↳ Examples: ADMIN_SIGNAL_FORBIDDEN, EXTERNAL_FIELDS_NOT_ALLOWED, UNKNOWN_FIELDS_PRESENT
+    ↳ If ALLOW: typically [] (empty)
+    ↳ If DENY: must be non-empty (validated by Pydantic)
+
+  input_digest: str
+    ↳ SHA256 hex of canonicalized input payload (deterministic JSON)
+    ↳ Computed in gate_request() with sort_keys=True, separators=(",", ":")
+    ↳ Ensures no raw payload in audit log (privacy by design)
+    ↳ Non-serializable payloads → digest = "" (empty string)
+
+  trace_id: str
+    ↳ UUID linking gate decision to action execution and HTTP request
+    ↳ Generated fresh in gate_request() dependency
+    ↳ Propagated through pipeline and returned in ActionResult
+
+  ts_utc: datetime
+    ↳ Timezone-aware UTC timestamp when decision was recorded
+    ↳ Validator ensures tzinfo != None and tzinfo == timezone.utc
+    ↳ Default: datetime.now(timezone.utc) if not provided
+
+
+GATE AUDIT SERIALIZATION:
+
+  log_decision(record: DecisionRecord) calls:
+    → logger.info(record.model_dump_json())
+    → Output: Single JSON line to gate_audit logger
+    → Format: Compact (no whitespace)
+    → Content example:
+        {
+          "decision": "DENY",
+          "profile_id": "default",
+          "profile_hash": "",
+          "matched_rules": [],
+          "reason_codes": ["UNKNOWN_FIELDS_PRESENT"],
+          "input_digest": "a1b2c3d4e5f6...",
+          "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+          "ts_utc": "2025-12-21T14:30:45.123456+00:00"
+        }
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ AUDIT STREAM 2: ACTION AUDIT (action_audit logger)                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Location: app/action_audit_log.py → logging.getLogger("action_audit")  │
+│ Record Type: ActionResult (Pydantic BaseModel, immutable frozen=True)   │
+│ Trigger: MULTIPLE times per request (pre-audit + post-audit)            │
+│ Frequency: Minimum 2 records per successful pipeline execution           │
+│ Source of Truth: Execution stages in agentic_pipeline.run_agentic_action()
+└─────────────────────────────────────────────────────────────────────────┘
+
+ACTION AUDIT RECORD SCHEMA (ActionResult):
+
+  action: str
+    ↳ Canonical action identifier (e.g., "process")
+    ↳ Must exist in ACTION_REGISTRY
+
+  executor_id: str
+    ↳ Which executor handled the request (e.g., "text_process_v1")
+    ↳ Determined by routing in Step 1
+    ↳ Immutable once resolved
+
+  executor_version: str
+    ↳ Version of executor code (e.g., "1.0.0", semver format)
+    ↳ Retrieved from executor instance or "unknown" if unavailable
+    ↳ Immutable snapshot at execution time
+
+  status: Literal["SUCCESS", "FAILED", "BLOCKED", "PENDING"]
+    ↳ SUCCESS: Execution completed without errors
+    ↳ FAILED: Execution raised exception (TimeoutError, generic Exception)
+    ↳ BLOCKED: Pipeline validation failed (step 3B, 4A, 4B, 5)
+    ↳ PENDING: Special marker for pre-audit (status before execution)
+
+  reason_codes: list[str]
+    ↳ Why execution ended (BLOCKED/FAILED) or special markers (PENDING)
+    ↳ Examples for BLOCKED: "ACTION_VERSION_INVALID", "EXECUTOR_NOT_FOUND", "CAPABILITY_MISMATCH", "LIMIT_EXCEEDED"
+    ↳ Examples for FAILED: "EXECUTOR_TIMEOUT", "EXECUTOR_EXCEPTION"
+    ↳ Examples for PENDING: "EXECUTION_ATTEMPT" (pre-audit marker)
+    ↳ If SUCCESS: empty list []
+
+  input_digest: str
+    ↳ SHA256 hex of canonicalized input payload (same computation as gate audit)
+    ↳ Computed in Step 2 of pipeline
+    ↳ Links action audit to gate audit (same digest)
+
+  output_digest: str | None
+    ↳ SHA256 hex of canonicalized output (only for SUCCESS or certain FAILED cases)
+    ↳ None if output not JSON-serializable or execution not attempted
+    ↳ Pre-audit record (PENDING) always has output_digest = None
+
+  trace_id: str
+    ↳ Same trace_id from gate audit (received from gate_request dependency)
+    ↳ Enables full correlation: gate decision → action execution
+
+  ts_utc: datetime
+    ↳ Timezone-aware UTC timestamp when action result was recorded
+    ↳ One ts_utc per audit entry (pre and post have different timestamps)
+    ↳ Validator ensures tzinfo != None and tzinfo == timezone.utc
+
+
+ACTION AUDIT SERIALIZATION:
+
+  log_action_result(result: ActionResult) calls:
+    → logger.info(result.model_dump_json())
+    → Output: Single JSON line to action_audit logger
+    → Format: Compact (no whitespace)
+    → Content example (PRE-AUDIT):
+        {
+          "action": "process",
+          "executor_id": "text_process_v1",
+          "executor_version": "1.0.0",
+          "status": "PENDING",
+          "reason_codes": ["EXECUTION_ATTEMPT"],
+          "input_digest": "a1b2c3d4e5f6...",
+          "output_digest": null,
+          "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+          "ts_utc": "2025-12-21T14:30:45.200000+00:00"
+        }
+    
+    ↳ Content example (POST-AUDIT SUCCESS):
+        {
+          "action": "process",
+          "executor_id": "text_process_v1",
+          "executor_version": "1.0.0",
+          "status": "SUCCESS",
+          "reason_codes": [],
+          "input_digest": "a1b2c3d4e5f6...",
+          "output_digest": "x7y8z9a0b1c2...",
+          "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+          "ts_utc": "2025-12-21T14:30:45.350000+00:00"
+        }
+
+
+DUAL AUDIT RELATIONSHIP:
+
+  Temporal flow:
+    T1: gate_request dependency evaluates gate
+         → DecisionRecord logged (ALLOW or DENY)
+         → If DENY: HTTPException(403), no action audit
+         → If ALLOW: proceed to endpoint handler
+
+    T2: gate_request dependency returns {payload, action, trace_id}
+
+    T3: process() endpoint calls run_agentic_action()
+         → Pipeline Step 1-5: Pre-execution validation
+         → Some validation failures log BLOCKED ActionResult
+
+    T4: PRE-AUDIT: log_action_result(status=PENDING)
+         → ActionResult with reason_codes=["EXECUTION_ATTEMPT"]
+         → Guarantees auditability even if executor crashes
+
+    T5: executor.execute(ActionRequest)
+         → Executor runs (deterministic, no side-effects)
+         → May raise TimeoutError or generic Exception
+
+    T6: POST-AUDIT: log_action_result(status=SUCCESS/FAILED)
+         → ActionResult with final status and output_digest
+         → Guarantees execution outcome recorded
+
+
+AUDIT INDEPENDENCE:
+
+  Gate audit is independent of action audit:
+    ✓ Gate audit happens BEFORE action is known to be executable
+    ✓ Gate audit uses GateInput (payload-centric validation)
+    ✓ Action audit uses ActionRequest (action-centric execution)
+    ✓ Both use same input_digest (can correlate)
+    ✓ Different reason_code systems (GateReasonCode vs reason_codes)
+
+  Failure scenarios where both audit streams apply:
+    ✓ Request → Gate ALLOW → Action BLOCKED: Both recorded
+    ✓ Request → Gate DENY → Action not executed: Only gate recorded
+    ✓ Request → Gate ALLOW → Action SUCCESS: Both recorded
+    ✓ Request → Gate ALLOW → Action FAILED: Both recorded
+
+
+================================================================================
+2. TRACE_ID PROPAGATION AND CORRELATION
+================================================================================
+
+TRACE_ID DEFINITION:
+
+  Type: str (string)
+  Format: UUID4 (hex with dashes, e.g., "550e8400-e29b-41d4-a716-446655440000")
+  Generation: uuid.uuid4() → str(uuid.uuid4())
+  Scope: Single HTTP request to /process endpoint
+  Purpose: Correlate gate decision, action execution, and logs
+
+TRACE_ID GENERATION POINT:
+
+  Location: app/main.py, gate_request() dependency function
+  Code: trace_id = str(uuid.uuid4())
+  Timing: Generated at the VERY START of HTTP request processing
+  Scope: Function-local variable, passed through return dict
+
+TRACE_ID PROPAGATION PATH:
+
+  HTTP Request (no trace_id header or implicit)
+    ↓
+  gate_request() dependency
+    └─ Generates: trace_id = str(uuid.uuid4())
+       Creates: GateInput(action, payload, ...)
+       (GateInput does NOT contain trace_id)
+       Creates: DecisionRecord(..., trace_id=trace_id)
+       → Logs to gate_audit
+       Returns: {"payload": ..., "action": ..., "trace_id": trace_id}
+    ↓
+  process() endpoint handler
+    ├─ Receives: gate_data dict with "trace_id" key
+    ├─ Extracts: trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
+    │  (fallback to new UUID if somehow missing)
+    ├─ Calls: run_agentic_action(..., trace_id=trace_id, ...)
+    │
+    └─ run_agentic_action() in agentic_pipeline.py
+       ├─ Parameter: trace_id (passed through all steps)
+       │
+       ├─ Step 1-5: Validation loops (no logging yet)
+       │  (trace_id available but not logged in these steps)
+       │
+       ├─ Step 6a: PRE-AUDIT
+       │  Creates: ActionResult(..., trace_id=trace_id, status="PENDING")
+       │  → Logs to action_audit
+       │
+       ├─ Step 6b: Executor execution
+       │  Creates: ActionRequest(..., trace_id=trace_id)
+       │  Passes to: executor.execute(action_req)
+       │  (Executor receives trace_id but does nothing with it)
+       │
+       ├─ Step 7: POST-AUDIT
+       │  Creates: ActionResult(..., trace_id=trace_id, status=SUCCESS/FAILED/BLOCKED)
+       │  → Logs to action_audit
+       │
+       └─ Returns: (ActionResult, output=None)
+    ↓
+  process() endpoint
+    └─ Returns: HTTP 200 with JSON response
+       Response contains: "trace_id": trace_id
+       User can correlate logs using this trace_id
+
+
+TRACE_ID AUDIT TRAIL EXAMPLE:
+
+  User makes HTTP request: POST /process { "text": "hello" }
+  
+  Generated trace_id: "550e8400-e29b-41d4-a716-446655440000"
+  
+  Gate audit log (T1 = 14:30:45.100):
+    {
+      "decision": "ALLOW",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "ts_utc": "2025-12-21T14:30:45.100000+00:00",
+      "input_digest": "a1b2c3..."
+    }
+  
+  Action pre-audit log (T2 = 14:30:45.200):
+    {
+      "status": "PENDING",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "ts_utc": "2025-12-21T14:30:45.200000+00:00",
+      "reason_codes": ["EXECUTION_ATTEMPT"]
+    }
+  
+  Action post-audit log (T3 = 14:30:45.350):
+    {
+      "status": "SUCCESS",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "ts_utc": "2025-12-21T14:30:45.350000+00:00",
+      "output_digest": "x7y8z9..."
+    }
+  
+  HTTP response (T4 = 14:30:45.400):
+    {
+      "status": "SUCCESS",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  
+  User can query logs with filter: trace_id == "550e8400-e29b-41d4-a716-446655440000"
+  → Returns all 3 log entries (gate + pre-audit + post-audit)
+
+
+TRACE_ID LIMITATIONS:
+
+  1. No parent_trace_id
+     ↳ Distributed tracing not supported
+     ↳ Cannot correlate parent request to child actions
+
+  2. No tenant_id or user_id embedded
+     ↳ Multi-tenant isolation not expressible in trace_id
+     ↳ Must infer tenant from payload or HTTP header (not done)
+
+  3. No request_type or correlation_id
+     ↳ trace_id is fully opaque
+     ↳ No semantic information in identifier
+
+  4. No session context
+     ↳ Multiple requests in same session have different trace_ids
+     ↳ Cannot group related requests
+
+  5. Fallback in process() endpoint
+     ↳ If trace_id missing from gate_data, generates new one
+     ↳ Indicates weak contract between gate_request and process()
+     ↳ No type enforcement (trace_id is str, but not validated)
+
+  6. No structured logging of trace_id field
+     ↳ trace_id is in JSON but not as separate logging context
+     ↳ Cannot filter logs by trace_id in Python logging middleware
+     ↳ Requires JSON parsing of logs
+
+
+================================================================================
+3. DIGEST USAGE: REPLACING RAW PAYLOADS WITH HASHES
+================================================================================
+
+DIGEST PHILOSOPHY:
+
+  Core principle: "No raw payloads or outputs in audit logs"
+  Mechanism: SHA256 hash (deterministic, one-way, collision-resistant)
+  Purpose: Privacy by design + non-repudiation (via hash)
+
+DIGEST COMPUTATION STANDARDIZATION:
+
+  Location 1: app/decision_record.py, make_input_digest(payload: Any) → str
+
+    def make_input_digest(payload: Any) -> str:
+        try:
+            canonical = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+        except (TypeError, ValueError):
+            canonical = str(payload)
+        blob = canonical.encode("utf-8")
+        return hashlib.sha256(blob).hexdigest()
+
+    Properties:
+      ✓ Deterministic: Same payload → same digest
+      ✓ Canonical: sort_keys=True ensures key order invariant
+      ✓ Compact: separators=(",", ":") removes all whitespace
+      ✓ Unicode-safe: ensure_ascii=False preserves non-ASCII characters
+      ✓ Fallback: Non-JSON-serializable → str(payload) → hash of string
+      ✓ Output: Hex string (64 chars for SHA256)
+
+  Location 2: app/main.py, gate_request() dependency
+
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    input_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    ✓ IDENTICAL computation to decision_record.make_input_digest()
+    ✓ Both gate and action audit use same digest
+
+  Location 3: app/agentic_pipeline.py, _compute_input_digest(payload)
+
+    def _compute_input_digest(payload: dict) -> str | None:
+        try:
+            canonical = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        except (TypeError, ValueError):
+            return None  # Non-serializable → None (silent failure)
+
+    ⚠️ DIVERGENCE: Returns None for non-serializable, not str(payload)
+    ⚠️ CONSEQUENCE: Non-JSON payloads get digest=None, but status can be SUCCESS
+
+  Location 4: app/agentic_pipeline.py, _compute_output_digest(output)
+
+    Similar to _compute_input_digest() but for output
+    Returns: str or None
+
+
+INPUT DIGEST FLOW:
+
+  1. HTTP /process endpoint receives: {"text": "hello"}
+
+  2. gate_request() computes input_digest
+     input_digest = sha256(json.dumps({"text": "hello"}, sort_keys=True))
+     = "4ba5873f3c5bdc1a35eab5a9e5e5b3c4d5..." (example)
+
+  3. Input digest logged in DecisionRecord (gate_audit)
+     → No raw {"text": "hello"} in log, only hash
+
+  4. process() endpoint receives {payload, action, trace_id}
+     (gate_request did not return input_digest, recomputed if needed)
+
+  5. run_agentic_action() recomputes input_digest in Step 2
+     input_digest = _compute_input_digest(payload)
+     (Should match gate's digest if payload unchanged)
+
+  6. Input digest logged in ActionResult (action_audit)
+     → Same hash as gate audit
+     → Proves payload linkage between gate and action
+
+
+OUTPUT DIGEST FLOW (SUCCESS case):
+
+  1. Executor returns: {"processed": "HELLO", "length": 5}
+
+  2. Step 7: Compute output_digest
+     output_digest = _compute_output_digest({"processed": "HELLO", ...})
+     = "x7y8z9a0b1c2d3e4f5..." (example)
+
+  3. Output digest logged in ActionResult (action_audit)
+     → No raw executor output in log, only hash
+
+  4. HTTP response contains:
+     {
+       "status": "SUCCESS",
+       "output_digest": "x7y8z9a0b1c2d3e4f5...",
+       "trace_id": "...",
+       ...
+     }
+
+  5. User cannot retrieve raw output (output is None in result)
+     → Executor return value is discarded (privacy by design)
+
+
+OUTPUT DIGEST FLOW (FAILED case):
+
+  1. Executor raises Exception
+
+  2. Step 6b: Exception caught
+     output = None (never created)
+     output_digest remains as initialized in ActionResult construction
+
+  3. ActionResult created with:
+     output_digest=output_digest (from earlier initialization)
+
+  4. If validation failed before execution:
+     output_digest may be set earlier in pipeline
+     (Depends on which step failed)
+
+
+DIGEST AS PROOF OF INTEGRITY:
+
+  Use case 1: Verify payload consistency
+    Gate audit: input_digest = "abc123"
+    Action audit: input_digest = "abc123"
+    → Payload unchanged between gate and action ✓
+
+  Use case 2: Verify execution happened
+    Action pre-audit (PENDING): no output_digest
+    Action post-audit (SUCCESS): output_digest = "xyz789"
+    → Execution definitely occurred (output was generated) ✓
+
+  Use case 3: Detect payload tampering
+    If logs replay check: input_digest in gate != input_digest in action
+    → Payload modified between layers (privacy breach) ✗
+
+  Use case 4: Privacy
+    Raw payload never appears in logs
+    → Even with log access, cannot see sensitive data
+    → Only digests are visible
+
+
+DIGEST LIMITATIONS:
+
+  1. One-way: Cannot reverse digest to get original payload
+     ⚠️ Risk: If payload is needed for investigation, only digest available
+
+  2. Non-JSON payloads:
+     Location 1 (decision_record): str(payload) → hash
+     Location 3 (pipeline): None (silent, returns None)
+     ⚠️ INCONSISTENCY: Same non-JSON payload gets different digests
+
+  3. Silent failure in _compute_input_digest()
+     Except (TypeError, ValueError) → return None
+     ⚠️ Risk: Non-serializable payload → digest=None, but status=SUCCESS allowed
+
+  4. Empty digest fallback in main.py
+     If digest computation fails: input_digest = "" (empty string)
+     ⚠️ Different from None: empty string looks like valid hash, isn't
+
+
+DIGEST COLLISION RISK:
+
+  SHA256: 2^128 collision resistance (birthday paradox)
+  Probability of collision in 2^64 hashes: ~50% (theoretical)
+  Practical risk: Negligible for audit trail size
+  Exception: Intentional collision attack (outside scope)
+
+
+================================================================================
+4. PRE-AUDIT AND POST-AUDIT SEMANTICS
+================================================================================
+
+SEMANTICS MODEL:
+
+  "audit" = immutable record of an event for later verification
+  
+  "pre-audit" = record BEFORE event occurs (guarantees auditability even if event crashes)
+  "post-audit" = record AFTER event concludes (captures event outcome)
+
+  This model ensures: "No execution without proof in logs"
+
+PRE-AUDIT (PENDING) SEMANTICS:
+
+  When: Step 6a, BEFORE executor.execute() is called
+  Status: "PENDING" (special value, not a failure)
+  Reason codes: ["EXECUTION_ATTEMPT"]
+  Output digest: None (not computed yet)
+  Ts_utc: datetime of pre-audit timestamp
+
+  Code location (agentic_pipeline.py, lines 395-408):
+    pre_audit_result = ActionResult(
+        action=action,
+        executor_id=executor_id,
+        executor_version=executor_version,
+        status="PENDING",  # Special: indicates execution was attempted
+        reason_codes=["EXECUTION_ATTEMPT"],  # Marker for pre-audit
+        input_digest=input_digest,
+        output_digest=None,  # Not known yet
+        trace_id=trace_id,
+        ts_utc=datetime.now(timezone.utc),
+    )
+    log_action_result(pre_audit_result)
+
+  Meaning of PENDING:
+    ✓ Executor is about to run
+    ✓ All pre-execution validations (Step 1-5) passed
+    ✓ trace_id, executor_id, executor_version are known and logged
+    ✓ If executor crashes/hangs, this log exists (non-repudiation)
+
+  Use case: Executor crash during execute()
+    Scenario 1: Executor.execute() hangs indefinitely
+      → PRE-AUDIT log exists: status="PENDING"
+      → POST-AUDIT never logged (timeout not implemented)
+      → Audit trail shows attempt was made
+      → Operator knows request never completed
+
+    Scenario 2: Executor raises uncaught exception
+      → PRE-AUDIT log exists: status="PENDING"
+      → Exception caught in except block
+      → POST-AUDIT logged: status="FAILED", reason_codes=["EXECUTOR_EXCEPTION"]
+      → Audit trail shows both attempt and failure
+
+  Marker semantics:
+    EXECUTION_ATTEMPT = "This action was attempted"
+    Not "execution succeeded" (that's SUCCESS)
+    Not "execution will happen" (that's future tense)
+    = "Execution was initiated, outcome pending"
+
+
+POST-AUDIT (SUCCESS/FAILED/BLOCKED) SEMANTICS:
+
+  Status values:
+
+  1. SUCCESS (Step 7, normal completion)
+     When: Executor returned output without exception
+     Reason codes: [] (empty)
+     Output digest: SHA256 of output (always computed)
+     Consequence: Request fully executed, safe to consider done
+
+     Code location (lines 472-483):
+       output_digest = _compute_output_digest(output)
+       status = "SUCCESS"
+       reason_codes = []
+       # ... construct ActionResult ...
+       log_action_result(result)
+       return (result, None)  # output is None (privacy)
+
+  2. FAILED (Step 6b exception handlers, lines 434-468)
+     When: Executor raised exception OR validation failed in Step 2-5 with exception
+     Reason codes: ["EXECUTOR_TIMEOUT"], ["EXECUTOR_EXCEPTION"]
+     Output digest: None (output never created)
+     Consequence: Execution was attempted but did not complete
+
+     Example: Executor.execute() raised TimeoutError
+       status = "FAILED"
+       reason_codes = ["EXECUTOR_TIMEOUT"]
+
+     Example: Executor.execute() raised generic Exception
+       status = "FAILED"
+       reason_codes = ["EXECUTOR_EXCEPTION"]
+
+  3. BLOCKED (Step 1-5 validation failures, lines 273-388)
+     When: Pipeline validation rejected the request (before execution)
+     Reason codes: Non-empty list ["ACTION_VERSION_INVALID"], ["EXECUTOR_NOT_FOUND"], etc.
+     Output digest: Set before execution (from earlier step) or None
+     Consequence: Request was rejected by governance, no execution attempted
+
+     Examples:
+
+     Step 1 (routing):
+       Reason code: ["UNKNOWN_ACTION"]
+       Trigger: route_action_deterministic() raised UnknownActionError
+
+     Step 3B (action version validation):
+       Reason code: ["ACTION_VERSION_INVALID"]
+       Trigger: action_version not semver OR is None
+
+     Step 4 (executor lookup):
+       Reason code: ["EXECUTOR_NOT_FOUND"]
+       Trigger: get_executor(executor_id) raised UnknownExecutorError
+
+     Step 4A (executor version):
+       Reason code: ["EXECUTOR_VERSION_MISMATCH"]
+       Trigger: executor.version < min_executor_version
+
+     Step 4B (capabilities):
+       Reason code: ["CAPABILITY_MISMATCH"]
+       Trigger: required_capabilities not subset of executor.capabilities
+
+     Step 5 (payload limits):
+       Reason code: ["LIMIT_EXCEEDED"] or ["NON_JSON_PAYLOAD"]
+       Trigger: check_payload_limits() raised LimitExceeded or TypeError
+
+  4. PENDING (Step 6a, pre-audit only)
+     When: Before execution attempt
+     Reason codes: ["EXECUTION_ATTEMPT"]
+     Output digest: None (not computed)
+     Consequence: Execution is about to start, outcome unknown
+
+
+PRE-AUDIT + POST-AUDIT SEQUENCE (SUCCESS case):
+
+  Timeline:
+
+  T1: gate_request() evaluates gate
+      → DecisionRecord logged: decision="ALLOW"
+
+  T2: process() endpoint calls run_agentic_action()
+      → Pipeline steps 1-5: All pass
+
+  T3: Step 6a (PRE-AUDIT)
+      → ActionResult logged: status="PENDING", reason_codes=["EXECUTION_ATTEMPT"]
+      → Timestamp: ts_utc = "14:30:45.200"
+
+  T4: Step 6b (EXECUTION)
+      → executor.execute(ActionRequest) called
+      → Executor computes output deterministically
+      → Executor returns output (not logged, not returned to user)
+
+  T5: Step 7 (POST-AUDIT)
+      → ActionResult logged: status="SUCCESS", output_digest="x7y8z9..."
+      → Timestamp: ts_utc = "14:30:45.350"
+      → Difference: 150ms between pre and post
+
+  T6: HTTP response sent
+      → ActionResult returned (same as post-audit log)
+      → trace_id included
+
+
+AUDIT INTERVAL ANALYSIS:
+
+  The time delta between pre-audit and post-audit timestamps reveals:
+
+  ts_delta = ts_utc(post) - ts_utc(pre)
+
+  ✓ 0-10ms: Very fast execution (simple operation)
+  ✓ 10-100ms: Normal execution (I/O, computation)
+  ✓ 100-500ms: Slower operation (external calls, database)
+  ✓ 500ms+: Very slow (concerning, possible hang?)
+  ✗ Negative ts_delta: Clock skew or logging out-of-order (impossible normally)
+  ✗ Zero ms: Different timestamps but rounded to same second (insufficient precision)
+
+  Note: datetime.now(timezone.utc) has microsecond precision
+        → Can detect sub-second execution times
+
+
+DOUBLE-AUDIT GUARANTEE:
+
+  Why pre-audit and post-audit matter:
+
+  Risk 1: Executor crash with core dump
+    Without pre-audit: No record of execution attempt
+    With pre-audit: PENDING log proves executor was called
+    → Can investigate executor crash with context
+
+  Risk 2: Executor hangs (no timeout mechanism in code)
+    Without pre-audit: Request disappears from logs
+    With pre-audit: PENDING log eventually times out client-side
+    → Audit shows the request existed and was being processed
+
+  Risk 3: Executor side-effect despite crash
+    Without pre-audit: Side-effect recorded, but no proof execution was authorized
+    With pre-audit: PENDING log provides authorization proof
+    → Non-repudiation: "This action was explicitly authorized and attempted"
+
+  Risk 4: Log loss at POST-AUDIT
+    Without pre-audit: If post-audit log lost, action looks like never executed
+    With pre-audit: PENDING log survives, action confirmed as attempted
+    → At least one log exists to prove execution happened
+
+
+================================================================================
+5. FAILURE CASES WHERE AUDITABILITY COULD BE COMPROMISED
+================================================================================
+
+CRITICAL AUDITABILITY FAILURES:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 1: NON-JSON PAYLOAD SILENT DIGEST LOSS                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/agentic_pipeline.py, _compute_input_digest(payload)
+
+Code:
+  def _compute_input_digest(payload: dict) -> str | None:
+      try:
+          canonical = json.dumps(...)
+          return hashlib.sha256(...).hexdigest()
+      except (TypeError, ValueError):
+          return None  # ← SILENT FAILURE
+
+Scenario: User submits non-JSON-serializable payload
+
+  Example: {"obj": <object instance>, "data": b"bytes"}
+  
+  Step 2: _compute_input_digest(payload)
+    → json.dumps() raises TypeError (object not serializable)
+    → Function returns None
+    → Status quo: input_digest = None
+
+  Step 6: ActionResult constructed with input_digest=None
+
+  Audit log written:
+    {
+      "action": "process",
+      "status": "BLOCKED",
+      "reason_codes": ["NON_JSON_PAYLOAD"],
+      "input_digest": null,  ← No way to verify input
+      "trace_id": "..."
+    }
+
+  Consequence: Audit trail has NO digest
+    ✗ Cannot verify payload consistency
+    ✗ Cannot correlate to gate audit (gate also computed with different fallback)
+    ✗ If payload resubmitted later, different digest in gate audit
+    ✗ Auditability compromise: Input not cryptographically fingerprinted
+
+Comparison with gate audit:
+
+  gate_request() uses:
+    canonical = json.dumps(...) OR str(payload) as fallback
+    input_digest = sha256(canonical)
+    → Always returns string (never None)
+
+  pipeline uses:
+    try json.dumps(...) → hash
+    except → return None
+    → Returns None for non-serializable
+
+  INCONSISTENCY:
+    Gate: Non-JSON payload → digest = sha256(str(payload))
+    Action: Non-JSON payload → digest = None
+    Consequence: Same payload gets different digests in two audit streams
+
+CLASSIFICATION: CRITICAL
+  Severity: HIGH (auditing failure)
+  Frequency: MEDIUM (depends on user input types)
+  Detection: Digest=null in logs (observable)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 2: OUTPUT DIGEST LOST ON EXECUTION FAILURE                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/agentic_pipeline.py, Step 6b exception handlers
+
+Code:
+  except TimeoutError:
+      # ... set status="FAILED", reason_codes=["EXECUTOR_TIMEOUT"] ...
+      result = ActionResult(
+          ...
+          output_digest=output_digest,  # ← Still set to initial value or None
+          ...
+      )
+      log_action_result(result)
+      return (result, None)
+
+Scenario: Executor raises TimeoutError or Exception
+
+  State before exception:
+    output_digest = _compute_output_digest(None)  # From line 429
+    → Returns None (or None if exception before computation)
+
+  Exception in Step 6b:
+    executor.execute() raises TimeoutError
+    → Caught in except TimeoutError block
+
+  ActionResult created with:
+    output_digest = None  # No output was ever generated
+
+  Audit log written:
+    {
+      "status": "FAILED",
+      "reason_codes": ["EXECUTOR_TIMEOUT"],
+      "output_digest": null,
+      "ts_utc": "14:30:45.350"
+    }
+
+  Problem: It's CORRECT that output_digest=None (no output was generated)
+           BUT: How is this different from SUCCESS with output_digest computed?
+
+Actually, this is NOT a failure case. FAILED status with output_digest=None is correct
+(output never generated because execution failed). This is working as designed.
+
+Let me reconsider: The audit model is sound here. Moving to actual failures.
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 2 (REVISED): GATE AUDIT MISSING WHEN GATE DENIES                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, gate_request() dependency, HTTP exception path
+
+Code:
+  if gate_decision == "DENY":
+      raise HTTPException(status_code=403, detail="Gate denied request")
+
+Flow:
+
+  T1: gate_request() evaluates gate
+      → gate_decision = "DENY"
+
+  T2: DecisionRecord logged to gate_audit
+      → decision="DENY", reason_codes=[...], trace_id="uuid"
+
+  T3: HTTPException(403) raised
+
+  T4: FastAPI catches HTTPException
+      → HTTP 403 response sent to user
+
+  T5: process() endpoint NEVER reached
+
+  T6: Action audit NEVER logged
+
+  Consequence: User receives HTTP 403 but no action audit record
+
+This IS working as designed: DENY at gate means no action was executed.
+Audit trail only contains gate audit, which is correct.
+
+Let me continue to actual failures.
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 2 (REVISED): LOGGING FAILURE NOT PROPAGATED                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/action_audit_log.py, log_action_result()
+
+Code:
+  def log_action_result(result: ActionResult) -> None:
+      logger.info(result.model_dump_json())
+
+Scenario: Python logging system fails (e.g., disk full, handler error)
+
+  Step: log_action_result(result) called
+  Logger: logger.info() raises exception (theoretically)
+  
+  In Python logging, by default:
+    ✓ Exceptions in handlers are silently swallowed
+    ✓ logger.info() doesn't raise exception back to caller
+    ✗ BUT: Audit event is lost
+
+  Consequence:
+    ✗ ActionResult computed but not logged
+    ✗ Audit trail missing this execution
+    ✗ Caller doesn't know logging failed
+    ✗ HTTP response sent with status=SUCCESS, but audit silent
+
+CLASSIFICATION: CRITICAL
+  Severity: CRITICAL (audit trail loss)
+  Frequency: LOW (only if logging misconfigured or system failure)
+  Detection: Audit gap (requires log monitoring)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 3: TRACE_ID MISSING IN ACTION AUDIT                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, process() endpoint
+
+Code:
+  trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
+  # ... 
+  result, output = run_agentic_action(
+      ...
+      trace_id=trace_id,
+      ...
+  )
+
+Scenario: gate_request() returns dict without "trace_id" key
+
+  gate_request() return statement:
+    return {"payload": body, "action": action, "trace_id": trace_id}
+
+  But: If trace_id is not included (bug in gate_request):
+    gate_data = {"payload": ..., "action": ...}
+    (no "trace_id" key)
+
+  process() extracts:
+    trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
+    → Falls back to NEW UUID (not the gate's trace_id)
+
+  Consequence:
+    Gate audit: trace_id = "uuid-A"
+    Action audit: trace_id = "uuid-B" (different!)
+    → Cannot correlate gate and action audits
+    → Audit trails appear to be for different requests
+
+CLASSIFICATION: CRITICAL
+  Severity: CRITICAL (auditability loss)
+  Frequency: LOW (only if gate_request modified incorrectly)
+  Detection: Manual: compare gate and action audit trace_ids
+  Impact: Non-repudiation fails (cannot prove request was authorized)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 4: INPUT DIGEST MISMATCH BETWEEN GATE AND ACTION                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: Both gate_request() and agentic_pipeline._compute_input_digest()
+
+Code flow:
+
+  gate_request():
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    input_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+  _compute_input_digest():
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+  They LOOK identical, but:
+
+Scenario: Payload modified between gate and action
+
+  T1: gate_request() receives: {"text": "hello"}
+      input_digest = sha256("...") = "aaa"
+
+  T2: process() receives payload (same object)
+
+  T3: MUTATION: Payload modified in-memory
+      payload["text"] = "HELLO"
+
+  T4: run_agentic_action() receives modified payload
+      input_digest = sha256("...") = "bbb"
+
+  Audit logs:
+    Gate audit: input_digest="aaa"
+    Action audit: input_digest="bbb"
+
+  Consequence:
+    ✗ Digests don't match
+    ✗ Cannot prove payload consistency
+    ✗ Suggests either:
+      - Payload was tampered with (security breach)
+      - OR process() modified payload (bug)
+
+CLASSIFICATION: CRITICAL
+  Severity: CRITICAL (payload integrity)
+  Frequency: LOW (Python dict is mutable but modified by accident)
+  Detection: Digest mismatch in audit logs
+  Note: Pydantic frozen=True only applies to Pydantic models, not plain dicts
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 5: PRE-AUDIT NOT LOGGED IF STEP 6A FAILS                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/agentic_pipeline.py, Step 6a
+
+Code:
+  # Step 6a: PRE-AUDIT
+  pre_audit_result = ActionResult(...)
+  log_action_result(pre_audit_result)  # ← If this raises, pre-audit is lost
+  
+  try:
+      action_req = ActionRequest(...)
+      output = executor.execute(action_req)  # ← Executor runs AFTER logging
+  except ...
+
+Scenario: log_action_result() raises exception
+
+  Pre-audit ActionResult is constructed successfully
+  log_action_result(pre_audit_result) is called
+  
+  If logger.info() fails (rare, but possible):
+    → Exception is NOT raised back to caller (Python logging default)
+    → But: Audit event lost to log sink
+    → Execution proceeds anyway
+
+  OR: If ActionResult.model_dump_json() raises (shouldn't happen, Pydantic should not fail)
+    → log_action_result() would propagate exception
+    → executor.execute() is never called
+    → Status quo: Pre-audit lost, executor not called, no post-audit
+
+  Consequence:
+    ✗ PRE-AUDIT missing from audit trail
+    ✗ If executor crashes, no proof of authorization attempt
+    ✗ Non-repudiation compromised
+
+CLASSIFICATION: HIGH
+  Severity: HIGH (auditability loss)
+  Frequency: VERY LOW (logging should not fail)
+  Detection: Audit gap + POST-AUDIT exists but PRE-AUDIT missing
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 6: GATE AUDIT MISSING WHEN GATE EXCEPTION OCCURS                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, gate_request() dependency
+
+Code:
+  try:
+      gate_input = GateInput(...)
+      gate_result = evaluate_gate(gate_input)
+      gate_decision = gate_result.decision.value
+      gate_exception = None
+  except Exception as exc:
+      gate_decision = "DENY"
+      gate_exception = str(exc)
+      gate_result = None
+
+  decision_record = DecisionRecord(
+      decision=gate_decision,
+      profile_id="default",
+      profile_hash="",
+      matched_rules=[],
+      reason_codes=reason_codes,  # ← Set to ["GATE_EXCEPTION"] if gate_exception
+      input_digest=input_digest,
+      trace_id=trace_id,
+  )
+  log_decision(decision_record)
+
+Scenario: evaluate_gate() raises exception (e.g., profile not found)
+
+  T1: GateInput constructed: OK
+  T2: evaluate_gate(gate_input) raises ProfileNotFoundError
+  T3: Exception caught:
+      gate_decision = "DENY"
+      reason_codes = ["GATE_EXCEPTION"]
+
+  T4: DecisionRecord constructed with:
+      reason_codes=["GATE_EXCEPTION"]
+
+  T5: log_decision(decision_record) called
+      → Audit logged with reason_codes=["GATE_EXCEPTION"]
+
+  BUT: No stack trace, no error message in DecisionRecord
+       (DecisionRecord has no error_message field)
+
+  Consequence:
+    ✓ Audit was logged (gate audit exists)
+    ✓ Status is DENY (safe)
+    ✗ But: Error details lost (what exception? why did it fail?)
+    ✗ operator.cannot investigate gate exception from audit logs alone
+
+CLASSIFICATION: MEDIUM
+  Severity: MEDIUM (partial loss of error context)
+  Frequency: LOW (gate exceptions should be rare)
+  Detection: reason_codes=["GATE_EXCEPTION"] in logs (observable)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 7: PROFILE_HASH NEVER POPULATED IN DECISION_RECORD              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, gate_request() dependency
+
+Code:
+  decision_record = DecisionRecord(
+      decision=gate_decision,
+      profile_id="default",
+      profile_hash="",  # ← Always empty string
+      matched_rules=[],  # ← Always empty list
+      reason_codes=reason_codes,
+      input_digest=input_digest,
+      trace_id=trace_id,
+  )
+
+Observation:
+  profile_hash is always "" (empty string)
+  matched_rules is always [] (empty list)
+
+Consequence:
+  ✗ Profile fingerprint NOT recorded in audit trail
+  ✗ Cannot verify which policy version was applied
+  ✗ If profile changes, no way to compare to old audit logs
+  ✗ matched_rules list is empty (always), so cannot see which rules ran
+  ✗ Audit trail has no context of which policy was enforced
+
+CLASSIFICATION: HIGH
+  Severity: HIGH (lost governance context)
+  Frequency: ALWAYS (happens on every request)
+  Detection: Audit inspection (profile_hash="" and matched_rules=[])
+  Impact: Cannot audit which policy was enforced at decision time
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 8: ACTION AUDIT MISSING IF MATRIX CHECK FAILS                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, process() endpoint
+
+Code:
+  matrix = get_action_matrix()
+  if action not in matrix.allowed_actions:
+      action_audit_log = logging.getLogger("action_audit")
+      action_audit_log.info(
+          json.dumps({
+              "status": "BLOCKED",
+              "action": action,
+              "reason_codes": ["PROFILE_ACTION_MISMATCH"],
+              "trace_id": trace_id,
+          })
+      )
+      raise HTTPException(status_code=403, detail="Action not allowed in profile")
+
+Observation:
+  Action audit logged for matrix rejection
+  BUT: Not using ActionResult (Pydantic model)
+       → Using json.dumps() directly with dict
+
+Consequence:
+  ✗ Audit record is incomplete (missing fields):
+    - No executor_id
+    - No executor_version
+    - No input_digest
+    - No output_digest
+    - No ts_utc (timestamp)
+
+  ✓ Has: status, action, reason_codes, trace_id
+
+  Schema mismatch:
+    ActionResult (full Pydantic model) in other places
+    dict (partial JSON) in this place
+    → Audit logs have inconsistent schema
+
+CLASSIFICATION: MEDIUM
+  Severity: MEDIUM (inconsistent audit schema)
+  Frequency: LOW (only if action not in matrix)
+  Detection: JSON schema mismatch in logs
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 9: NO AUDIT OF GATE DECISION DETAILS (EVIDENCE LOST)            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/main.py, gate_request()
+
+Code:
+  gate_result = evaluate_gate(gate_input)
+  # gate_result contains: decision, reasons (with evidence dict)
+  # But DecisionRecord constructed without this detail:
+  
+  decision_record = DecisionRecord(
+      decision=gate_decision,
+      profile_id="default",
+      profile_hash="",
+      matched_rules=[],
+      reason_codes=reason_codes,  # ← Only codes, not details
+      input_digest=input_digest,
+      trace_id=trace_id,
+  )
+
+Observation:
+  gate_result.reasons includes GateReason objects with:
+    - code: GateReasonCode (enum)
+    - message: str
+    - evidence: dict (what failed, how)
+
+  But DecisionRecord only captures:
+    - reason_codes: List[str] (just the code names)
+    - No message, no evidence
+
+Consequence:
+  ✗ Decision justification lost
+  ✗ Only codes in audit log, not reasoning
+  ✗ Example: reason_codes=["UNKNOWN_FIELDS_PRESENT"]
+    Doesn't say WHICH fields were unknown
+    (Evidence is in gate_result but not in audit)
+
+  Use case impact:
+    User submits: {"text": "hello", "extra_field": "xyz"}
+    Gate denies with: UNKNOWN_FIELDS_PRESENT
+    Audit log: reason_codes=["UNKNOWN_FIELDS_PRESENT"]
+    Operator: Doesn't know which field caused rejection (need to ask user)
+
+CLASSIFICATION: MEDIUM
+  Severity: MEDIUM (lost decision context)
+  Frequency: ALWAYS (when gate denies)
+  Detection: Reason codes present but evidence missing
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FAILURE 10: ROUTING EXCEPTION SUPPRESSED WITHOUT AUDIT                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Location: app/agentic_pipeline.py, Step 1
+
+Code:
+  # Step 1: Routing
+  try:
+      executor_id = route_action_deterministic(action)
+  except Exception:  # ← Bare except clause
+      status = "BLOCKED"
+      reason_codes = ["UNKNOWN_ACTION"]
+      # ... construct ActionResult ...
+      log_action_result(result)
+      return (result, None)
+
+Problem:
+  Bare except clause catches ALL exceptions (including SystemExit, KeyboardInterrupt)
+  
+  If route_action_deterministic() raises:
+    - UnknownActionError: reason_codes=["UNKNOWN_ACTION"] (OK)
+    - ValueError: reason_codes=["UNKNOWN_ACTION"] (wrong code, hides actual error)
+    - Any other exception: reason_codes=["UNKNOWN_ACTION"] (wrong code)
+
+Consequence:
+  ✗ Different exceptions mapped to same reason code
+  ✗ Audit logs don't distinguish:
+    - Action not in registry (real error)
+    - Registry lookup failed (system error)
+    - Malformed action parameter (input error)
+
+  ✓ All logged as status=BLOCKED, reason_codes=["UNKNOWN_ACTION"]
+  ✗ Operator cannot diagnose root cause from audit
+
+CLASSIFICATION: MEDIUM
+  Severity: MEDIUM (diagnostic loss)
+  Frequency: LOW (depends on what exceptions routing can raise)
+  Detection: Audit inspection (no exception details in logs)
+
+
+================================================================================
+6. AUDITABILITY GAPS: SUMMARY AND IMPACT RANKING
+================================================================================
+
+CRITICAL FAILURES (Audit trail loss or corruption):
+
+1. Non-JSON payload → input_digest=None inconsistency
+   Impact: Cannot verify input integrity for some payloads
+   Frequency: Medium (depends on input types)
+   Detectability: High (digest=null is visible)
+
+2. Logging failure → audit event lost
+   Impact: Execution recorded in HTTP response, missing from audit
+   Frequency: Very low (logging must misconfigured)
+   Detectability: Low (requires log monitoring and absence detection)
+
+3. trace_id mismatch between gate and action
+   Impact: Cannot correlate authorization to execution
+   Frequency: Low (only if gate_request modified)
+   Detectability: High (trace_ids don't match in queries)
+
+4. Input digest mismatch → payload mutation not detected
+   Impact: Cannot prove payload consistency
+   Frequency: Low (mutation between gate and action)
+   Detectability: High (digest mismatch is observable)
+
+5. PRE-AUDIT logging failure → authorization attempt lost
+   Impact: No proof of execution attempt if executor crashes
+   Frequency: Very low (logging failure)
+   Detectability: Low (requires audit gap detection)
+
+
+HIGH FAILURES (Context loss):
+
+6. profile_hash never populated
+   Impact: Cannot verify which policy version was applied
+   Frequency: Always (every request)
+   Detectability: High (profile_hash="" is visible)
+
+7. matched_rules never populated
+   Impact: Cannot see which rules were evaluated
+   Frequency: Always (every request)
+   Detectability: High (matched_rules=[] is visible)
+
+8. Action matrix audit uses different schema
+   Impact: Inconsistent audit records (ActionResult vs dict)
+   Frequency: Low (only when matrix check fails)
+   Detectability: High (schema mismatch is observable)
+
+9. Gate decision evidence (message, details) not captured
+   Impact: Decision justification lost, operator cannot diagnose rejection
+   Frequency: Always (when gate denies)
+   Detectability: Medium (requires comparing gates_result to audit record)
+
+10. Routing exception suppression
+    Impact: Different exceptions hidden behind single reason code
+    Frequency: Low (depends on what routing can fail on)
+    Detectability: Medium (requires comparing exception types to audit record)
+
+
+COMBINED RISK ASSESSMENT:
+
+Scenario: Audit trail reconstruction after incident
+
+  Requirement: "Reconstruct exactly what happened to request X"
+  
+  Available artifacts:
+    Gate audit: DecisionRecord (profile_hash="", matched_rules=[])
+      ✓ Can see decision and reason_codes
+      ✗ Cannot see policy details or evidence
+    
+    Action audit: ActionResult (pre + post)
+      ✓ Can see execution status and digests
+      ✗ Cannot see input/output values (only hashes)
+    
+    HTTP response: Echoes ActionResult
+      ✓ Confirms execution occurred
+    
+    Problem: If input_digest=None or input_digest mismatch:
+      ✗ Cannot verify payload consistency
+      ✗ Cannot correlate gate to action with certainty
+
+  Conclusion: Partial reconstruction possible, but:
+    - Policy context lost (profile_hash, matched_rules)
+    - Decision justification lost (evidence)
+    - Payload verification compromised (digest loss/mismatch)
+
+
+================================================================================
+END OF STAGE 4
+================================================================================

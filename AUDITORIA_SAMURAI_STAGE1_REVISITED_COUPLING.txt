@@ -1,0 +1,1167 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 1 REVISITED: CANONICAL IDs AND COUPLING ANALYSIS
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, metrológico
+ESCOPO: Análise de coupling points e canonical ID mismatches
+AUDIÊNCIA: Arquitetos sêniores e auditores de governança
+
+AVISO: Este documento mapeia EXATAMENTE como dados fluem entre módulos.
+Enfoque em naming inconsistencies, global state, control-plane coupling.
+
+================================================================================
+1. ARCHITECTURE NARRATIVE (Text Diagram)
+================================================================================
+
+COMPLETE DATA FLOW:
+
+HTTP Client
+    │ POST /process { "text": "hello" }
+    │
+    ▼
+main.py (FastAPI endpoint)
+    │ Creates: trace_id (UUID)
+    │ Extracts: action = "process" (HARDCODED)
+    │ Extracts: payload = { "text": "hello" }
+    │ Calls: gate_request() dependency
+    │
+    ├─── GATE LAYER ──────────────────────────────────
+    │    gate_engine.evaluate_gate(GateInput)
+    │      ├─ Calls: get_profile("process")
+    │      │         [looks in gate_profiles.DEFAULT_PROFILES]
+    │      │         [finds: ACTION_PROCESS = "process"]
+    │      ├─ Resolves: PolicyProfile(name="process.v1", allowlist={text})
+    │      └─ Returns: GateResult(ALLOW/DENY)
+    │
+    ├─ IF DENY:
+    │    └─ Logs: DecisionRecord to gate_audit
+    │       Returns: 403 HTTPException
+    │
+    ├─ IF ALLOW:
+    │    └─ Logs: DecisionRecord to gate_audit
+    │       Continues to pipeline
+    │
+    ├─── ROUTING LAYER ───────────────────────────────
+    │    action_matrix.get_action_matrix()
+    │      ├─ Returns: ActionMatrix(profile="default", allowed_actions=["process"])
+    │      └─ Checks: "process" in ["process"] => OK
+    │
+    ├─── PIPELINE LAYER ──────────────────────────────
+    │    agentic_pipeline.run_agentic_action(
+    │        action="process",
+    │        payload={...},
+    │        trace_id=...,
+    │        executor_id="unknown",
+    │        executor_version="unknown"
+    │    )
+    │
+    │    STEP 1: Routing
+    │      action_router.route_action("process")
+    │        [looks in ACTION_REGISTRY dict]
+    │        [finds: "process" => "text_process_v1"]
+    │        Returns: executor_id = "text_process_v1"
+    │
+    │    STEP 2: Input digest
+    │      Computes: SHA256(json.dumps(payload))
+    │
+    │    STEP 3-4B: Validations
+    │      action_registry.get_action_registry()
+    │        [looks in ActionRegistry]
+    │        [finds: "process" => ActionMeta(action_version="1.0.0", ...)]
+    │
+    │    STEP 4-5: Executor resolution
+    │      executors.registry.get_executor("text_process_v1")
+    │        [looks in _EXECUTORS dict]
+    │        [finds: TextProcessExecutorV1 instance]
+    │        Returns: executor (version="1.0.0", capabilities=["TEXT_PROCESSING"])
+    │
+    │    STEP 6a: PRE-AUDIT
+    │      Logs: ActionResult(status=PENDING) to action_audit
+    │
+    │    STEP 6b: Execution
+    │      executor.execute(ActionRequest(action, payload, trace_id))
+    │        [runs deterministically]
+    │        Returns: output = {"processed": "HELLO", "length": 5}
+    │
+    │    STEP 7: POST-AUDIT
+    │      Computes: SHA256(json.dumps(output))
+    │      Logs: ActionResult(status=SUCCESS, output_digest=...) to action_audit
+    │
+    ▼
+HTTP Response
+    {
+      "action": "process",
+      "status": "SUCCESS",
+      "input_digest": "a1b2c3...",
+      "output_digest": "d4e5f6...",
+      "trace_id": "uuid-...",
+      "executor_id": "text_process_v1",
+      "executor_version": "1.0.0"
+    }
+
+
+LAYER DEFINITIONS:
+
+┌─────────────────────────────────────────────────────────────────┐
+│ HTTP LAYER (main.py)                                            │
+│ Responsibility: FastAPI wiring, dependency injection             │
+│ Input: HTTP POST /process { "text": "..." }                     │
+│ Output: HTTP 200/403 with JSON response                         │
+│ Global Imports: 8 modules (agentic_pipeline, action_audit_log,  │
+│                 action_matrix, audit_log, gate_engine, ...)     │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ GATE LAYER (gate_engine.py)                                     │
+│ Responsibility: Fail-closed validation, rule engine              │
+│ Input: GateInput(action, payload, ...)                          │
+│ Output: GateResult(ALLOW/DENY, reasons)                         │
+│ Dependencies: gate_profiles.get_profile()                        │
+│ Global Imports: contracts.gate_v1                               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ ROUTING LAYER (action_matrix.py + action_router.py)             │
+│ Responsibility: Check action allowlist, map action to executor   │
+│ Input: action="process"                                          │
+│ Output: executor_id="text_process_v1"                            │
+│ Global State: _global_matrix (mutable, test-only)                │
+│ Global Registry: ACTION_REGISTRY (immutable)                     │
+│ Global Registry: DEFAULT_PROFILES (immutable)                    │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ PIPELINE LAYER (agentic_pipeline.py)                             │
+│ Responsibility: 8-step governed execution with validation         │
+│ Input: action, payload, trace_id, executor_id                    │
+│ Output: (ActionResult, None)                                     │
+│ Dependencies: action_router, action_registry, executors.registry,│
+│              payload_limits, action_audit_log                    │
+│ Global Imports: 6 modules                                        │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ REGISTRY LAYER (action_registry.py + executors/registry.py)      │
+│ Responsibility: Metadata and instance storage                    │
+│ Input: action_id or executor_id lookup                           │
+│ Output: ActionMeta or Executor instance                          │
+│ Global State: _EXECUTORS dict (thread-locked)                    │
+│ Global Registry: DEFAULT_PROFILES (frozen)                       │
+│ Global Registry: ACTION_REGISTRY (frozen)                        │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ EXECUTOR LAYER (executors/registry.py + TextProcessExecutorV1)   │
+│ Responsibility: Deterministic, side-effect-free execution        │
+│ Input: ActionRequest(action, payload, trace_id)                  │
+│ Output: Any (payload-like object, never raw output)              │
+│ Isolation: No dependencies on other layers (complete isolation)  │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ AUDIT LAYER (action_audit_log.py + audit_log.py)                │
+│ Responsibility: Immutable, non-repudiable event logging          │
+│ Input: DecisionRecord or ActionResult                            │
+│ Output: None (side-effect: logger.info())                        │
+│ Isolation: No dependencies on other layers (complete isolation)  │
+└─────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+2. COMPLETE COUPLING POINT ENUMERATION
+================================================================================
+
+COUPLING DIRECTION LEGEND:
+  A → B = "A imports B" or "A calls function from B" or "A uses global from B"
+
+IDENTIFIED COUPLINGS:
+
+┌─────────────────────────────────────────────────────────────────┐
+│ COUPLING SET 1: HTTP LAYER → ALL OTHERS                         │
+└─────────────────────────────────────────────────────────────────┘
+
+1. main.py → agentic_pipeline
+   Import: from app.agentic_pipeline import run_agentic_action
+   Nature: Direct function call
+   Consequence: HTTP layer strongly coupled to pipeline interface
+   
+2. main.py → action_audit_log
+   Import: from app.action_audit_log import log_action_result
+   Nature: Audit event logging
+   Consequence: HTTP handler has audit dependency
+   
+3. main.py → action_matrix
+   Import: from app.action_matrix import get_action_matrix
+   Nature: Runtime action allowlist check
+   Consequence: HTTP handler depends on matrix state
+   
+4. main.py → audit_log
+   Import: from app.audit_log import log_decision
+   Nature: Gate decision logging
+   Consequence: HTTP handler has audit dependency
+   
+5. main.py → gate_engine
+   Import: from app.gate_engine import evaluate_gate
+   Nature: Direct call to gate validator
+   Consequence: HTTP layer knows about gate rules and engine
+   
+6. main.py → contracts.gate_v1
+   Import: from app.contracts.gate_v1 import GateDecision, GateInput, ...
+   Nature: Contract dataclass imports
+   Consequence: HTTP layer coupled to gate contract version
+   
+7. main.py → decision_record
+   Import: from app.decision_record import DecisionRecord
+   Nature: Gate audit object construction
+   Consequence: HTTP layer knows gate audit schema
+   
+8. main.py → schemas
+   Import: from app.schemas import ProcessRequest, ProcessResponse
+   Nature: Request/response dataclass imports
+   Consequence: HTTP layer coupled to schema version
+
+
+COUPLING SCORE: HTTP LAYER = 8 direct imports
+SEVERITY: VERY HIGH (HTTP handler is God object)
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│ COUPLING SET 2: PIPELINE LAYER → DEPENDENCIES                   │
+└─────────────────────────────────────────────────────────────────┘
+
+1. agentic_pipeline.py → action_audit_log
+   Call: log_action_result(pre_audit_result)
+   Nature: Audit event emission
+   Consequence: Pipeline depends on audit sink
+   
+2. agentic_pipeline.py → action_contracts
+   Import: from app.action_contracts import ActionRequest, ActionResult
+   Nature: Contract construction
+   Consequence: Pipeline coupled to contract schema
+   
+3. agentic_pipeline.py → action_registry
+   Call: get_action_registry()
+   Nature: Action metadata lookup
+   Consequence: Pipeline depends on action registry interface
+   
+4. agentic_pipeline.py → action_router
+   Call: route_action_deterministic(action)
+   Nature: Action to executor mapping
+   Consequence: Pipeline depends on routing function
+   
+5. agentic_pipeline.py → executors.registry
+   Call: get_executor(executor_id)
+   Nature: Executor instance lookup
+   Consequence: Pipeline depends on executor registry
+   
+6. agentic_pipeline.py → payload_limits
+   Call: check_payload_limits(payload, ...)
+   Nature: Payload size enforcement
+   Consequence: Pipeline depends on limits checker
+   
+7. agentic_pipeline.py → packaging.version
+   Import: from packaging.version import Version
+   Nature: Semver comparison (B1-FIX)
+   Consequence: Pipeline depends on external semver library
+
+
+COUPLING SCORE: PIPELINE LAYER = 6 direct dependencies
+SEVERITY: HIGH (Pipeline is orchestrator, high fanout)
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│ COUPLING SET 3: GATE LAYER → CONTRACTS                          │
+└─────────────────────────────────────────────────────────────────┘
+
+1. gate_engine.py → contracts.gate_v1
+   Imports: GateDecision, GateInput, GateReason, GateReasonCode, GateResult
+   Nature: Contract imports
+   Consequence: Gate tightly coupled to gate_v1 contract version
+   
+2. gate_engine.py → gate_profiles
+   Call: get_profile(inp.action)
+   Nature: Policy profile lookup
+   Consequence: Gate depends on profile storage interface
+
+
+COUPLING SCORE: GATE LAYER = 2 direct imports
+SEVERITY: MEDIUM (Gate is focused, low fanout)
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│ COUPLING SET 4: EXECUTOR LAYER → CONTRACTS                      │
+└─────────────────────────────────────────────────────────────────┘
+
+1. executors/registry.py → action_contracts
+   Import: from app.action_contracts import ActionRequest
+   Nature: Contract import
+   Consequence: Executor registry coupled to action contract
+   
+2. TextProcessExecutorV1 → action_contracts
+   Usage: req: ActionRequest (type hint)
+   Nature: Contract type hint
+   Consequence: Executor implementation knows about ActionRequest
+
+
+COUPLING SCORE: EXECUTOR LAYER = 1 direct import
+SEVERITY: LOW (Executor is isolated, only uses input contract)
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│ COUPLING SET 5: AUDIT LAYER → NONE                              │
+└─────────────────────────────────────────────────────────────────┘
+
+(Audit layer has zero imports except stdlib)
+
+COUPLING SCORE: AUDIT LAYER = 0 direct imports (only stdlib)
+SEVERITY: NONE (Audit is isolated)
+
+
+================================================================================
+3. SHARED CONTRACTS ANALYSIS
+================================================================================
+
+SHARED CONTRACTS IDENTIFY COUPLING POINTS:
+
+CONTRACT 1: GateInput
+  Defined in: app/contracts/gate_v1.py
+  Used by: main.py, gate_engine.py
+  Fields: action, payload, allow_external, deny_unknown_fields
+  Immutable: frozen=True
+  Risk: Changes to GateInput break both gate_engine and HTTP handler
+
+CONTRACT 2: GateResult
+  Defined in: app/contracts/gate_v1.py
+  Used by: main.py (reads result), gate_engine.py (returns)
+  Fields: decision, reasons, action, evaluated_keys
+  Immutable: frozen=True
+  Risk: Changes to GateResult break both producer and consumer
+
+CONTRACT 3: ActionRequest
+  Defined in: app/action_contracts.py
+  Used by: agentic_pipeline.py (creates), executors (receives)
+  Fields: action, payload, trace_id, ts_utc
+  Immutable: frozen=True
+  Risk: Changes to ActionRequest break pipeline and all executors
+
+CONTRACT 4: ActionResult
+  Defined in: app/action_contracts.py
+  Used by: agentic_pipeline.py (creates), main.py (returns), audit_log (logs)
+  Fields: action, executor_id, executor_version, status, input_digest, output_digest, trace_id, ts_utc
+  Immutable: frozen=True (with extra="forbid")
+  Risk: Changes to ActionResult break pipeline, HTTP response, and audit trail
+
+CONTRACT 5: PolicyProfile
+  Defined in: app/gate_profiles.py
+  Used by: gate_engine.py (reads), get_profile() returns
+  Fields: name, allowlist, deny_unknown_fields, allow_external, forbidden_keys
+  Immutable: frozen=True (dataclass)
+  Risk: Changes to PolicyProfile break gate_engine logic
+
+CONTRACT 6: ActionMatrix
+  Defined in: app/action_matrix.py
+  Used by: main.py (reads allowed_actions)
+  Fields: profile, allowed_actions
+  Immutable: frozen=False (MUTABLE)
+  Risk: Mutations to ActionMatrix affect runtime behavior without visibility
+
+CONTRACT 7: ActionMeta
+  Defined in: app/action_registry.py
+  Used by: agentic_pipeline.py (reads metadata)
+  Fields: description, executor, version, action_version, required_capabilities, min_executor_version
+  Immutable: frozen=True (BaseModel)
+  Risk: Changes to ActionMeta break AG-03 validations
+
+
+CONTRACT COUPLING RISK MATRIX:
+
+Contract         │ Producer            │ Consumers                      │ Mutability │ Risk
+─────────────────┼─────────────────────┼────────────────────────────────┼────────────┼─────
+GateInput        │ main.py             │ gate_engine, ...               │ Frozen     │ HIGH
+GateResult       │ gate_engine         │ main.py                        │ Frozen     │ HIGH
+ActionRequest    │ agentic_pipeline    │ all executors                  │ Frozen     │ CRITICAL
+ActionResult     │ agentic_pipeline    │ main.py, audit_log             │ Frozen     │ CRITICAL
+PolicyProfile    │ gate_profiles       │ gate_engine                    │ Frozen     │ HIGH
+ActionMatrix     │ action_matrix       │ main.py                        │ MUTABLE    │ CRITICAL
+ActionMeta       │ action_registry     │ agentic_pipeline               │ Frozen     │ HIGH
+
+
+================================================================================
+4. GLOBAL MUTABLE STATE COMPLETE CATALOG
+================================================================================
+
+GLOBAL MUTABLE STATE #1: _global_matrix
+  Location: app/action_matrix.py
+  Type: ActionMatrix | None (module-level variable)
+  Mutability: FULLY MUTABLE
+  Thread-Safety: NOT THREAD-SAFE (no lock)
+  Initialization: None (lazy initialized in get_action_matrix())
+  Modification Points:
+    1. set_action_matrix(matrix) - for testing
+    2. reset_action_matrix() - for testing cleanup
+  Purpose: Override default ActionMatrix for test scenarios
+  Impact: Global state visible to HTTP handler at runtime
+  Consequence: Test isolation depends on cleanup, race conditions possible
+
+RISK ASSESSMENT:
+  - If test forgets reset_action_matrix(), next test sees old matrix
+  - If multiple threads call set_action_matrix() concurrently, undefined behavior
+  - No transaction boundaries, no observable change events
+  - TEST POLLUTION: Mutable global state designed for tests bleeding into runtime
+
+
+GLOBAL MUTABLE STATE #2: _EXECUTORS
+  Location: app/executors/registry.py
+  Type: dict[str, Executor] (module-level variable)
+  Mutability: Dict is immutable (frozen at import), entries are immutable
+  Thread-Safety: THREAD-SAFE (protected by _EXECUTORS_LOCK RLock)
+  Initialization: {"text_process_v1": TextProcessExecutorV1()} at module load
+  Modification Points: None (read-only after initialization)
+  Purpose: Cache executor instances
+  Impact: All requests share same executor instances (no isolation)
+  Consequence: If executor is stateful, state is shared across requests
+
+RISK ASSESSMENT:
+  - Executor instances are singletons, created at module import time
+  - No lifecycle management (no initialize, shutdown, reload)
+  - If executor mutates internal state, all requests see side-effects
+  - Thread-safe access but not isolation-safe
+
+
+GLOBAL MUTABLE STATE #3: DEFAULT_PROFILES
+  Location: app/gate_profiles.py
+  Type: Dict[str, PolicyProfile] (module-level dict)
+  Mutability: Dict contents are frozen (PolicyProfile is frozen dataclass)
+  Thread-Safety: THREAD-SAFE (immutable)
+  Initialization: Initialized with 3 profiles: AGENT.RUN, ARCONTE.SIGNAL, process
+  Modification Points: None (immutable)
+  Purpose: Policy profile definitions per action
+  Impact: Gate engine always consults DEFAULT_PROFILES
+  Consequence: Profile changes require code modification and redeploy
+
+RISK ASSESSMENT:
+  - No mutation possible (safe)
+  - But hardcoded, not externalized (inflexible)
+  - Drift detection only in tests, not runtime
+
+
+GLOBAL IMMUTABLE STATE #4: ACTION_REGISTRY
+  Location: app/action_router.py
+  Type: dict[str, str] (module-level dict)
+  Mutability: Dict contents are strings (immutable), dict is immutable dict
+  Thread-Safety: THREAD-SAFE (immutable)
+  Initialization: {"process": "text_process_v1"} at module load
+  Modification Points: None (no setter function)
+  Purpose: Map action to executor_id deterministically
+  Impact: Routing always consults ACTION_REGISTRY
+  Consequence: Routing changes require code modification and redeploy
+
+RISK ASSESSMENT:
+  - No mutation possible (safe)
+  - But hardcoded, not externalized (inflexible)
+  - Drift detection not implemented
+
+
+GLOBAL IMMUTABLE STATE #5: ACTION_REGISTRY (in action_registry.py)
+  Location: app/action_registry.py
+  Type: Returned by get_action_registry() factory function
+  Mutability: ActionRegistry is frozen=True, actions dict entries are frozen
+  Thread-Safety: THREAD-SAFE (immutable, created on each call)
+  Initialization: Created dynamically in get_action_registry()
+  Modification Points: None (factory returns immutable object)
+  Purpose: Metadata source of truth for actions
+  Impact: Pipeline consults ACTION_REGISTRY for AG-03 validation
+  Consequence: Metadata changes require code modification and redeploy
+
+RISK ASSESSMENT:
+  - Immutable (safe)
+  - But hardcoded in function return (inflexible)
+  - Fingerprinting enabled but verification only in tests
+
+
+SUMMARY OF GLOBAL STATE:
+
+Mutable:           _global_matrix (1 source, NOT THREAD-SAFE)
+Immutable:         _EXECUTORS, DEFAULT_PROFILES, ACTION_REGISTRY (2 sources)
+Thread-Protected:  _EXECUTORS (via _EXECUTORS_LOCK RLock)
+Hardcoded:         All 5 sources are hardcoded, not externalized
+
+
+WHY GLOBAL STATE MATTERS:
+
+1. TESTABILITY: _global_matrix requires cleanup between tests
+2. CONCURRENCY: _global_matrix could have race conditions
+3. CONFIGURATION: All state is code-based, not config-based
+4. AUDITABILITY: No observable change events when state mutates
+5. CANARY DEPLOYMENT: Impossible to have multiple versions coexist
+6. MULTI-TENANT: All tenants share same profiles, registries, executors
+
+
+================================================================================
+5. CONTROL-PLANE ASSUMPTIONS IN RUNTIME CODE
+================================================================================
+
+Control-plane is the configuration and governance layer.
+Runtime is the execution engine.
+
+ASSUMPTION 1: ACTION NAME IS HARDCODED "process"
+  Location: main.py, line 49
+  Code: action = "process"
+  Assumption: All HTTP /process requests execute action "process"
+  Reality: HTTP endpoint is hardcoded to single action
+  Consequence: Cannot execute other actions without modifying main.py
+  Control-plane leak: Action routing embedded in HTTP layer
+
+ASSUMPTION 2: GATE PROFILE IS IMPLICIT
+  Location: agentic_pipeline.py doesn't know about profiles
+  Assumption: Pipeline assumes gate already validated
+  Reality: Gate profile selection happens in main.py via GateInput
+  Consequence: Pipeline doesn't know which profile was applied
+  Control-plane leak: Profile selection logic in HTTP handler
+
+ASSUMPTION 3: EXECUTOR ALWAYS EXISTS
+  Location: agentic_pipeline.py, Step 4
+  Code: executor = get_executor(executor_id)
+  Assumption: If routing succeeded, executor exists
+  Reality: Router and executor registry can diverge
+  Consequence: Get EXECUTOR_NOT_FOUND error in Step 4 (late)
+  Control-plane leak: Two independent registries (router vs executor)
+
+ASSUMPTION 4: ACTION REGISTRY IS STATIC
+  Location: agentic_pipeline.py, Step 3
+  Code: registry = get_action_registry()
+  Assumption: Registry is available and consistent
+  Reality: Registry is hardcoded in function return
+  Consequence: Cannot swap registry backend (e.g., to DB)
+  Control-plane leak: No dependency inversion, hardcoded factory
+
+ASSUMPTION 5: POLICY PROFILES ARE STATIC
+  Location: gate_engine.py
+  Code: profile = get_profile(inp.action)
+  Assumption: Profile for action always exists
+  Reality: Profile is dict lookup from DEFAULT_PROFILES
+  Consequence: Cannot change profiles without redeploy
+  Control-plane leak: No external config, hardcoded in Python
+
+ASSUMPTION 6: EXECUTOR CAPABILITIES ARE DECLARED
+  Location: agentic_pipeline.py, Step 4B
+  Code: executor.capabilities = ["TEXT_PROCESSING"]
+  Assumption: Executor declares capabilities accurately
+  Reality: No enforcement, executor could have wrong list
+  Consequence: AG-03 validation trusts executor claim
+  Control-plane leak: Capabilities not verified, only declared
+
+ASSUMPTION 7: EXECUTOR VERSION IS PROVIDED
+  Location: agentic_pipeline.py, Step 4
+  Code: executor_version = getattr(executor, "version", None)
+  Assumption: executor.version attribute exists and is string
+  Reality: Version can be None or wrong type
+  Consequence: Version check adiado até Step 4A
+  Control-plane leak: Type validation in runtime code
+
+ASSUMPTION 8: ACTION MATRIX IS CONSULTED
+  Location: main.py, after gate_request
+  Code: matrix = get_action_matrix(); matrix.allowed_actions
+  Assumption: ActionMatrix defines allowed actions per profile
+  Reality: Matrix is mutable global state with default profile="default"
+  Consequence: Multi-profile not supported (only "default")
+  Control-plane leak: Matrix is mutable but not versionable
+
+ASSUMPTION 9: LEGACY ACTIONS ARE EXCLUDED FROM AG-03
+  Location: agentic_pipeline.py, Steps 3B, 4A, 4B
+  Code: if action not in LEGACY_ACTIONS
+  Assumption: LEGACY_ACTIONS = {"process"} is safe
+  Reality: LEGACY_ACTIONS is hardcoded set
+  Consequence: Legacy actions never validated
+  Control-plane leak: Deprecation mechanism doesn't exist
+
+
+CONTROL-PLANE COUPLING SYMPTOMS:
+
+1. CONFIGURATION IS CODE
+   - Profiles hardcoded in gate_profiles.py
+   - Actions hardcoded in action_router.py
+   - Executors hardcoded in executors/registry.py
+   - Changes require code modification and redeploy
+
+2. NO SEPARATION OF CONTROL-PLANE AND RUNTIME
+   - main.py mixes HTTP handling with governance decisions
+   - action = "process" is hardcoded in HTTP handler
+   - Profile selection mixes with payload validation
+   - No clear "configuration phase" before execution phase
+
+3. RUNTIME CANNOT CHANGE CONTROL-PLANE
+   - No API to add new actions at runtime
+   - No API to change profiles at runtime
+   - No API to register new executors at runtime
+   - Only _global_matrix is mutable (for tests)
+
+4. CONTROL-PLANE ARTIFACTS NOT VERSIONED
+   - Profiles have no version field
+   - Actions have action_version but no profile_version
+   - Executors have version but no executor_interface_version
+   - ActionMatrix.profile has no version
+
+5. NO AUDIT OF CONTROL-PLANE CHANGES
+   - Profile changes logged? No
+   - Action registry changes logged? No
+   - Executor registration changes logged? No
+   - Only execution is audited, not governance state
+
+
+================================================================================
+6. CANONICAL ID MISMATCHES AND NAMING INCONSISTENCIES
+================================================================================
+
+IDENTIFIER SYSTEM ANALYSIS:
+
+Type: ACTION
+
+  Source 1: action_router.py
+    Key Format: "process"
+    Dict: ACTION_REGISTRY: dict[str, str] = {"process": "text_process_v1"}
+    Type: String key in dict
+
+  Source 2: action_registry.py
+    Key Format: "process"
+    Dict: get_action_registry().actions = {"process": {...ActionMeta...}}
+    Type: String key in dict
+
+  Source 3: gate_profiles.py
+    Key Format: "process" (but also ACTION_PROCESS constant)
+    Dict: DEFAULT_PROFILES = {ACTION_PROCESS: PolicyProfile(...), ...}
+    Type: String or constant
+
+  Source 4: action_matrix.py
+    Element Format: "process"
+    List: allowed_actions = ["process", ...]
+    Type: String in list
+
+  Source 5: main.py
+    Assignment: action = "process"
+    Type: Hardcoded string literal
+
+  MISMATCH RISK:
+    ⚠️ action_router.py says "process" → "text_process_v1"
+    ⚠️ action_registry.py says "process" → ActionMeta(executor: "text_process_v1")
+    ✓ Both agree on executor_id
+    ⚠️ But: action_registry defines action_version="1.0.0"
+    ⚠️ But: action_router has no version info
+    ⚠️ If routing diverges: pipeline gets executor_id mismatch
+    
+    Example scenario:
+      action_router.py: "process" → "text_process_v1"
+      action_registry.py: "process" → executor="text_process_v2"
+      Pipeline routes to v1 but validates metadata for v2
+      Version check uses wrong executor metadata
+
+
+Type: EXECUTOR
+
+  Source 1: action_router.py
+    Format: "text_process_v1"
+    Type: String key in dict
+    Used by: run_agentic_action() receives executor_id
+
+  Source 2: executors/registry.py
+    Format: "text_process_v1"
+    Dict: _EXECUTORS = {"text_process_v1": TextProcessExecutorV1()}
+    Type: String key in dict
+    Instance: executor.executor_id = "text_process_v1"
+    Version: executor.version = "1.0.0"
+    
+  Source 3: action_registry.py
+    Format: "text_process_v1"
+    Field: ActionMeta.executor = "text_process_v1"
+    Type: String field
+    
+  NAMING ANALYSIS:
+    ✓ Consistent naming: "text_process_v1" in all 3 sources
+    ⚠️ But: Semantic confusion
+       - executor_id "text_process_v1" is "implementation name"
+       - executor.version "1.0.0" is "code version" (semver)
+       - Both use version numbers but different meanings
+       
+    Example confusion:
+      executor_id="text_process_v1" (semantic: "v1" is implementation)
+      executor.version="1.0.0" (semantic: "1.0.0" is semver)
+      If we upgrade to "text_process_v2", all code changes
+      But if we upgrade executor.version to "1.0.1", only executor changes
+      No clear upgrade path
+
+
+Type: PROFILE
+
+  Source 1: gate_profiles.py
+    Format: "process" (action name, used as key)
+    Also: ACTION_PROCESS = "process" (constant, same value)
+    Type: String key
+    
+  Source 2: action_matrix.py
+    Format: "default" (profile name, stored in ActionMatrix.profile)
+    Type: String field
+    
+  MISMATCH RISK:
+    ⚠️ Gate lookup: get_profile("process") — uses ACTION as key
+    ⚠️ Matrix lookup: ActionMatrix.profile = "default"
+    ✗ INCONSISTENCY: Gate profiles keyed by ACTION, matrix keyed by PROFILE
+    
+    Semantic confusion:
+      DEFAULT_PROFILES: {"process": PolicyProfile(...)} — action is key
+      ActionMatrix: {profile: "default", allowed_actions: [...]}
+      get_profile() takes action, returns profile
+      
+    Question: Can we have multiple profiles per action?
+      Current: No, 1:1 mapping action → profile
+      But: ActionMatrix.profile is global, always "default"
+      If: Someone adds new profile, how does it get selected?
+      Risk: New profile added to DEFAULT_PROFILES but never selected
+
+
+Type: CAPABILITY
+
+  Source 1: executors/registry.py
+    Format: ["TEXT_PROCESSING"]
+    Type: List of strings
+    Location: TextProcessExecutorV1.capabilities
+    
+  Source 2: action_registry.py
+    Format: [] (empty list for "process" action)
+    Type: List of strings
+    Location: ActionMeta.required_capabilities
+    
+  MISMATCH RISK:
+    ⚠️ Executor declares: ["TEXT_PROCESSING"]
+    ⚠️ Action requires: []
+    ✓ Match (no requirements)
+    ⚠️ But: Capabilities are just strings, no versioning
+    
+    Example risk:
+      If executor adds TEXT_PROCESSING v2:
+        executor.capabilities = ["TEXT_PROCESSING_V2"]
+        But action still requires ["TEXT_PROCESSING"]
+        Validation fails even though v2 is superset of v1
+      
+      No capability versioning or compatibility checking
+
+
+Type: TRACE_ID
+
+  Source 1: main.py
+    Format: str(uuid.uuid4())
+    Type: UUID string
+    Location: trace_id = ...
+    
+  Source 2: GateInput, GateResult, ActionRequest, ActionResult
+    Format: Opaque string
+    Type: String field
+    
+  LIMITATION (Not mismatch):
+    ⚠️ Trace ID has no structure
+    ⚠️ No tenant_id, user_id, session_id
+    ⚠️ No parent_trace_id for distributed tracing
+    ⚠️ Cannot filter logs by tenant
+    Risk: Multi-tenant systems cannot isolate traces
+
+
+================================================================================
+7. STRONG ISOLATION BOUNDARIES
+================================================================================
+
+BOUNDARY 1: EXECUTOR LAYER
+  What it accesses: Only ActionRequest (input contract)
+  What accesses it: agentic_pipeline via get_executor()
+  Isolation strength: ✓✓✓ COMPLETE ISOLATION
+  Reason: Executor has no imports of business logic, only stdlib and contracts
+  Risk: None (executor cannot access other layers)
+  
+  Consequence: 
+    + Executor can be tested independently
+    + Executor can be replaced without affecting gate or pipeline
+    + New executors can be added without modifying gate
+    
+  Note: Executor instance is singleton, so state leakage possible between requests
+
+BOUNDARY 2: AUDIT LAYER
+  What it accesses: Only stdlib (logging module)
+  What accesses it: agentic_pipeline and main.py via log_*() functions
+  Isolation strength: ✓✓✓ COMPLETE ISOLATION
+  Reason: Audit has no imports except stdlib logger
+  Risk: None (audit cannot access business logic)
+  
+  Consequence:
+    + Audit is decoupled from execution
+    + Audit sink can be changed (e.g., DB, queue) without affecting pipeline
+    + Audit failures don't block execution
+    
+  Note: Audit is one-way (read-only), no side-effects
+
+BOUNDARY 3: GATE LAYER
+  What it accesses: gate_profiles.py, contracts.gate_v1
+  What accesses it: main.py via evaluate_gate()
+  Isolation strength: ✓✓ MEDIUM ISOLATION
+  Reason: Gate is focused, only depends on profiles and contracts
+  Risk: Gate cannot be tested without profile provider
+  
+  Consequence:
+    + Gate logic is independent of execution
+    + Gate can be tested with mock profiles
+    + Gate failures block execution (fail-closed)
+    
+  Note: Gate doesn't know about actions, only about payloads
+
+
+================================================================================
+8. WEAK ISOLATION BOUNDARIES
+================================================================================
+
+BOUNDARY VIOLATION 1: HTTP LAYER IMPORTS EVERYTHING
+  HTTP handler imports: 8 modules (agentic_pipeline, action_matrix, gate_engine, ...)
+  Violation: HTTP knows about every layer
+  Reason: Monolithic endpoint handler
+  Risk: Changing any layer requires updating HTTP handler
+  Impact: Low layer changes → HTTP changes → redeploy
+  
+  Example:
+    If we change pipeline interface, HTTP breaks
+    If we change gate contract, HTTP breaks
+    If we change audit interface, HTTP breaks
+
+BOUNDARY VIOLATION 2: PIPELINE IMPORTS MULTIPLE REGISTRIES
+  Pipeline calls: 3 different registry lookups
+    1. get_action_registry() — for metadata
+    2. route_action() — for routing
+    3. get_executor() — for executor instance
+  Violation: Pipeline is tightly coupled to registry interfaces
+  Reason: No registry abstraction, concrete function calls
+  Risk: Cannot swap registry backend without modifying pipeline
+  Impact: All registries must implement same version
+  
+  Example:
+    If we want to use DB-backed registry, must modify pipeline code
+
+BOUNDARY VIOLATION 3: ACTION MATRIX IS GLOBAL MUTABLE STATE
+  Shared by: test fixtures and main.py endpoint handler
+  Violation: Tests can pollute global state visible to HTTP handler
+  Reason: _global_matrix in action_matrix.py is module-level dict
+  Risk: Test isolation failure if cleanup forgotten
+  Impact: Concurrent tests can race on _global_matrix
+  
+  Example:
+    Test A: set_action_matrix(matrix with action_x)
+    Test B: runs same test, expects default matrix
+    Result: Test B sees action_x from Test A
+
+BOUNDARY VIOLATION 4: MAIN.PY CONSTRUCTS CONTRACTS
+  main.py creates: GateInput, DecisionRecord, ActionRequest, ActionResult
+  Violation: HTTP handler knows about all contract types
+  Reason: No factory, contracts constructed inline
+  Risk: Contract changes require HTTP handler changes
+  Impact: Contract schema versioning is implicit
+  
+  Example:
+    If we add trace_context to GateInput, main.py needs update
+    If we remove a field from ActionResult, HTTP response changes
+
+
+================================================================================
+9. CANONICAL ID RISK ASSESSMENT
+================================================================================
+
+CANONICAL ID MISMATCH INVENTORY:
+
+MISMATCH 1: action_router vs action_registry executor_id
+  Location A: action_router.py, ACTION_REGISTRY = {"process": "text_process_v1"}
+  Location B: action_registry.py, ActionMeta(executor: "text_process_v1")
+  Consistency: ✓ Currently match
+  Risk: If modified independently, can diverge
+  Example failure:
+    Scenario: Developer modifies action_router.py but forgets action_registry.py
+    Router says: "process" → "text_process_v1"
+    Registry says: "process" → ActionMeta(executor: "text_process_v2")
+    Pipeline outcome:
+      STEP 1: Routing resolves "process" → "text_process_v1"
+      STEP 3: Registry lookup gets metadata for executor "text_process_v2"
+      STEP 4A: Version validation uses metadata for wrong executor
+      RESULT: Version mismatch error even though both are valid
+
+MISMATCH 2: action_router action names vs action_registry action names
+  Location A: action_router.py, keys = {"process"}
+  Location B: action_registry.py, keys = {"process"}
+  Consistency: ✓ Currently match
+  Risk: If new action added to only one source
+  Example failure:
+    Scenario: New action added to action_registry but not to action_router
+    Registry: {"process": {...}, "admin": {...}}
+    Router: {"process": "text_process_v1"}
+    Pipeline outcome:
+      STEP 1: route_action("admin") raises UnknownActionError
+      STEP 3: action_meta = registry.actions["admin"] succeeds
+      RESULT: Inconsistent error paths (silent fail vs BLOCKED)
+
+MISMATCH 3: action_registry action_version vs executor.version
+  Location A: ActionMeta(action_version: "1.0.0")
+  Location B: executor.version = "1.0.0"
+  Consistency: ✓ Currently match
+  Risk: Not enforced, can diverge
+  Example failure:
+    Scenario: Executor upgraded to v1.0.1 but action_version not updated
+    Action metadata: action_version = "1.0.0"
+    Executor instance: version = "1.0.1"
+    Pipeline outcome:
+      STEP 4: Resolves executor, gets version "1.0.1"
+      STEP 4A: Validates "1.0.1" >= min_executor_version
+      RESULT: Passes, but audit trail shows mismatch if reconciled later
+
+MISMATCH 4: gate_profiles action key vs action_registry action key
+  Location A: gate_profiles.py, DEFAULT_PROFILES = {ACTION_PROCESS: ...}
+  Location B: action_registry.py, actions = {"process": ...}
+  Consistency: ✓ Currently match (both use string "process")
+  Risk: If constant ACTION_PROCESS redefined
+  Example failure:
+    Scenario: Typo in gate_profiles.py, ACTION_PROCESS = "proces"
+    Gate profile key: "proces"
+    Registry key: "process"
+    Pipeline outcome:
+      STEP 1: Route action "process" succeeds
+      HTTP handler: evaluate_gate() tries get_profile("process")
+      Gate result: None (profile not found)
+      RESULT: GATE_EXCEPTION, UNKNOWN_ACTION
+
+MISMATCH 5: action_matrix.allowed_actions vs action_registry.actions
+  Location A: action_matrix.py, allowed_actions = ["process"]
+  Location B: action_registry.py, actions = {"process": ...}
+  Consistency: ✓ Currently match
+  Risk: If matrix not updated when action added/removed
+  Example failure:
+    Scenario: Action added to registry but not to matrix
+    Registry: {"process": {...}, "admin": {...}}
+    Matrix: {profile: "default", allowed_actions: ["process"]}
+    Pipeline outcome:
+      HTTP: Calls get_action_matrix(), checks "admin" in ["process"]
+      Result: False (action not allowed)
+      Status: 403 before reaching pipeline
+      User sees: action not allowed (misleading, actually not in matrix)
+
+MISMATCH 6: action_router action names vs action_matrix action names
+  Location A: action_router.py, ACTION_REGISTRY.keys() = {"process"}
+  Location B: action_matrix.py, allowed_actions = ["process"]
+  Consistency: ✓ Currently match
+  Risk: If new action added to router but not to matrix
+  Example failure:
+    Scenario: Action added to router but forgotten in matrix
+    Router: {"process": "v1", "admin": "v2"}
+    Matrix: allowed_actions = ["process"]
+    Pipeline outcome:
+      Route "admin" succeeds
+      Check matrix: "admin" not in allowed_actions
+      Result: 403 (action not allowed)
+      But: Routes exist, executor exists, policy permits
+
+CANONICAL ID NAMING ANTI-PATTERNS:
+
+ANTI-PATTERN 1: Version in Identifier Name
+  executor_id = "text_process_v1"
+  Semantic overload: "v1" appears to be version but is part of implementation name
+  Risk: Cannot change executor implementation without changing all references
+  Alternative: executor_id = "text_processor", executor.implementation = "v1"
+
+ANTI-PATTERN 2: No Separation of Action and Profile
+  Gate profiles keyed by action name: DEFAULT_PROFILES["process"]
+  But: ActionMatrix uses profile = "default" (not action)
+  Risk: 1:N mapping not supported (one action, multiple policies)
+  Alternative: Separate action_id from profile_id
+
+ANTI-PATTERN 3: Capability Strings Without Version
+  executor.capabilities = ["TEXT_PROCESSING"]
+  No versioning: "TEXT_PROCESSING" could mean v1, v2, or undefined
+  Risk: Backward compatibility not expressible
+  Alternative: executor.capabilities = [("TEXT_PROCESSING", "1.0.0"), ...]
+
+ANTI-PATTERN 4: Hardcoded Legacy Action Set
+  LEGACY_ACTIONS = {"process"}
+  No mechanism for removal
+  Risk: Legacy actions cannot be deprecated
+  Alternative: ActionMeta(deprecated: bool, sunset_date: date)
+
+
+================================================================================
+STRONG BOUNDARIES: COMPLETE LIST
+================================================================================
+
+1. EXECUTOR LAYER: Isolated (no imports of business logic)
+   - Exports: Executor interface (ActionRequest in, Any out)
+   - Imports: Only stdlib and action_contracts
+   - Strength: Complete isolation
+   - Consequence: Independent testable, replaceable without side-effects
+
+2. AUDIT LAYER: Isolated (no imports of business logic)
+   - Exports: Audit interface (logs only)
+   - Imports: Only stdlib logger
+   - Strength: Complete isolation
+   - Consequence: Decoupled from execution, can change sink implementation
+
+3. GATE LAYER: Focused (single responsibility)
+   - Exports: evaluate_gate() function
+   - Imports: contracts.gate_v1, gate_profiles
+   - Strength: Medium isolation (depends on external profiles)
+   - Consequence: Can test independently with mock profiles
+
+
+================================================================================
+WEAK BOUNDARIES: COMPLETE LIST
+================================================================================
+
+1. HTTP LAYER: Tightly coupled to all others (8 imports)
+   - Imports: agentic_pipeline, action_audit_log, action_matrix, audit_log, gate_engine, contracts, decision_record, schemas
+   - Consequence: HTTP changes affect all layers, monolithic
+
+2. PIPELINE LAYER: Tightly coupled to registries (6 imports)
+   - Imports: action_audit_log, action_contracts, action_registry, action_router, executors.registry, payload_limits, packaging.version
+   - Consequence: Cannot swap registry implementations without code change
+
+3. ACTION MATRIX: Global mutable state accessible from HTTP
+   - State: _global_matrix (mutable, not thread-safe)
+   - Consequence: Test pollution, no transaction boundaries
+
+4. ROUTING: Fragmented (action_router + action_registry.executor)
+   - Sources: ACTION_REGISTRY dict + ActionMeta.executor field
+   - Consequence: Inconsistency risk, two sources of truth
+
+
+================================================================================
+CANONICAL ID RISKS: COMPLETE SUMMARY
+================================================================================
+
+CRITICAL RISKS:
+
+1. action_router vs action_registry executor_id DIVERGENCE
+   Impact: Version validation uses wrong executor metadata
+   Severity: HIGH (causes AG-03 bypass)
+   Mitigation: None (both hardcoded independently)
+
+2. action_registry vs gate_profiles action name TYPO
+   Impact: Gate fails to find profile, UNKNOWN_ACTION
+   Severity: HIGH (blocks all requests)
+   Mitigation: None (no validation that keys match)
+
+3. action_registry vs action_matrix action name MISMATCH
+   Impact: Action allowed by policy but blocked by matrix
+   Severity: MEDIUM (confusing error)
+   Mitigation: None (no validation that lists align)
+
+4. executor_id vs executor.version SEMANTICS CONFUSION
+   Impact: Unclear upgrade path, version in name vs version in property
+   Severity: MEDIUM (operational confusion)
+   Mitigation: Naming convention only
+
+
+HIGH RISKS:
+
+5. LEGACY_ACTIONS hardcoded, no deprecation path
+   Impact: Legacy actions bypass AG-03 forever
+   Severity: MEDIUM (governance bypass)
+   Mitigation: None (no sunset mechanism)
+
+6. Capabilities as strings, no versioning
+   Impact: Backward compatibility not expressible
+   Severity: MEDIUM (version mismatch risk)
+   Mitigation: None (string matching only)
+
+
+MEDIUM RISKS:
+
+7. Trace ID has no tenant_id structure
+   Impact: Multi-tenant isolation not possible via trace
+   Severity: MEDIUM (multi-tenant limitation)
+   Mitigation: None (trace_id is opaque)
+
+8. ActionMatrix.profile hardcoded "default"
+   Impact: Multi-profile execution not supported
+   Severity: MEDIUM (scalability limitation)
+   Mitigation: None (single profile only)
+
+
+================================================================================
+END OF STAGE 1 (REVISITED)
+================================================================================
+
+STRONG BOUNDARIES: COMPLETE LIST
+=================================
+
+1. EXECUTOR LAYER (app/executors/)
+   - Imports: Only stdlib + action_contracts
+   - Dependents: Pipeline (via get_executor)
+   - Isolation: Complete (no access to gate, profiles, registries)
+   - Strength: ✓✓✓ EXCELLENT
+
+2. AUDIT LAYER (action_audit_log.py, audit_log.py)
+   - Imports: Only stdlib
+   - Dependents: Pipeline, HTTP (via log_*() functions)
+   - Isolation: Complete (no access to execution logic)
+   - Strength: ✓✓✓ EXCELLENT
+
+3. GATE LAYER (gate_engine.py)
+   - Imports: contracts.gate_v1, gate_profiles
+   - Dependents: HTTP (via evaluate_gate)
+   - Isolation: Medium (depends on external profile provider)
+   - Strength: ✓✓ GOOD
+
+
+WEAK BOUNDARIES: COMPLETE LIST
+================================
+
+1. HTTP LAYER (main.py)
+   - Imports: 8 modules (agentic_pipeline, action_audit_log, action_matrix, audit_log, gate_engine, contracts, decision_record, schemas)
+   - Role: God object (knows about all layers)
+   - Problem: Monolithic endpoint handler
+   - Strength: ✗ POOR
+
+2. PIPELINE LAYER (agentic_pipeline.py)
+   - Imports: 6 modules (action_audit_log, action_contracts, action_registry, action_router, executors.registry, payload_limits, packaging.version)
+   - Role: High fanout orchestrator
+   - Problem: Tightly coupled to multiple registries
+   - Strength: ✗ POOR
+
+3. ACTION MATRIX (action_matrix.py)
+   - State: _global_matrix (mutable, not thread-safe)
+   - Problem: Test pollution, concurrent access risk
+   - Strength: ✗ POOR
+
+4. ROUTING FRAGMENTATION (action_router.py + action_registry.py)
+   - Sources: 2 independent registries (ACTION_REGISTRY dict + ActionMeta.executor)
+   - Problem: Inconsistency risk
+   - Strength: ✗ POOR
+
+
+CANONICAL ID RISKS: SUMMARY
+============================
+
+CRITICAL (HIGH IMPACT):
+  1. action_router executor_id vs action_registry executor field mismatch
+     → AG-03 validation uses wrong metadata
+  
+  2. action name consistency across gate_profiles, action_registry, action_matrix
+     → Silent failures if typos or divergence
+
+HIGH (MEDIUM IMPACT):
+  3. executor_id="text_process_v1" conflates implementation name with version
+     → Upgrade path confusion
+  
+  4. Capabilities as unversioned strings
+     → Backward compatibility not expressible
+  
+  5. LEGACY_ACTIONS hardcoded, no sunset mechanism
+     → Legacy actions bypass AG-03 forever
+
+MEDIUM (OPERATIONAL):
+  6. Trace ID without tenant_id structure
+     → Multi-tenant not supported
+  
+  7. ActionMatrix.profile="default" hardcoded
+     → Multi-profile execution not supported
+
+
+END OF STAGE 1 (REVISITED)

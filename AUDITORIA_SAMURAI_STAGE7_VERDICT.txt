@@ -1,0 +1,1080 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 7: SYNTHESIS, VERDICT, AND UPGRADE PATH
+TECHNO OS BACKEND (AGENTIC VERITTÀ) — FINAL JUDGMENT
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, sem concessões
+ESCOPO: Veredicto final sobre arquitetura, governança, prontidão para produção
+AUDIÊNCIA: CTO, responsáveis por segurança, tomadores de decisão
+
+AVISO: Este documento é JULGAMENTO FINAL. Síntese de Stages 0-6.
+Recomendação clara: SEAL / DO NOT SEAL / SEAL WITH CONDITIONS
+
+================================================================================
+1. SYNTHESIS OF PREVIOUS FINDINGS
+================================================================================
+
+STAGE 0 (STRUCTURAL ENUMERATION):
+  → System is monolithic HTTP handler calling a pipeline with 8 steps
+  → 80 lines of entrypoint code coupled to all 7 layers
+  → 3 independent registries (router, registry, executor)
+  → Global mutable state (_global_matrix) for testing
+  → Audit trail has two streams (gate + action)
+  → Test suite: 29 files, ~95 tests, 5 categories
+
+STAGE 1 (ARCHITECTURAL ANALYSIS):
+  → 8 CRITICAL coupling points in HTTP layer (God object)
+  → 6 coupling points in pipeline layer (high fanout)
+  → 2 coupling points in gate layer (focused)
+  → 0 coupling points in audit layer (isolated)
+  → Executor layer completely isolated (good)
+  → 7 shared contracts drive interdependencies
+
+STAGE 1-REVISITED (COUPLING & CANONICAL IDs):
+  → CRITICAL: executor_id vs executor.version semantic confusion
+  → CRITICAL: action_router vs action_registry can diverge
+  → HIGH: LEGACY_ACTIONS hardcoded, bypasses AG-03 forever
+  → HIGH: action_matrix not versionable (no canary deployment)
+  → HIGH: Capabilities as unversioned strings
+  → Control-plane configuration is hardcoded in code
+  → No runtime reconfiguration possible
+
+STAGE 2 (PIPELINE EXECUTION):
+  → 8 sequential steps, each a potential failure point
+  → Step 6a (PRE-AUDIT): Logs PENDING before execution
+  → Step 6b (Execution): Executor called, exceptions caught
+  → Step 7 (POST-AUDIT): Logs SUCCESS/FAILED/BLOCKED
+  → Input digest computed in Step 2 (non-JSON fallback)
+  → Output digest computed in Step 7 (non-JSON returns None)
+  → Digest inconsistency between layers undetected
+
+STAGE 3 (GOVERNANCE ENFORCEMENT):
+  → AG-01 (fail-closed gate): IMPLEMENTED ✓
+  → AG-02 (no raw outputs in response): IMPLEMENTED ✓
+  → AG-03 (version + capability validation): RED tests UNIMPLEMENTED ✗
+  → B1-FIX (semver comparison): IMPLEMENTED ✓
+  → B2-FIX (thread safety): IMPLEMENTED ✓
+  → B3 (fingerprinting): IMPLEMENTED ✓
+  → LEGACY_ACTIONS = {"process"}: BYPASSES all AG-03 ✗
+
+STAGE 4 (AUDIT AND TRACEABILITY):
+  → DecisionRecord: 9 fields, profile_hash and matched_rules always empty
+  → ActionResult: 9 fields, input/output digests for privacy
+  → trace_id: Generated per request, correlation key
+  → PRE-AUDIT (PENDING): Logged before executor.execute()
+  → POST-AUDIT (SUCCESS/FAILED/BLOCKED): Logged after execution
+  → CRITICAL: Logging failure silent (audit trail lost)
+  → CRITICAL: Digest mismatch between gate and action audits
+  → 10 auditability failures identified (5 CRITICAL/HIGH)
+
+STAGE 5 (TEST COVERAGE ANALYSIS):
+  → 48 unit tests (gate, decision_record, contracts, locks)
+  → 5 pipeline tests (unknown action, non-JSON, limits)
+  → 12 RED tests (executor versioning, capabilities, action versioning)
+  → 26 integration tests (gate+pipeline, pre-audit, mismatch)
+  → 4 E2E tests (health, process, rejection)
+  → TextProcessExecutorV1: ZERO unit tests (implementation untested)
+  → 14 production failure scenarios identified
+  → 10+ missing test categories (concurrency, logging, executor, mutation)
+
+STAGE 6 (FAILURE MODES):
+  → 80+ distinct failure modes enumerated
+  → 5 CRITICAL failures (logging, AG-03 bypass, state leakage, races, missing impl)
+  → 5 HIGH failures (digest inconsistency, non-versionable, timeout, registration)
+  → 15+ MEDIUM failures (config risks, data integrity)
+  → 11 luck-based mechanisms (stateless executor, logging never fails, sequential)
+  → 44% of failures detected by tests
+  → 25% detected by runtime checks
+  → 31% completely undetected
+
+
+================================================================================
+2. HONEST VERDICT BY DIMENSION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DIMENSION 1: ARCHITECTURE QUALITY                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Assessment: FAIR (passable for prototype, problematic for scale)
+
+Strengths:
+  ✓ Executor layer completely isolated
+  ✓ Audit layer completely isolated
+  ✓ Gate layer focused and testable
+  ✓ Clear 8-step pipeline with explicit ordering
+  ✓ Fail-closed semantics on unknown inputs
+  ✓ Immutable contracts (Pydantic frozen models)
+
+Weaknesses:
+  ✗ HTTP layer is God object (8 coupling points)
+  ✗ Pipeline tightly coupled to 6 registries
+  ✗ Action matrix is global mutable state (race condition risk)
+  ✗ Configuration hardcoded in code (no externalization)
+  ✗ Three independent registries (router, registry, executor)
+  ✗ No dependency inversion (no abstractions for registries)
+  ✗ Executor is singleton (state leakage risk)
+  ✗ No runtime reconfiguration capability
+
+Verdict: Architecture is SERVICEABLE for single-action prototype but INADEQUATE
+for multi-action, multi-tenant, or canary deployments. Control-plane tightly
+embedded in runtime code blocks operational flexibility.
+
+Architecture Score: 5/10
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DIMENSION 2: GOVERNANCE MATURITY                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Assessment: PARTIAL (AG-01, AG-02 strong; AG-03 unimplemented)
+
+Implemented:
+  ✓ AG-01: Fail-closed gate (DENY blocks execution)
+  ✓ AG-02: No raw outputs in HTTP response
+  ✓ B1-FIX: Correct semver comparison (1.10.0 > 1.9.0)
+  ✓ B2-FIX: Thread-safe executor registry (RLock)
+  ✓ B3: Fingerprinting enabled for governance artifacts
+
+Not Implemented / Broken:
+  ✗ AG-03: Version validation NOT implemented (RED tests)
+  ✗ AG-03: Capability validation NOT implemented (RED tests)
+  ✗ LEGACY_ACTIONS bypass: "process" action skips ALL AG-03
+  ✗ Profile context lost: profile_hash="" (always), matched_rules=[] (always)
+  ✗ Governance audit: No audit of control-plane state changes
+  ✗ Action versioning: No sunset/deprecation mechanism
+
+Risk Assessment: System claims governance (AG-01/02/B1-B3) but AG-03 is
+the core feature for multi-action systems, and it's RED (not done). LEGACY_ACTIONS
+hardcoded bypass means only "process" action runs, and it bypasses validation.
+This is critical: You cannot enforce action versions or capabilities because
+the mechanism doesn't exist (RED tests).
+
+Governance Score: 4/10 (AG-01/02 = good, AG-03 = not implemented, bypass = bad)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DIMENSION 3: AGENTIC READINESS                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Assessment: NOT READY (single action only, no multi-agent coordination)
+
+Current State:
+  ✓ Single action "process" is fully operational
+  ✓ Pipeline steps are deterministic and audited
+  ✓ Executor output is isolated (not exposed in response)
+  ✗ Only one action possible (hardcoded action="process")
+  ✗ No action routing for multiple agents
+  ✗ No action composition or chaining
+  ✗ No dynamic executor registration
+  ✗ No agent identity or context preservation
+
+AG-03 (multi-action governance): RED (not implemented)
+  - Cannot enforce version compatibility for new actions
+  - Cannot declare capabilities for new executors
+  - Cannot validate action-to-executor mappings
+  - Cannot deprecate old actions
+
+Critical Gap: System can execute ONE action ("process") with governance.
+It cannot manage MULTIPLE actions or MULTIPLE agents. The RED tests for
+AG-03 explicitly flag this: "expect BLOCKED but feature not implemented".
+
+Agentic Score: 2/10 (single action only, multi-action framework incomplete)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ DIMENSION 4: PRODUCTION READINESS                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Assessment: NOT READY FOR PRODUCTION (critical gaps in reliability, observability, scaling)
+
+Critical Production Blockers:
+  ✗ Logging failure is silent (audit trail lost, no exception)
+  ✗ Concurrent request access to _global_matrix (no lock, race condition)
+  ✗ Executor timeout not enforced (can hang indefinitely)
+  ✗ No concurrent test coverage (sequential-only testing)
+  ✗ TextProcessExecutorV1 has zero unit tests (implementation untested)
+  ✗ AG-03 not implemented (version/capability validation missing)
+  ✗ Non-JSON payload digest inconsistency (audit trail broken)
+  ✗ No multi-tenant isolation (trace_id has no tenant context)
+  ✗ No runtime reconfiguration (all state hardcoded, requires redeploy)
+  ✗ No canary deployment capability (matrix not versionable)
+
+Observability Gaps:
+  ✗ Audit trail can be lost silently (logging failure)
+  ✗ profile_hash and matched_rules always empty (governance context lost)
+  ✗ Digest mismatch undetected (no test for consistency)
+  ✗ Exception details hidden (all exceptions → FAILED)
+
+Reliability Gaps:
+  ✗ Executor state leakage (singleton, no isolation)
+  ✗ Global mutable state not protected (no transaction semantics)
+  ✗ Large payloads not handled (no timeout, OOM risk)
+  ✗ Concurrent requests not tested (production concurrency risk)
+
+Operability Gaps:
+  ✗ Configuration hardcoded (code changes required, redeploy needed)
+  ✗ Only one action supported (hardcoded action="process")
+  ✗ Only one profile supported (ActionMatrix.profile="default")
+  ✗ No dynamic executor registration (redeploy required)
+
+Verdict: System is suitable for ISOLATED TESTING or RESEARCH PROTOTYPE but
+has multiple critical gaps that would cause production incidents:
+
+  - First production logging failure: Audit trail lost (CRITICAL security event)
+  - First concurrent request peak: Race condition on matrix (request isolation violated)
+  - First timeout scenario: Process hangs indefinitely (availability issue)
+  - First new action need: Code change + redeploy required (operational pain)
+
+Production Score: 2/10 (only suitable for single-user, synchronous, low-load testing)
+
+
+================================================================================
+3. WHAT IS ACCEPTABLE FOR R&D vs. PRODUCTION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ACCEPTABLE FOR R&D (Current State):                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Acceptable:
+  ✓ Single action ("process") fully operational
+  ✓ Clear auditable pipeline (PRE-AUDIT + execution + POST-AUDIT)
+  ✓ Deterministic executor output
+  ✓ Fail-closed gate (unknown fields → DENY)
+  ✓ Privacy by design (digests only, no raw output in response)
+  ✓ Prototype governance (AG-01, AG-02, B1-B3)
+  ✓ Semver comparison correct
+  ✓ Thread-safe executor registry
+  ✓ Immutable contracts
+
+Acceptable Limitations for R&D:
+  ✓ Single hardcoded action (fine for testing one executor)
+  ✓ Global mutable matrix for test configuration (fine, cleanup works)
+  ✓ Hardcoded registries (fine, configuration rarely changes in R&D)
+  ✓ No executor timeout (fine, tests are short-running)
+  ✓ Sequential testing (fine, no concurrent load in R&D)
+  ✓ Logging may fail silently (acceptable in research, would be caught in monitoring)
+  ✓ AG-03 not implemented (OK, RED tests document what's missing)
+
+R&D Verdict: SUITABLE FOR ISOLATED RESEARCH
+You can safely:
+  - Test the single "process" action
+  - Verify gate logic with various payloads
+  - Verify audit trail with mock logging
+  - Prototype executor behavior
+  - Test semver and capability mechanisms in isolation
+  - Iterate on governance rules
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ BLOCKS FOR PRODUCTION (Must Fix Before Release):                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Blocking Issues:
+
+1. LOGGING FAILURE → AUDIT TRAIL LOSS (SEVERITY: CRITICAL)
+   Problem: logger.info() exceptions are swallowed silently
+   Impact: No proof of execution in audit trail
+   Requirement: Audit failures must either succeed or fail loudly
+   Detection: Not testable with current mocking
+   Must fix: Before any production deployment
+
+2. CONCURRENT REQUEST RACE (SEVERITY: CRITICAL)
+   Problem: _global_matrix has no lock, concurrent requests race
+   Impact: Request isolation violated, wrong actions allowed
+   Requirement: Either remove mutable global state or protect with lock
+   Detection: Only visible in concurrent tests (which don't exist)
+   Must fix: Before any multi-request scenario
+
+3. EXECUTOR TIMEOUT NOT ENFORCED (SEVERITY: HIGH)
+   Problem: No timeout mechanism, executor can hang indefinitely
+   Impact: Request timeout → user-facing latency, cascading failures
+   Requirement: All executors must have bounded execution time
+   Detection: Only visible in stress tests (which don't exist)
+   Must fix: Before any production load
+
+4. AG-03 NOT IMPLEMENTED (SEVERITY: HIGH)
+   Problem: Version and capability validation completely missing (RED tests)
+   Impact: Cannot enforce multi-action governance rules
+   Requirement: Must implement version compatibility and capability checking
+   Detection: RED tests document missing behavior
+   Must fix: Before supporting multiple actions
+
+5. EXECUTOR UNIT TESTS MISSING (SEVERITY: HIGH)
+   Problem: TextProcessExecutorV1 has zero unit tests
+   Impact: Executor behavior completely untested, bugs invisible
+   Requirement: Unit tests for executor logic, exception handling, output validation
+   Detection: No executor unit tests in test suite
+   Must fix: Before any action beyond "process"
+
+6. DIGEST INCONSISTENCY (SEVERITY: HIGH)
+   Problem: Gate uses str() fallback, pipeline uses None for non-JSON
+   Impact: Audit trail inconsistent, non-JSON payloads unverifiable
+   Requirement: Consistent digest strategy across layers
+   Detection: No test compares gate vs action digest
+   Must fix: Before audit trail is trusted
+
+7. NO CONCURRENT TEST COVERAGE (SEVERITY: HIGH)
+   Problem: Sequential-only testing, no concurrent request scenarios
+   Impact: Production concurrency bugs invisible
+   Requirement: Concurrent request tests (at least 10+ parallel requests)
+   Detection: Currently no concurrent tests
+   Must fix: Before production load
+
+8. PROFILE CONTEXT LOST (SEVERITY: MEDIUM)
+   Problem: profile_hash="" and matched_rules=[] always
+   Impact: Governance audit trail lacks context
+   Requirement: Capture which profile was applied and which rules matched
+   Detection: Tests accept empty values
+   Must fix: Before audit trail is trusted for compliance
+
+9. CONFIGURATION HARDCODED (SEVERITY: MEDIUM)
+   Problem: Actions, profiles, executors all in code
+   Impact: Configuration changes require code modification and redeploy
+   Requirement: Externalize control-plane configuration (ENV, file, or API)
+   Detection: N/A (design limitation)
+   Must fix: Before multi-environment deployments
+
+10. ACTION MATRIX MUTABLE, NOT VERSIONABLE (SEVERITY: MEDIUM)
+    Problem: No version field, no canary deployment support
+    Impact: Cannot have multiple versions coexist
+    Requirement: Add version field to ActionMatrix, versioned updates
+    Detection: N/A (design limitation)
+    Must fix: Before any canary or blue-green deployment
+
+
+Production Verdict: DO NOT SEAL FOR PRODUCTION
+System cannot be released to production in current state due to:
+  - Critical audit trail vulnerability (logging failure)
+  - Critical request isolation vulnerability (concurrent matrix race)
+  - Missing core governance feature (AG-03 not implemented)
+  - Missing production telemetry (no timeout, no stress tests)
+
+These are not "nice to have" improvements. These are MUST-HAVE for
+any system that:
+  - Claims to audit actions (but can lose audit trail)
+  - Claims to enforce governance (but AG-03 is RED)
+  - Runs in multi-request environment (but not tested for concurrency)
+
+
+================================================================================
+4. PRIORITIZED UPGRADE PATH
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: CRITICAL BLOCKERS (Must complete before any production)        │
+│ Estimated effort: 4-6 weeks                                            │
+│ Target: Make audit trail non-repudiable and request isolation safe      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+P1.1: FIX LOGGING FAILURE VULNERABILITY (WEEK 1)
+Priority: CRITICAL
+Current: logger.info() exceptions swallowed, audit trail lost
+Target: Audit failure must raise exception or retry
+Implementation:
+  - Add error handler to audit log functions
+  - If logging fails, immediately raise AuditLogError
+  - Catch AuditLogError in pipeline Step 6a/7
+  - Return BLOCKED status with reason_code=AUDIT_LOG_FAILED
+  - Test: Mock logger to raise exception, verify BLOCKED response
+Impact: Prevents silent audit trail loss
+Effort: 3 days
+Risk: Low (explicit error handling)
+
+
+P1.2: FIX CONCURRENT REQUEST RACE ON _global_matrix (WEEK 1)
+Priority: CRITICAL
+Current: No lock, concurrent requests race on mutable state
+Target: Either remove mutable state or add lock with atomicity
+Implementation Option A (Recommended): Remove _global_matrix from runtime
+  - Move test matrix override to test fixture setup (before request)
+  - Use conftest fixture to set global state once per test
+  - Prevent matrix mutations during request execution
+  - Add lock to matrix access in runtime code (guard against test pollution)
+  Effort: 5 days
+  Risk: Medium (fixture refactoring)
+  
+Implementation Option B: Add RLock to _global_matrix
+  - Wrap all _global_matrix reads/writes with lock
+  - Ensure atomic get-set operations
+  - Test: Run 10+ concurrent requests, verify no race
+  Effort: 2 days
+  Risk: Low (straightforward locking)
+  
+Recommendation: Option A (cleaner). Option B as fallback.
+Impact: Request isolation guaranteed even under concurrent load
+Risk: Medium (test fixture refactoring)
+
+
+P1.3: IMPLEMENT AG-03 GOVERNANCE (WEEKS 2-4)
+Priority: CRITICAL (blocks multi-action systems)
+Current: RED tests, version/capability validation missing
+Target: Version and capability checking fully implemented and tested
+Subtasks:
+
+  P1.3a: Implement Action Version Validation (Week 2)
+    - Step 3B: Validate action_version format (semver)
+    - If invalid, return BLOCKED (ACTION_VERSION_INVALID)
+    - Test: test_action_version_invalid_format (RED → GREEN)
+    - Test: test_action_version_old_deprecated (RED → GREEN)
+    Effort: 3 days
+    
+  P1.3b: Implement Executor Version Compatibility (Week 3)
+    - Step 4A: Check executor_version >= min_executor_version
+    - If incompatible, return BLOCKED (EXECUTOR_VERSION_INCOMPATIBLE)
+    - Use packaging.version.Version (B1-FIX confirmed working)
+    - Test: test_executor_version_too_old (RED → GREEN)
+    - Test: test_executor_version_semver_ordering (RED → GREEN)
+    Effort: 2 days
+    
+  P1.3c: Implement Capability Validation (Week 4)
+    - Step 4B: Check executor.capabilities ⊇ required_capabilities
+    - If missing, return BLOCKED (CAPABILITY_MISMATCH)
+    - Both sets treated case-sensitively
+    - Test: test_capability_missing (RED → GREEN)
+    - Test: test_capability_superset_allowed (RED → GREEN)
+    Effort: 2 days
+    
+  P1.3d: Remove LEGACY_ACTIONS Bypass (Week 4)
+    - Delete LEGACY_ACTIONS = {"process"} code
+    - Make ALL actions subject to AG-03
+    - Mark "process" action with action_version="1.0.0" in registry
+    - Test: test_legacy_action_removed_from_bypass
+    Effort: 1 day
+    
+Total AG-03 effort: 8 days
+Impact: Multi-action governance fully operational
+Risk: Medium (RED tests converted to real tests)
+
+
+P1.4: FIX DIGEST INCONSISTENCY (WEEK 4)
+Priority: CRITICAL (audit trail integrity)
+Current: Gate uses str() fallback, pipeline uses None
+Target: Consistent digest strategy across both layers
+Implementation:
+  - Decision: Use None for non-JSON (privacy-first)
+  - Update gate_request() to NOT compute fallback digest
+  - gate input_digest = None if json.dumps() fails
+  - Document: Only JSON payloads have digests
+  - Test: test_digest_consistency_non_json
+  Effort: 2 days
+  Risk: Low (consistent with privacy design)
+
+
+P1.5: CAPTURE GOVERNANCE CONTEXT IN AUDIT (WEEK 5)
+Priority: HIGH (audit trail completeness)
+Current: profile_hash="" and matched_rules=[] always
+Target: Populate with actual values
+Implementation:
+  - gate_engine.evaluate_gate() returns: profile applied + rules matched
+  - main.py gate_request() extracts: profile_hash, matched_rules
+  - DecisionRecord captured with full context
+  - Test: test_decision_record_captures_profile_hash
+  - Test: test_decision_record_captures_matched_rules
+  Effort: 2 days
+  Risk: Low (return value addition)
+
+
+P1.6: ADD CONCURRENT REQUEST TESTS (WEEK 5-6)
+Priority: CRITICAL (production readiness)
+Current: Sequential-only tests
+Target: Minimum 10+ concurrent request scenarios
+Tests to add:
+  - test_concurrent_get_action_matrix (10 threads)
+  - test_concurrent_process_requests (10 threads, same action)
+  - test_concurrent_different_actions (if multi-action by then)
+  - test_concurrent_gate_evaluation (10 threads)
+  - test_concurrent_executor_calls (10 threads, same executor)
+  - test_race_condition_matrix_mutation (intentional race detection)
+  
+Tools: pytest-asyncio or ThreadPoolExecutor
+Effort: 5 days
+Risk: Medium (concurrency testing can be flaky)
+
+
+PHASE 1 SUMMARY:
+  Total effort: 4-6 weeks (1 person, full-time)
+  Critical path: P1.1 (1) → P1.2 (1) → P1.3 (8) + P1.4 (2) + P1.5 (2) + P1.6 (5) = 19 days
+  If parallelized: 4-5 weeks
+  Exit criteria: All CRITICAL blockers resolved, no RED tests remain
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: HARDENING (After Phase 1, before production)                  │
+│ Estimated effort: 3-4 weeks                                            │
+│ Target: Reliability, observability, multi-environment support           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+P2.1: IMPLEMENT EXECUTOR TIMEOUT (WEEK 1)
+Priority: HIGH
+Current: No timeout, can hang indefinitely
+Target: All executors bounded by configurable timeout
+Implementation:
+  - Add timeout_ms field to executor.limits
+  - Wrap executor.execute() call with timeout (use signal or async)
+  - If timeout, catch TimeoutError, return FAILED (EXECUTOR_TIMEOUT)
+  - Test: test_executor_timeout_exceeded
+  Effort: 3 days
+
+
+P2.2: IMPLEMENT EXECUTOR UNIT TESTS (WEEK 1-2)
+Priority: HIGH
+Current: TextProcessExecutorV1 has zero unit tests
+Target: >90% coverage of executor implementation
+Tests:
+  - test_text_process_valid_input
+  - test_text_process_missing_text_field
+  - test_text_process_text_not_string
+  - test_text_process_output_format
+  - test_text_process_empty_text
+  - test_text_process_very_long_text (stress)
+  - test_text_process_unicode_handling
+  - test_text_process_exception_handling
+  Effort: 3 days
+
+
+P2.3: EXTERNALIZE CONTROL-PLANE CONFIGURATION (WEEKS 2-3)
+Priority: HIGH
+Current: Actions, profiles, executors hardcoded in code
+Target: Load from ENV, YAML, or configuration API
+Implementation:
+  - Create config module (app/config.py)
+  - Load DEFAULT_PROFILES from JSON/YAML file (or ENV)
+  - Load ACTION_REGISTRY from JSON/YAML file (or ENV)
+  - Load LEGACY_ACTIONS (if needed) from config
+  - Support environment-specific configs (dev/staging/prod)
+  - Test: test_config_load_from_file
+  - Test: test_config_override_from_env
+  Effort: 5 days
+
+
+P2.4: IMPLEMENT ACTION MATRIX VERSIONING (WEEK 3)
+Priority: HIGH (required for canary deployment)
+Current: No version field, mutable state
+Target: Versioned, immutable action matrices
+Implementation:
+  - Add version field to ActionMatrix (e.g., "1.0.0")
+  - Add timestamp field (ts_utc)
+  - Make ActionMatrix immutable (frozen=True)
+  - Support matrix updates with version increment
+  - Test: test_matrix_version_increment
+  - Test: test_matrix_immutable
+  Effort: 3 days
+
+
+P2.5: FIX EXECUTOR STATE ISOLATION (WEEK 4)
+Priority: MEDIUM
+Current: Executor singleton, state shared across requests
+Target: Each request gets isolated executor state
+Implementation:
+  - Either: Make executor stateless (verify no internal state mutation)
+  - Or: Create new executor instance per request (less efficient)
+  - Or: Reset executor state between requests
+  - Test: test_executor_state_isolation (run 100 requests, verify no leakage)
+  Effort: 2 days
+
+
+P2.6: ADD STRESS TESTS (WEEK 4)
+Priority: MEDIUM
+Current: Only normal-case tests
+Target: Large payload, deep nesting, many concurrent requests
+Tests:
+  - test_stress_large_payload (100MB JSON)
+  - test_stress_deep_nesting (1000 levels)
+  - test_stress_many_list_items (10000 items)
+  - test_stress_concurrent_requests (100+ parallel)
+  Effort: 3 days
+
+
+PHASE 2 SUMMARY:
+  Total effort: 3-4 weeks (1 person, full-time)
+  Critical path: P2.3 (5) + P2.4 (3) + supporting work = 2-3 weeks
+  If parallelized: 3-4 weeks
+  Exit criteria: All stress tests pass, executor tested, config externalized
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: SCALING (After Phase 2, for multi-agent/multi-tenant)         │
+│ Estimated effort: 6-8 weeks                                            │
+│ Target: Multi-action, multi-tenant, true agentic capability            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+P3.1: REMOVE HARDCODED action="process" (WEEK 1)
+Priority: HIGH (enables multi-action)
+Current: Only "process" action supported
+Target: HTTP endpoint accepts action parameter
+Implementation:
+  - Change POST /process → POST /actions/{action}
+  - Extract action from URL path or query parameter
+  - Validate action is in ACTION_REGISTRY
+  - Route to correct executor
+  - Test: test_multiple_actions_routable
+  Effort: 2 days
+
+
+P3.2: IMPLEMENT MULTI-PROFILE SUPPORT (WEEK 1-2)
+Priority: HIGH (operational flexibility)
+Current: Only ActionMatrix.profile="default"
+Target: Support multiple profiles, selected per request or context
+Implementation:
+  - Add profile parameter to ActionMatrix or GateInput
+  - Allow different profiles per tenant/context
+  - Update gate_engine to use selected profile
+  - Test: test_multiple_profiles_different_rules
+  Effort: 3 days
+
+
+P3.3: IMPLEMENT TENANT ISOLATION (WEEK 2-3)
+Priority: HIGH (multi-tenant support)
+Current: No tenant context in trace_id
+Target: tenant_id in all audit trails, isolated access
+Implementation:
+  - Add tenant_id to ActionRequest, GateInput, DecisionRecord, ActionResult
+  - Filter audit logs by tenant_id
+  - Add tenant isolation test (verify tenant A cannot see tenant B's actions)
+  - Test: test_tenant_isolation
+  Effort: 4 days
+
+
+P3.4: IMPLEMENT DYNAMIC EXECUTOR REGISTRATION (WEEK 3-4)
+Priority: MEDIUM (operational flexibility)
+Current: Executors hardcoded in code
+Target: Register executors at runtime (API endpoint)
+Implementation:
+  - Create POST /executors registration endpoint
+  - Validate executor signature and capabilities
+  - Add to _EXECUTORS registry
+  - Support executor update/removal
+  - Test: test_dynamic_executor_registration
+  Effort: 5 days
+
+
+P3.5: IMPLEMENT ACTION COMPOSITION (WEEK 4-5)
+Priority: LOW (advanced agentic feature)
+Current: Single action per request
+Target: Chain multiple actions, pass output to next
+Implementation:
+  - New action type: "composition" that lists sub-actions
+  - Executor for composition: runs actions in sequence, passes output
+  - Test: test_action_composition
+  Effort: 5 days
+
+
+P3.6: IMPLEMENT DISTRIBUTED TRACING (WEEK 5-6)
+Priority: MEDIUM (production observability)
+Current: Single trace_id, no parent/child relationship
+Target: parent_trace_id, span_id, distributed trace correlation
+Implementation:
+  - Add parent_trace_id field to DecisionRecord, ActionResult
+  - Support OpenTelemetry or similar format
+  - Test: test_distributed_tracing
+  Effort: 3 days
+
+
+P3.7: IMPLEMENT OBSERVABILITY DASHBOARD (WEEK 6-8)
+Priority: MEDIUM (operational visibility)
+Current: Logs only, no visualization
+Target: Dashboard showing action execution, governance decisions, errors
+Implementation:
+  - Parse audit logs into structured format (Elasticsearch or similar)
+  - Create Grafana dashboard or custom UI
+  - Metrics: action success rate, executor latency, governance blocks
+  - Test: test_metrics_accuracy
+  Effort: 8 days
+
+
+PHASE 3 SUMMARY:
+  Total effort: 6-8 weeks (1-2 people)
+  Critical path: P3.1 (2) + P3.2 (3) + P3.3 (4) + P3.4 (5) + P3.6 (3) = 17 days
+  If parallelized: 6-8 weeks
+  Exit criteria: Multi-action, multi-tenant, distributed tracing, dashboard
+
+
+================================================================================
+5. DETAILED UPGRADE SEQUENCE (Gantt-style)
+================================================================================
+
+PHASE 1 (Blockers):
+
+Week 1:
+  P1.1 (3 days): Fix logging failure vulnerability
+  P1.2 (5 days, parallel option): Fix concurrent race on matrix
+  
+Week 2-3:
+  P1.3a-b (5 days): Implement action + executor version validation
+  
+Week 4:
+  P1.3c-d (3 days): Implement capability validation + remove legacy bypass
+  P1.4 (2 days, parallel): Fix digest inconsistency
+  P1.5 (2 days, parallel): Capture governance context
+  
+Week 5-6:
+  P1.6 (5 days): Add concurrent request tests
+  
+Exit: Phase 1 complete (no RED tests, all blockers fixed)
+
+
+PHASE 2 (Hardening):
+
+Week 1:
+  P2.1 (3 days): Implement executor timeout
+  P2.2 (3 days, parallel): Add executor unit tests
+  
+Week 2-3:
+  P2.3 (5 days): Externalize control-plane config
+  
+Week 3:
+  P2.4 (3 days, parallel): Implement matrix versioning
+  
+Week 4:
+  P2.5 (2 days): Fix executor state isolation
+  P2.6 (3 days, parallel): Add stress tests
+  
+Exit: Phase 2 complete (all tests pass, config externalized)
+
+
+PHASE 3 (Scaling):
+
+Week 1:
+  P3.1 (2 days): Remove hardcoded action="process"
+  P3.2 (3 days): Implement multi-profile support
+  
+Week 2-3:
+  P3.3 (4 days): Implement tenant isolation
+  
+Week 3-4:
+  P3.4 (5 days): Implement dynamic executor registration
+  
+Week 4-5:
+  P3.5 (5 days): Implement action composition
+  
+Week 5-6:
+  P3.6 (3 days): Implement distributed tracing
+  
+Week 6-8:
+  P3.7 (8 days): Implement observability dashboard
+  
+Exit: Phase 3 complete (multi-action, multi-tenant, true agentic)
+
+
+TOTAL TIMELINE: 12-18 weeks (if strictly sequential)
+                 10-14 weeks (if highly parallelized)
+                 Estimated 1 senior engineer full-time
+
+
+================================================================================
+6. FINAL SCORE TABLE
+================================================================================
+
+Dimension                │ Current │ After P1 │ After P2 │ After P3 │ Target
+──────────────────────────┼─────────┼──────────┼──────────┼──────────┼────────
+Architecture Quality      │   5/10  │   6/10   │   7/10   │   8/10   │  8/10
+Governance Maturity       │   4/10  │   8/10   │   8/10   │   9/10   │  9/10
+Agentic Readiness         │   2/10  │   3/10   │   4/10   │   8/10   │  8/10
+Production Readiness      │   2/10  │   6/10   │   8/10   │   9/10   │  9/10
+──────────────────────────┼─────────┼──────────┼──────────┼──────────┼────────
+OVERALL SCORE             │  3.3/10 │  5.8/10  │  6.8/10  │  8.5/10  │  8.5/10
+
+
+Detailed Breakdown:
+
+CURRENT STATE (3.3/10):
+  ✓ Strengths: Isolated executor, isolated audit, clear pipeline
+  ✗ Weaknesses: Logging fails silently, concurrency unsafe, AG-03 missing,
+                only single action, no production readiness
+
+AFTER PHASE 1 (5.8/10):
+  + Fixed: Logging failures, concurrent races, AG-03 implemented,
+           governance context captured, concurrent tests added
+  ✗ Remains: Hardcoded config, no timeout, executor untested,
+             single action only, no multi-tenant
+
+AFTER PHASE 2 (6.8/10):
+  + Fixed: Executor timeout, executor unit tests, config externalized,
+           matrix versioning, stress tests pass
+  ✗ Remains: Single action hardcoded, no tenant isolation,
+             no distributed tracing
+
+AFTER PHASE 3 (8.5/10):
+  + Fixed: Multi-action support, multi-profile, tenant isolation,
+           dynamic executor registration, distributed tracing,
+           observability dashboard
+  ✗ Minor: Action composition (advanced), some edge cases
+
+
+================================================================================
+7. RISK ASSESSMENT BY PHASE
+================================================================================
+
+PHASE 1 RISKS:
+
+  P1.1 (Logging): LOW
+    - Straightforward error handling
+    - Well-defined change surface
+    - Easy to test with mock logger
+
+  P1.2 (Concurrent Race): MEDIUM
+    - Fixture refactoring is non-trivial
+    - Must not break existing tests
+    - Race condition is hard to reproduce (flaky tests possible)
+
+  P1.3 (AG-03): MEDIUM
+    - RED tests become real code
+    - Semantic validation complex (version ranges, capabilities)
+    - New failure modes introduced (must handle all edge cases)
+
+  P1.4 (Digest): LOW
+    - Straightforward consistency fix
+    - Well-defined scope
+
+  P1.5 (Profile Context): LOW
+    - Adding return values, simple refactoring
+
+  P1.6 (Concurrent Tests): MEDIUM
+    - Concurrency testing is inherently flaky
+    - May need retry logic or reduced assertion confidence
+
+
+PHASE 2 RISKS:
+
+  P2.1 (Timeout): LOW
+    - Standard pattern, well-tested libraries available
+
+  P2.2 (Executor Tests): LOW
+    - Straightforward unit testing
+
+  P2.3 (Config Externalization): MEDIUM
+    - Changes how system is initialized
+    - Must maintain backward compatibility
+    - Environment-specific configs complex to manage
+
+  P2.4 (Matrix Versioning): LOW
+    - Additive change, low risk
+
+  P2.5 (Executor State): MEDIUM
+    - State isolation hard to verify
+    - Requires deep understanding of executor implementation
+
+  P2.6 (Stress Tests): MEDIUM
+    - May discover unexpected behaviors
+    - System resource limits may vary by environment
+
+
+PHASE 3 RISKS:
+
+  P3.1 (Multi-action): MEDIUM
+    - Large refactoring (URL routing change)
+    - Must maintain backward compatibility (gradual transition)
+
+  P3.2 (Multi-profile): LOW
+    - Additive feature, gate engine already supports multiple profiles
+
+  P3.3 (Tenant Isolation): MEDIUM
+    - Complex to test thoroughly (isolation is hard to verify)
+    - May have subtle data leakage bugs
+
+  P3.4 (Dynamic Executor): HIGH
+    - Security implications (what validates new executors?)
+    - Complex to test safely
+
+  P3.5 (Action Composition): HIGH
+    - Introduces new semantics (chains, sub-actions)
+    - Error handling for partial failures complex
+
+  P3.6 (Distributed Tracing): MEDIUM
+    - Requires careful instrumentation
+    - May have performance implications
+
+  P3.7 (Dashboard): LOW
+    - Isolated from core system, mostly UI/UX
+
+
+================================================================================
+8. FINAL RECOMMENDATION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ VERDICT: DO NOT SEAL FOR PRODUCTION                                    │
+│                                                                         │
+│ CONDITIONAL PATH: SEAL IF AND ONLY IF:                                 │
+│   - Phase 1 all complete (no RED tests remain)                         │
+│   - Concurrent request tests pass (10+ parallel)                        │
+│   - Logging failure is handled with retry/exception                     │
+│   - AG-03 fully implemented and tested                                  │
+│   - Audit trail verified for consistency and completeness               │
+│   - Risk assessment reviewed and accepted by CTO + Security             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+HONEST ASSESSMENT:
+
+Current System:
+  This is a well-engineered RESEARCH PROTOTYPE with excellent isolation
+  between layers (executor, audit, gate are clean). However, it has critical
+  gaps that prevent production use:
+
+  1. AUDIT TRAIL VULNERABILITY: Logging failures are silent. This is a
+     CRITICAL security and compliance issue. Any production system must
+     guarantee non-repudiation of actions.
+
+  2. CONCURRENCY SAFETY: _global_matrix has no lock. This works fine for
+     sequential tests but fails under concurrent load. No production request
+     handler can allow this.
+
+  3. GOVERNANCE INCOMPLETE: AG-03 (version/capability validation) is RED
+     (not implemented). This means the system CLAIMS to enforce governance
+     but cannot. Only "process" action runs, and it bypasses all validation.
+
+  4. MISSING TELEMETRY: No executor unit tests, no stress tests, no
+     concurrent tests. These gaps mean bugs only appear in production.
+
+Decision Logic:
+
+  FOR R&D: ✓ APPROVED
+    The system is excellent for isolated research on a single action.
+    You can safely test governance mechanisms, audit trails, and pipeline
+    execution. It's a solid prototype.
+
+  FOR PRODUCTION: ✗ BLOCKED
+    The system has three CRITICAL gaps:
+      a) Audit trail can be lost (logging failure)
+      b) Concurrent requests are unsafe (no lock, races)
+      c) Governance is incomplete (AG-03 not done)
+    
+    Any one of these would disqualify a production system. All three present
+    blocks independent of each other.
+
+  FOR STAGED PRODUCTION: ✓ POSSIBLE (after Phase 1)
+    If you complete Phase 1 (4-6 weeks), you can deploy to production with:
+      - Single action ("process")
+      - Single profile
+      - Single tenant (no isolation)
+      - Synchronous request handling (no concurrent batch jobs)
+      - Bounded payloads (limits enforced)
+    
+    This is a "minimally viable production" deployment. It's not ideal, but
+    it's defensible if business need is urgent.
+
+    Then Phase 2 (3-4 weeks) hardens reliability. Then Phase 3 (6-8 weeks)
+    adds true agentic capability.
+
+
+RECOMMENDATION TO STAKEHOLDERS:
+
+If Business Timeline is FLEXIBLE (normal R&D):
+  → Do Phase 1 (4-6 weeks)
+  → Do Phase 2 (3-4 weeks)
+  → THEN consider production deployment
+  → Later add Phase 3 for multi-agent capability
+  TOTAL TIME: 7-10 weeks to production-ready
+
+If Business Timeline is URGENT (need something now):
+  → Do Phase 1 (4-6 weeks) MINIMUM
+  → Deploy to production with tight constraints:
+     - Single action, no concurrent batch jobs, monitored logging
+  → Plan Phase 2 + 3 for next quarter
+  → This is ACCEPTABLE RISK if properly monitored
+  PRODUCTION DATE: 4-6 weeks from now
+
+
+KEY DECISION POINT:
+
+  Can you wait 4-6 weeks for Phase 1?
+    → YES: Do it. You'll have a solid, safe system.
+    → NO: Do it anyway. Shipping broken governance is worse than waiting.
+
+
+FINAL WORDS:
+
+  This codebase is PROFESSIONALLY WRITTEN. The engineering is thoughtful
+  (immutable contracts, fail-closed gate, isolated layers). The problem is
+  not code quality. The problem is INCOMPLETENESS.
+
+  Phase 1 is not optional. It's the difference between a prototype and a
+  system. Phase 2 and 3 are enhancements. Phase 1 is MANDATORY.
+
+  Once Phase 1 is done, you have a production-ready foundation. Phases 2-3
+  are about scaling to multi-agent, multi-tenant, multi-profile systems.
+
+  The path is clear. The effort is defined. The blockers are identifiable.
+  Execute Phase 1, ship to production, then expand.
+
+
+================================================================================
+9. FINAL VERDICT TABLE
+================================================================================
+
+DIMENSION                    │ VERDICT
+──────────────────────────────┼──────────────────────────────
+Code Quality                  │ ✓ Excellent (clean isolation)
+Architecture Clarity          │ ✓ Good (8-step pipeline explicit)
+Error Handling                │ ✗ Poor (logging fails silently)
+Test Coverage (breadth)       │ ✓ Good (29 files, ~95 tests)
+Test Coverage (depth)         │ ✗ Poor (executor untested, no concurrency)
+Governance Implementation     │ ✗ Incomplete (AG-03 is RED)
+Production Readiness          │ ✗ No (audit + concurrency + AG-03 gaps)
+Agentic Capability            │ ✗ No (single action only)
+Observability                 │ ✗ Poor (no metrics, profile context lost)
+Operational Flexibility       │ ✗ No (config hardcoded)
+──────────────────────────────┼──────────────────────────────
+OVERALL RECOMMENDATION        │ DO NOT SEAL FOR PRODUCTION
+                              │ SEAL AFTER PHASE 1 (with conditions)
+                              │ Timeline: 4-6 weeks
+──────────────────────────────┴──────────────────────────────
+
+
+================================================================================
+10. CHECKLIST FOR PHASE 1 COMPLETION
+================================================================================
+
+Before marking Phase 1 complete, verify:
+
+  ☐ P1.1: Logging failure raises exception (no silent loss)
+  ☐ P1.2: _global_matrix protected by lock (or removed from runtime)
+  ☐ P1.3a: Action version validation implemented and tested (RED → GREEN)
+  ☐ P1.3b: Executor version compatibility checked (RED → GREEN)
+  ☐ P1.3c: Capability validation implemented (RED → GREEN)
+  ☐ P1.3d: LEGACY_ACTIONS removed, all actions validated
+  ☐ P1.4: Digest strategy consistent (None for all non-JSON)
+  ☐ P1.5: profile_hash and matched_rules populated in audit
+  ☐ P1.6: 10+ concurrent request tests passing
+  ☐ All RED tests converted to GREEN (no RED tests remain)
+  ☐ New tests document expected behavior (no assumptions)
+  ☐ Code review completed (at least 2 reviewers)
+  ☐ Documentation updated (governance mechanisms)
+  ☐ Changelog recorded (audit trail of fixes)
+
+
+================================================================================
+END OF AUDIT
+================================================================================
+
+FINAL VERDICT:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SEAL STATUS: DO NOT SEAL FOR PRODUCTION                                 │
+│                                                                         │
+│ SEAL AFTER: Phase 1 complete (4-6 weeks)                               │
+│             All CRITICAL blockers resolved                              │
+│             All RED tests converted to GREEN                            │
+│             Concurrent request tests passing                            │
+│                                                                         │
+│ TIMELINE TO PRODUCTION:    4-6 weeks (Phase 1 only)                    │
+│ TIMELINE TO FULL CAPABILITY: 12-18 weeks (Phases 1-3)                  │
+│                                                                         │
+│ RECOMMENDATION: Execute Phase 1 immediately. Then seal for production   │
+│                with conditions (Phase 2 planned). Phase 3 enables       │
+│                true multi-agent capability.                            │
+│                                                                         │
+│ CURRENT USE: R&D and prototyping only. Not suitable for production.    │
+│             Single action, single user, sequential requests only.       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+This audit is complete.
+
+Prepared: 21 de dezembro de 2025
+Auditor: GitHub Copilot (SAMURAI MODE)
+Scope: Structural (0), Architectural (1R), Pipeline (2), Governance (3),
+        Audit (4), Test Coverage (5), Failure Modes (6), Verdict (7)
+Status: FINAL JUDGMENT

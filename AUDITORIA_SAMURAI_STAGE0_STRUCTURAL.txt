@@ -1,0 +1,1198 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 0: STRUCTURAL ENUMERATION
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, não-genérico
+OBJETIVO: Descrição estrutural completa do codebase
+AUDIÊNCIA: Arquitetos sêniores e auditores de governança
+
+AVISO: Este documento NÃO contém recomendações, julgamentos de prontidão para
+produção, ou avaliações qualitativas. Apenas enumera o que existe.
+
+================================================================================
+1. ESTRUTURA DO REPOSITÓRIO
+================================================================================
+
+DIRETÓRIOS RAIZ:
+
+techno-os-backend/
+├── .git/                           (Controle de versão)
+├── .github/                        (Metadados e instruções)
+│   ├── copilot-instructions.md     (Governança de desenvolvimento)
+│   └── ENDPOINTS.md                (Documentação de API)
+├── .gitignore                      (Exclusões de versionamento)
+├── .pytest_cache/                  (Cache de pytest)
+├── .venv/                          (Ambiente virtual Python)
+├── app/                            (Código principal da aplicação)
+├── tests/                          (Suite de testes)
+├── docs/                           (Documentação adicional)
+├── requirements.txt                (Dependências de produção)
+├── dev-requirements.txt            (Dependências de desenvolvimento)
+├── pytest.ini                      (Configuração de pytest)
+├── actions_fingerprint.lock        (Lock de ações governadas)
+├── profiles_fingerprint.lock       (Lock de perfis de governança)
+└── *.txt                           (Documentação técnica diversa)
+
+ARQUIVOS DE DOCUMENTAÇÃO TÉCNICA PRESENTES:
+
+- AG02_IMPLEMENTATION.txt
+- AUDITORIA_SAMURAI.txt
+- AUDITORIA_SAMURAI_AG03_INTEGRAL.txt
+- BLINDAGEM_ESTRUTURAL_FASE1_COMPLETA.txt
+- COPILOT_AUDIT_BACKEND_ABUV_AG02_20251221.txt
+- GOVERNANCE_PROFILES.md
+- HTTP_DECISION_POINT.txt
+- R02_FINAL_SUMMARY.txt
+- pytest_final.log
+
+
+================================================================================
+2. ESTRUTURA DO DIRETÓRIO app/
+================================================================================
+
+ARQUIVOS NO NÍVEL RAIZ DE app/:
+
+app/
+├── __init__.py                     (Módulo Python)
+├── main.py                         (FastAPI application, HTTP endpoints)
+├── schemas.py                      (Pydantic schemas para HTTP)
+├── gate_engine.py                  (Motor de validação Gate)
+├── gate_profiles.py                (Perfis de política por ação)
+├── gate_artifacts.py               (Fingerprinting de perfis)
+├── decision_record.py              (Contrato de decisão Gate)
+├── audit_log.py                    (Logger de decisões Gate)
+├── action_contracts.py             (ActionRequest, ActionResult)
+├── action_registry.py              (Registro canônico de ações)
+├── action_matrix.py                (Matriz ação-perfil)
+├── action_router.py                (Roteamento ação→executor)
+├── action_audit_log.py             (Logger de execução de ações)
+├── agentic_pipeline.py             (Pipeline de execução governada)
+├── payload_limits.py               (Validação de limites de payload)
+├── contracts/                      (Subdiretório)
+├── executors/                      (Subdiretório)
+└── __pycache__/                    (Cache Python)
+
+SUBDIRETÓRIO app/contracts/:
+
+app/contracts/
+├── __init__.py
+├── canonical_v1.py                 (Contrato canônico V1)
+├── gate_v1.py                      (Contratos de Gate: GateInput, GateResult)
+├── field_governance.py             (Governança de campos)
+├── normalize.py                    (Normalização de dados)
+├── schema_export.py                (Exportação de schemas)
+└── __pycache__/
+
+SUBDIRETÓRIO app/executors/:
+
+app/executors/
+├── __init__.py
+├── base.py                         (Protocolo Executor, ExecutorLimits)
+├── registry.py                     (Registro de executores, implementações)
+└── __pycache__/
+
+
+================================================================================
+3. ESTRUTURA DO DIRETÓRIO tests/
+================================================================================
+
+ARQUIVOS DE TESTE (25 arquivos):
+
+tests/
+├── conftest.py                     (Fixtures compartilhadas)
+├── test_action_matrix.py
+├── test_action_mismatch.py
+├── test_action_registry.py
+├── test_action_registry_sync.py
+├── test_action_versioning_red.py
+├── test_ag03_audit_integrity_red.py
+├── test_ag03_retrocompat_red.py
+├── test_agentic_pipeline.py
+├── test_api.py
+├── test_contract_canonical_v1.py
+├── test_decision_record.py
+├── test_executor_capabilities_red.py
+├── test_executor_registry_thread_safe_b2.py
+├── test_executor_versioning_red.py
+├── test_field_governance.py
+├── test_gate_adversarial.py
+├── test_gate_artifacts.py
+├── test_gate_engine.py
+├── test_gate_http_enforcement.py
+├── test_gate_pipeline_integration.py
+├── test_normalize.py
+├── test_no_web_dependency.py
+├── test_pre_audit_b3.py
+├── test_profiles_governance_lock.py
+├── test_semver_ordering_b1.py
+├── web_test_api.py
+└── __pycache__/
+
+TOTAL DE TESTES: 123 coletados
+RESULTADO ATUAL: 120 passed, 3 skipped, 1 warning
+
+
+================================================================================
+4. SUBSISTEMA 1: GATE (VALIDAÇÃO DE ENTRADA)
+================================================================================
+
+ARQUIVOS:
+- app/gate_engine.py
+- app/gate_profiles.py
+- app/gate_artifacts.py
+- app/contracts/gate_v1.py
+- app/decision_record.py
+- app/audit_log.py
+
+RESPONSABILIDADE:
+Validar payloads de entrada antes que qualquer executor seja chamado.
+Implementa política fail-closed: qualquer violação resulta em DENY.
+
+COMPONENTES:
+
+1) gate_engine.py:
+   - evaluate_gate(inp: GateInput, rules: Iterable[Rule]) -> GateResult
+   - Implementa 4 regras padrão:
+     • profile_presence (verifica existência de profile)
+     • forbidden_admin_keys (bloqueia chaves administrativas)
+     • external_fields_policy (controla external_id, external_source)
+     • unknown_fields_fail_closed (bloqueia campos não-listados)
+   - Uso de short-circuit: primeira regra negada interrompe avaliação
+   - Exception durante avaliação resulta em DENY (RULE_EXCEPTION_FAIL_CLOSED)
+
+2) gate_profiles.py:
+   - PolicyProfile dataclass:
+     • name: str
+     • allowlist: FrozenSet[str]
+     • deny_unknown_fields: bool
+     • allow_external: bool
+     • forbidden_keys: FrozenSet[str]
+   - DEFAULT_PROFILES: Dict[str, PolicyProfile]
+   - Perfis definidos:
+     • ACTION_AGENT_RUN ("AGENT.RUN")
+     • ACTION_ARCONTE_SIGNAL ("ARCONTE.SIGNAL")
+     • ACTION_PROCESS ("process")
+   - get_profile(action: str) -> PolicyProfile | None
+   - get_profiles_version() -> str (fingerprint SHA256)
+
+3) gate_artifacts.py:
+   - profiles_fingerprint_sha256() -> str
+   - Computa fingerprint determinístico de DEFAULT_PROFILES
+   - Usado para detectar drift de configuração
+
+4) contracts/gate_v1.py:
+   - GateInput (action, payload, allow_external, deny_unknown_fields)
+   - GateResult (decision, reasons, action, evaluated_keys)
+   - GateDecision enum (ALLOW, DENY)
+   - GateReasonCode enum (13 códigos de razão)
+   - GateReason (code, message, evidence)
+
+5) decision_record.py:
+   - DecisionRecord: Registro imutável de decisão Gate
+   - Campos: decision, profile_id, profile_hash, matched_rules, reason_codes,
+            input_digest, trace_id, ts_utc
+   - make_input_digest(payload) -> str (SHA256 de JSON canônico)
+   - Validações: ts_utc deve ser UTC-aware, reason_codes não-vazio se DENY
+
+6) audit_log.py:
+   - log_decision(record: DecisionRecord) -> None
+   - Logger nomeado: "gate_audit"
+   - Emite uma linha JSON por decisão
+
+INVARIANTES DECLARADAS:
+- Fail-closed: qualquer exceção ou violação resulta em DENY
+- Determinismo: mesma entrada sempre produz mesma saída
+- Auditabilidade: toda decisão é registrada
+- Privacidade: apenas digest de payload, nunca payload bruto
+
+
+================================================================================
+5. SUBSISTEMA 2: AGENTIC PIPELINE (EXECUÇÃO GOVERNADA)
+================================================================================
+
+ARQUIVO PRINCIPAL:
+- app/agentic_pipeline.py (481 linhas)
+
+RESPONSABILIDADE:
+Orquestrar execução de ações através de governança V-COF (AG-03).
+Pipeline de 8 etapas com validação, roteamento, execução e auditoria.
+
+FUNÇÃO PRINCIPAL:
+run_agentic_action(
+    action: str,
+    payload: Dict[str, Any],
+    trace_id: str,
+    executor_id: str = "unknown",
+    executor_version: str = "unknown",
+) -> Tuple[ActionResult, Optional[Any]]
+
+ETAPAS DO PIPELINE:
+
+Step 1: Roteamento de ação (route_action)
+- Resolve executor_id a partir de action_router ou action_registry
+- Determina qual executor manipulará a ação
+
+Step 2: Validação de payload JSON-serializável
+- Computa input_digest (SHA256 de JSON canônico)
+- BLOCKED com NON_JSON_PAYLOAD se falhar
+
+Step 3: Validação de ação no registry
+- Busca action_meta em action_registry
+- BLOCKED com ACTION_UNKNOWN se não encontrada (e não roteada)
+
+Step 3A: Validação de action_version (AG-03)
+- Verifica existência de action_version para ações não-legacy
+- Verifica formato semver (X.Y.Z)
+- BLOCKED com ACTION_VERSION_MISSING ou ACTION_VERSION_INVALID
+
+Step 4: Resolução de executor
+- get_executor(executor_id) do registry
+- BLOCKED com EXECUTOR_NOT_FOUND se não existir
+- Extrai executor_version
+
+Step 4A: Validação de min_executor_version (AG-03)
+- Compara executor_version com min_executor_version usando semver
+- Usa packaging.version.Version para comparação correta
+- BLOCKED com EXECUTOR_VERSION_INCOMPATIBLE se incompatível
+
+Step 4B: Validação de required_capabilities (AG-03)
+- Verifica que executor possui todas as capabilities requeridas
+- Normalização: uppercase, deduplicação, ordenação
+- BLOCKED com EXECUTOR_CAPABILITY_MISSING (sem capabilities)
+- BLOCKED com EXECUTOR_CAPABILITY_MISMATCH (capabilities insuficientes)
+
+Step 5: Validação de payload limits
+- check_payload_limits(payload, max_bytes, max_depth, max_list)
+- BLOCKED com LIMIT_EXCEEDED se violar limites
+
+Step 6: Execução com pre-audit (B3-FIX)
+- PRE-AUDIT: Log ActionResult com status="PENDING" ANTES de executor.execute()
+- Garante auditabilidade mesmo se executor tiver side-effects
+- try/except em torno de executor.execute()
+- FAILED com EXECUTOR_TIMEOUT se TimeoutError
+- FAILED com EXECUTOR_EXCEPTION para outras exceções
+
+Step 7: Pós-execução com post-audit
+- Computa output_digest (SHA256 de JSON canônico do output)
+- Log ActionResult com status="SUCCESS"
+- Retorna (ActionResult, None) — output bruto nunca retornado
+
+CONSTANTES E HELPERS:
+
+- LEGACY_ACTIONS = {"process"}
+  Ações isentas de validação estrita AG-03
+
+- SEMVER_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+  Padrão de versão semântica
+
+- _compare_semver(version_a, version_b) -> int
+  Comparação de versões usando packaging.version.Version (B1-FIX)
+
+- _normalize_capabilities(caps) -> List[str]
+  Normaliza capabilities: uppercase, deduplica, ordena
+
+- _is_valid_semver(version_str) -> bool
+  Valida formato X.Y.Z
+
+- _compute_input_digest(payload) -> Optional[str]
+  SHA256 de JSON canônico ou None se não-serializável
+
+- _compute_output_digest(output) -> Optional[str]
+  SHA256 de output ou None
+
+
+================================================================================
+6. SUBSISTEMA 3: ACTION REGISTRY (METADADOS DE AÇÕES)
+================================================================================
+
+ARQUIVOS:
+- app/action_registry.py
+- app/action_matrix.py
+- app/action_router.py
+
+RESPONSABILIDADE:
+Manter metadados canônicos de ações governáveis e suas regras de execução.
+
+COMPONENTES:
+
+1) action_registry.py:
+   
+   ActionMeta (Pydantic BaseModel):
+   - description: str
+   - executor: str
+   - version: Optional[str] (deprecated, backward compat)
+   - action_version: Optional[str] (AG-03 semver)
+   - required_capabilities: List[str] (AG-03)
+   - min_executor_version: Optional[str] (AG-03)
+   
+   Validadores:
+   - action_version deve seguir regex semver
+   - required_capabilities é normalizado (uppercase, ordenado)
+   - min_executor_version deve seguir regex semver
+   
+   ActionRegistry (Pydantic BaseModel):
+   - actions: Dict[str, Any] (suporta ActionMeta ou dict)
+   - frozen=True (imutável)
+   
+   get_action_registry() -> ActionRegistry:
+   - Retorna registry com ação "process" definida
+   - action_version="1.0.0"
+   - required_capabilities=[]
+   - min_executor_version=None
+   
+   compute_registry_fingerprint(registry) -> str:
+   - SHA256 de JSON canônico do registry
+   - Usado para detectar drift
+
+2) action_matrix.py:
+   
+   ActionMatrix (Pydantic BaseModel):
+   - profile: str
+   - allowed_actions: List[str]
+   - frozen=False (mutável para testes)
+   
+   get_action_matrix() -> ActionMatrix:
+   - Retorna matriz padrão: profile="default", allowed_actions=["process"]
+   - Suporta override via _global_matrix
+   
+   set_action_matrix(matrix) -> None:
+   - Override para testes
+   
+   reset_action_matrix() -> None:
+   - Reset para testes
+   
+   is_action_allowed_in_profile(action, profile, matrix) -> bool:
+   - Verifica se ação é permitida em perfil
+
+3) action_router.py:
+   
+   ACTION_REGISTRY (dict):
+   - Mapeamento estático: action → executor_id
+   - Atualmente: {"process": "text_process_v1"}
+   
+   route_action(action: str) -> str:
+   - Resolve executor_id para action
+   - Raises UnknownActionError se não encontrada
+
+
+================================================================================
+7. SUBSISTEMA 4: EXECUTORS (IMPLEMENTAÇÕES DE EXECUÇÃO)
+================================================================================
+
+ARQUIVOS:
+- app/executors/base.py
+- app/executors/registry.py
+
+RESPONSABILIDADE:
+Fornecer instâncias de executores determinísticos e side-effect free.
+
+COMPONENTES:
+
+1) executors/base.py:
+   
+   ExecutorLimits (class):
+   - timeout_ms: int (timeout simulado)
+   - max_payload_bytes: int
+   - max_depth: int
+   - max_list_items: int
+   
+   Executor (Protocol):
+   - executor_id: str
+   - version: str
+   - limits: ExecutorLimits
+   - capabilities: Optional[List[str]] (AG-03)
+   - execute(req: ActionRequest) -> Any
+   
+   RESTRIÇÕES DECLARADAS:
+   - Executores DEVEM ser determinísticos
+   - Executores DEVEM ser side-effect free
+   - Executores PODEM lançar exceções (mapeadas para FAILED)
+
+2) executors/registry.py:
+   
+   TextProcessExecutorV1 (class):
+   - executor_id = "text_process_v1"
+   - version = "1.0.0"
+   - capabilities = ["TEXT_PROCESSING"]
+   - limits = ExecutorLimits(1000, 10000, 10, 100)
+   - execute(req) -> dict:
+     • Uppercases req.payload["text"]
+     • Retorna {"processed": text.upper(), "length": len}
+     • Raises KeyError se "text" ausente
+     • Raises ValueError se "text" não é string
+   
+   _EXECUTORS (dict):
+   - Registry global: {"text_process_v1": TextProcessExecutorV1()}
+   
+   _EXECUTORS_LOCK (threading.RLock):
+   - Lock reentrante para acesso thread-safe (B2-FIX)
+   
+   get_executor(executor_id: str) -> Executor:
+   - Acesso thread-safe com _EXECUTORS_LOCK
+   - Raises UnknownExecutorError se não encontrado
+
+
+================================================================================
+8. SUBSISTEMA 5: ACTION CONTRACTS (CONTRATOS DE EXECUÇÃO)
+================================================================================
+
+ARQUIVO:
+- app/action_contracts.py
+
+RESPONSABILIDADE:
+Definir contratos imutáveis de requisição e resultado de execução.
+
+COMPONENTES:
+
+ActionRequest (Pydantic BaseModel):
+- action: str
+- payload: dict[str, Any]
+- trace_id: str
+- ts_utc: datetime (default=now UTC)
+- extra="forbid", frozen=True (imutável)
+- Validação: ts_utc deve ser UTC-aware
+
+ActionResult (Pydantic BaseModel):
+- action: str
+- executor_id: str
+- executor_version: str
+- status: Literal["SUCCESS", "FAILED", "BLOCKED", "PENDING"]
+- reason_codes: list[str]
+- input_digest: str
+- output_digest: str | None
+- trace_id: str
+- ts_utc: datetime (default=now UTC)
+- extra="forbid", frozen=False
+- Validações:
+  • ts_utc deve ser UTC-aware
+  • reason_codes não-vazio se status != SUCCESS e status != PENDING
+
+SIGNIFICADOS DE STATUS:
+- SUCCESS: Execução completou sem erros
+- FAILED: Executor lançou exceção
+- BLOCKED: Validação de governança bloqueou execução
+- PENDING: Pre-audit (B3-FIX) — marca tentativa de execução
+
+
+================================================================================
+9. SUBSISTEMA 6: AUDIT (TRILHA DE AUDITORIA)
+================================================================================
+
+ARQUIVOS:
+- app/audit_log.py (Gate audit)
+- app/action_audit_log.py (Action audit)
+
+RESPONSABILIDADE:
+Emitir logs estruturados JSON de todas as decisões e execuções.
+
+COMPONENTES:
+
+1) audit_log.py:
+   - Logger nomeado: "gate_audit"
+   - log_decision(record: DecisionRecord) -> None
+   - Serializa DecisionRecord para JSON (uma linha por decisão)
+
+2) action_audit_log.py:
+   - Logger nomeado: "action_audit"
+   - log_action_result(result: ActionResult) -> None
+   - Serializa ActionResult para JSON (uma linha por execução)
+
+GARANTIAS:
+- Logs DEVEM ser emitidos mesmo em FAILED/BLOCKED
+- Pre-audit (PENDING) sempre logado antes de executor.execute()
+- Post-audit (SUCCESS/FAILED) logado após executor
+- Nenhum payload bruto ou output bruto é logado (apenas digests)
+
+
+================================================================================
+10. SUBSISTEMA 7: PAYLOAD LIMITS (VALIDAÇÃO DE SEGURANÇA)
+================================================================================
+
+ARQUIVO:
+- app/payload_limits.py (154 linhas)
+
+RESPONSABILIDADE:
+Validar limites de tamanho, profundidade e complexidade de payloads.
+
+COMPONENTES:
+
+LimitExceeded (Exception):
+- Levantada quando payload viola limites
+
+canonical_json_bytes(payload: Any) -> int:
+- Computa tamanho em bytes de JSON canônico
+- Raises TypeError se não JSON-serializável
+
+max_depth(payload: Any, max_safe_depth: int = 100) -> int:
+- Computa profundidade máxima de aninhamento
+- Usa travessia iterativa (não recursiva)
+- Raises LimitExceeded se exceder max_safe_depth durante travessia
+
+max_list_items(payload: Any, max_safe_items: int = 10000) -> int:
+- Encontra maior lista no payload
+- Usa travessia iterativa
+- Raises LimitExceeded se qualquer lista exceder max_safe_items
+
+check_payload_limits(
+    payload: Any,
+    max_bytes: int,
+    max_depth_limit: int,
+    max_list_limit: int,
+) -> None:
+- Valida todos os limites
+- Raises TypeError para payloads não-serializáveis
+- Raises LimitExceeded se qualquer limite for violado
+
+ALGORITMO:
+- Travessia iterativa com stack
+- Evita recursão (proteção contra stack overflow)
+- Fail-fast: para na primeira violação
+
+
+================================================================================
+11. SUBSISTEMA 8: HTTP LAYER (INTERFACE EXTERNA)
+================================================================================
+
+ARQUIVOS:
+- app/main.py
+- app/schemas.py
+
+RESPONSABILIDADE:
+Expor endpoints HTTP e integrar Gate + Pipeline.
+
+COMPONENTES:
+
+1) main.py:
+   
+   FastAPI application:
+   - title="Techno OS API"
+   - version="0.1.0"
+   
+   Endpoints:
+   
+   GET /health:
+   - Retorna {"status": "ok"}
+   - Sem autenticação
+   - Usado por orquestração e testes
+   
+   POST /process:
+   - Dependency: gate_request (valida via Gate)
+   - Valida via action_matrix (PROFILE_ACTION_MISMATCH)
+   - Chama run_agentic_action()
+   - Retorna ActionResult JSON (sem output bruto)
+   
+   gate_request (async dependency):
+   - Gera trace_id (UUID)
+   - Lê body JSON
+   - Computa input_digest
+   - Constrói GateInput
+   - Chama evaluate_gate()
+   - Se exceção em Gate: DENY com GATE_EXCEPTION
+   - Log DecisionRecord
+   - Emite gate_audit log
+   - Raises HTTPException 403 se DENY
+   - Retorna {"payload", "action", "trace_id"} se ALLOW
+
+2) schemas.py:
+   
+   ProcessRequest (Pydantic BaseModel):
+   - text: str (campo obrigatório)
+   - Validação: @validator("text") verifica non-empty
+   - NOTA: Usa @validator (Pydantic V1, deprecated)
+   
+   ProcessResponse (Pydantic BaseModel):
+   - result: str
+   - NOTA: Não é usado no código atual (main.py retorna dict)
+
+
+================================================================================
+12. GOVERNANÇA E LOCKS
+================================================================================
+
+ARQUIVOS DE LOCK:
+
+1) actions_fingerprint.lock:
+   - Fingerprint SHA256 do action registry
+   - Usado para detectar drift de ações
+   - Não verificado automaticamente no código (apenas em testes)
+
+2) app/profiles_fingerprint.lock:
+   - Fingerprint SHA256 dos gate profiles
+   - Função: get_profiles_version() em gate_profiles.py
+   - Testado em: test_profiles_governance_lock.py
+
+MECANISMO:
+- Fingerprints são computados deterministicamente
+- Testes verificam que fingerprint atual == fingerprint em lock
+- Se divergir, teste falha (indica drift não-intencional)
+
+
+================================================================================
+13. DEPENDÊNCIAS EXTERNAS
+================================================================================
+
+requirements.txt:
+- fastapi
+- uvicorn[standard]
+- pydantic>=2.0
+- packaging (B1-FIX para comparação semver)
+
+dev-requirements.txt:
+- pytest
+- pytest-asyncio
+- httpx (para TestClient)
+
+NOTA: Sem dependências de LLM, sem dependências de banco de dados,
+      sem dependências de cache distribuído.
+
+
+================================================================================
+14. CONFIGURAÇÃO E INFRAESTRUTURA
+================================================================================
+
+pytest.ini:
+- testpaths = tests
+- python_files = test_*.py
+- python_classes = Test*
+- python_functions = test_*
+
+LOGGING:
+- Configurado via logging.getLogger()
+- Dois loggers nomeados:
+  • "gate_audit"
+  • "action_audit"
+- Sem configuração explícita de handlers/formatters no código
+- Assume configuração externa ou defaults do logging
+
+THREADING:
+- threading.RLock() em executors/registry.py (B2-FIX)
+- Sem uso de asyncio para execução de executores
+- FastAPI endpoints são async (gate_request)
+- Pipeline é síncrono
+
+
+================================================================================
+15. DOCUMENTAÇÃO TÉCNICA EXISTENTE
+================================================================================
+
+ARQUIVOS .txt NO REPOSITÓRIO:
+
+1) AG02_IMPLEMENTATION.txt:
+   - Documentação de implementação AG-02
+
+2) AUDITORIA_SAMURAI.txt:
+   - Auditoria anterior (possivelmente pré-AG-03)
+
+3) AUDITORIA_SAMURAI_AG03_INTEGRAL.txt:
+   - Auditoria integral pós-AG-03 (1167 linhas)
+   - Data: 2025-12-21
+   - Conclusão: "ADEQUADO COM RESSALVAS ESTRUTURAIS"
+
+4) BLINDAGEM_ESTRUTURAL_FASE1_COMPLETA.txt:
+   - Documentação de Fase 1 de blindagem estrutural (214 linhas)
+   - Data: 2025-12-21
+   - Status: 3/3 blockers eliminados (B1, B2, B3)
+   - 120 testes passando
+
+5) COPILOT_AUDIT_BACKEND_ABUV_AG02_20251221.txt:
+   - Auditoria específica de AG-02
+
+6) HTTP_DECISION_POINT.txt:
+   - Documentação de pontos de decisão HTTP
+
+7) R02_FINAL_SUMMARY.txt:
+   - Resumo final do Recovery Sprint R-02
+
+8) GOVERNANCE_PROFILES.md:
+   - Documentação de perfis de governança
+
+.github/copilot-instructions.md:
+- Instruções de desenvolvimento com Copilot
+- Princípios: IA como instrumento, código legível > elegante
+- Linguagem técnica purificada
+- Memória dignificada (controle do usuário)
+- LGPD by design
+
+
+================================================================================
+16. PADRÕES DE NOMENCLATURA E CONVENÇÕES
+================================================================================
+
+NOMES DE MÓDULOS:
+- Substantivos descritivos: gate_engine, action_registry, audit_log
+- Separação por underscore: agentic_pipeline, action_audit_log
+
+NOMES DE CLASSES:
+- PascalCase: ActionRequest, GateResult, PolicyProfile
+- Executors: sufixo "V1" para versionamento (TextProcessExecutorV1)
+
+NOMES DE FUNÇÕES:
+- snake_case: evaluate_gate, run_agentic_action, log_decision
+- Prefixo "_" para helpers privados: _compare_semver, _compute_input_digest
+
+ENUMS:
+- PascalCase para enum: GateDecision, GateReasonCode
+- UPPER_CASE para valores: ALLOW, DENY, ACTION_UNKNOWN
+
+CONSTANTES:
+- UPPER_CASE: LEGACY_ACTIONS, SEMVER_PATTERN, DEFAULT_PROFILES
+
+VARIÁVEIS GLOBAIS:
+- Prefixo "_" se mutável: _EXECUTORS, _EXECUTORS_LOCK, _global_matrix
+
+
+================================================================================
+17. TESTES — ESTRUTURA E COBERTURA
+================================================================================
+
+TOTAL: 123 testes coletados, 120 passando, 3 skipped
+
+CATEGORIAS DE TESTES:
+
+Gate:
+- test_gate_engine.py
+- test_gate_adversarial.py
+- test_gate_artifacts.py
+- test_gate_http_enforcement.py
+- test_profiles_governance_lock.py
+
+Pipeline:
+- test_agentic_pipeline.py
+- test_gate_pipeline_integration.py
+
+Action Registry:
+- test_action_registry.py
+- test_action_registry_sync.py
+- test_action_matrix.py
+- test_action_mismatch.py
+
+AG-03 (Versioning & Capabilities):
+- test_action_versioning_red.py
+- test_executor_versioning_red.py
+- test_executor_capabilities_red.py
+- test_ag03_audit_integrity_red.py
+- test_ag03_retrocompat_red.py
+
+Blindagem Estrutural (Fase 1):
+- test_semver_ordering_b1.py (6 testes)
+- test_executor_registry_thread_safe_b2.py (4 testes)
+- test_pre_audit_b3.py (2 testes)
+
+Contracts:
+- test_contract_canonical_v1.py
+- test_field_governance.py
+- test_normalize.py
+- test_decision_record.py
+
+HTTP:
+- test_api.py (3 skipped — legacy MVP)
+- web_test_api.py
+
+Outros:
+- test_no_web_dependency.py
+
+TESTES SKIPPED:
+- test_api.py: 3 testes marcados como "Legacy MVP contract"
+- Razão: Substituídos por gate/pipeline tests
+
+
+================================================================================
+18. HISTÓRICO RECENTE (GIT COMMITS)
+================================================================================
+
+COMMITS MAIS RECENTES:
+
+008d861: docs: Blindagem estrutural Fase 1 completa (B1+B2+B3)
+a6eb78b: B3-FIX: Implement pre-audit logging before executor execution
+70fbbf0: B2-FIX: Add threading.RLock() to executor registry (thread-safe)
+f98b656: B1-FIX: Replace string version comparison with semver (1.10.0 > 1.9.0)
+136b7be: audit: Samurai-mode integral technical audit (ABU-V)
+a1fa9dc: docs: R-02 Recovery Sprint final summary (AG-03 seal complete)
+e264bb7: AG-03 SEAL: Lock governance layer + CI workflow + R-02 final
+
+PADRÃO:
+- Prefixos: "docs:", "B1-FIX:", "B2-FIX:", "B3-FIX:", "audit:", "AG-03 SEAL:"
+- Mensagens descritivas com impacto técnico
+- Fase 1 de blindagem estrutural recém-concluída
+
+
+================================================================================
+19. O QUE NÃO ESTÁ PRESENTE NO CODEBASE
+================================================================================
+
+INFRAESTRUTURA:
+
+- Sem configuração de banco de dados
+- Sem cache distribuído (Redis, Memcached)
+- Sem message queue (RabbitMQ, Kafka)
+- Sem tracing distribuído (OpenTelemetry, Jaeger)
+- Sem métricas (Prometheus, StatsD)
+- Sem service mesh
+- Sem Kubernetes manifests
+- Sem Docker Compose para desenvolvimento
+- Sem Dockerfile
+
+SEGURANÇA:
+
+- Sem autenticação de usuário
+- Sem autorização baseada em roles
+- Sem rate limiting
+- Sem CORS configuration explícita
+- Sem TLS/SSL configuration
+- Sem secrets management (Vault, AWS Secrets Manager)
+- Sem input sanitization além de Gate
+
+PERSISTÊNCIA:
+
+- Sem modelos de banco de dados
+- Sem migrations
+- Sem ORM (SQLAlchemy, Tortoise)
+- Sem camada de persistência para:
+  • Decisions
+  • ActionResults
+  • Audit logs (apenas logging, não persiste)
+
+EXECUTORS:
+
+- Apenas 1 executor implementado: TextProcessExecutorV1
+- Sem executors para:
+  • LLM calls
+  • Database queries
+  • External API calls
+  • File I/O
+  • Webhooks
+
+ORQUESTRAÇÃO:
+
+- Sem composição de ações (workflows, DAGs)
+- Sem retry logic
+- Sem circuit breakers
+- Sem fallbacks
+- Sem timeout enforcement real (apenas simulado)
+- Sem async execution de executors
+- Sem job queue
+
+MULTITENANCY:
+
+- Sem isolamento por tenant
+- Sem tenant_id em contratos
+- Sem rate limiting por tenant
+
+OBSERVABILIDADE:
+
+- Sem structured logging configuration
+- Sem log aggregation (ELK, Splunk)
+- Sem alerting (PagerDuty, Opsgenie)
+- Sem health checks detalhados
+- Sem readiness/liveness probes
+
+DEPLOYMENT:
+
+- Sem CI/CD pipelines (.github/workflows vazio ou ausente)
+- Sem scripts de deployment
+- Sem configuração de ambiente (dev, staging, prod)
+- Sem variáveis de ambiente documentadas
+
+GOVERNANÇA AVANÇADA:
+
+- Sem versioning de API (todos endpoints em /)
+- Sem deprecation policy
+- Sem backward compatibility tests além de retrocompat
+- Sem canary deployments
+- Sem feature flags
+
+TESTES:
+
+- Sem testes de carga
+- Sem testes de stress
+- Sem testes de penetração
+- Sem testes de chaos engineering
+- Sem testes end-to-end com dependências reais
+- Sem testes de performance (benchmarks)
+
+DOCUMENTAÇÃO:
+
+- Sem OpenAPI/Swagger UI configuration
+- Sem documentation site (Sphinx, MkDocs)
+- Sem diagramas de arquitetura (em formato machine-readable)
+- Sem ADRs (Architecture Decision Records) formais
+
+DESENVOLVIMENTO:
+
+- Sem pre-commit hooks
+- Sem linting configuration (flake8, pylint, ruff)
+- Sem formatting configuration (black, isort)
+- Sem type checking enforcement (mypy strict mode)
+- Sem coverage thresholds
+
+
+================================================================================
+20. SEPARAÇÃO DE RESPONSABILIDADES (OBSERVADA)
+================================================================================
+
+CAMADAS ARQUITETURAIS:
+
+1. HTTP LAYER (main.py, schemas.py)
+   - Recebe requisições HTTP
+   - Gerencia trace_id
+   - Delega para Gate
+   - Delega para Pipeline
+   - Serializa respostas
+
+2. GATE LAYER (gate_*.py, contracts/gate_v1.py)
+   - Valida payloads contra policies
+   - Fail-closed: nega tudo que não é explicitamente permitido
+   - Sem dependência de executors
+   - Emite gate_audit
+
+3. ROUTING LAYER (action_router.py, action_matrix.py)
+   - Resolve ação → executor
+   - Valida ação contra matriz de perfil
+   - Sem lógica de execução
+
+4. PIPELINE LAYER (agentic_pipeline.py)
+   - Orquestra validação AG-03
+   - Resolve executor
+   - Valida versões e capabilities
+   - Valida payload limits
+   - Executa executor
+   - Emite action_audit (pre + post)
+
+5. REGISTRY LAYER (action_registry.py, executors/registry.py)
+   - Mantém metadados de ações
+   - Mantém instâncias de executors
+   - Sem lógica de validação ou execução
+
+6. EXECUTOR LAYER (executors/base.py, executors/registry.py)
+   - Implementa lógica de negócio
+   - Determinístico, side-effect free
+   - Sem conhecimento de Gate ou Pipeline
+
+7. CONTRACTS LAYER (action_contracts.py, decision_record.py)
+   - Define estruturas de dados imutáveis
+   - Sem lógica de negócio
+   - Pydantic models para validação
+
+8. AUDIT LAYER (audit_log.py, action_audit_log.py)
+   - Emite logs estruturados
+   - Sem lógica de decisão
+   - Apenas serialização JSON
+
+ACOPLAMENTO OBSERVADO:
+
+- HTTP depende de Gate e Pipeline
+- Pipeline depende de Registry, Executors, Contracts, Audit
+- Gate depende de Contracts (gate_v1.py)
+- Executors NÃO dependem de Gate ou Pipeline
+- Audit NÃO depende de nada (apenas logging stdlib)
+
+INJEÇÃO DE DEPENDÊNCIAS:
+
+- Não há container de DI
+- Dependências são importadas diretamente
+- Registries são globais (_EXECUTORS, DEFAULT_PROFILES)
+- Testabilidade via monkeypatching (pytest)
+
+MUTABILIDADE:
+
+- Contracts: Imutáveis (frozen=True)
+- Gate Profiles: Imutáveis (frozen=True, frozenset)
+- Action Registry: Imutável (frozen=True)
+- Executors: Imutáveis (instâncias não mudam)
+- Action Matrix: Mutável (para testes via set_action_matrix)
+
+
+================================================================================
+21. FLUXO DE EXECUÇÃO COMPLETO (OBSERVADO NO CÓDIGO)
+================================================================================
+
+REQUEST: POST /process {"text": "hello"}
+
+Step 1: FastAPI route handler
+- Invoca dependency gate_request
+
+Step 2: gate_request dependency
+- Gera trace_id = uuid.uuid4()
+- Lê body = {"text": "hello"}
+- Computa input_digest = sha256(canonical JSON)
+- Constrói GateInput(action="process", payload=body, ...)
+- Chama evaluate_gate(gate_input)
+
+Step 3: evaluate_gate
+- Resolve profile = get_profile("process")
+- Itera sobre regras:
+  • profile_presence: OK
+  • forbidden_admin_keys: verifica "admin", "root", etc. — OK
+  • external_fields_policy: verifica "external_id" ausente — OK
+  • unknown_fields_fail_closed: verifica "text" em allowlist — OK
+- Retorna GateResult(decision=ALLOW, reasons=[OK], ...)
+
+Step 4: gate_request dependency (continuação)
+- decision = "ALLOW"
+- Cria DecisionRecord(decision="ALLOW", trace_id=..., ...)
+- log_decision(record) → emite para "gate_audit" logger
+- Retorna {"payload": body, "action": "process", "trace_id": ...}
+
+Step 5: POST /process handler (continuação)
+- Recebe gate_data com payload, action, trace_id
+- Busca action_matrix
+- Verifica "process" in allowed_actions — OK
+- Chama run_agentic_action(action="process", payload=body, trace_id=..., executor_id="text_process_v1")
+
+Step 6: run_agentic_action
+- Step 1: executor_id já fornecido ("text_process_v1")
+- Step 2: Computa input_digest
+- Step 3: Busca action_meta = registry.actions["process"]
+- Step 3A: Valida action_version="1.0.0" — OK (legacy exempt)
+- Step 4: get_executor("text_process_v1") — OK
+- Step 4A: Valida min_executor_version=None — SKIP (legacy)
+- Step 4B: Valida required_capabilities=[] — SKIP (legacy)
+- Step 5: check_payload_limits — OK (payload pequeno)
+- Step 6a: PRE-AUDIT
+  • Cria ActionResult(status="PENDING", reason_codes=["EXECUTION_ATTEMPT"], ...)
+  • log_action_result(pre_audit_result) → emite para "action_audit" logger
+- Step 6b: executor.execute(ActionRequest(...))
+  • TextProcessExecutorV1.execute recebe {"text": "hello"}
+  • Retorna {"processed": "HELLO", "length": 5}
+- Step 7: Computa output_digest = sha256({"processed": "HELLO", ...})
+- Step 7: Cria ActionResult(status="SUCCESS", output_digest=..., ...)
+- log_action_result(result) → emite para "action_audit" logger
+- Retorna (result, None)
+
+Step 7: POST /process handler (continuação)
+- Recebe (result, _) = run_agentic_action(...)
+- Serializa result para JSON:
+  {
+    "status": "SUCCESS",
+    "action": "process",
+    "executor_id": "text_process_v1",
+    "executor_version": "1.0.0",
+    "reason_codes": [],
+    "input_digest": "...",
+    "output_digest": "...",
+    "trace_id": "...",
+    "ts_utc": "2025-12-21T..."
+  }
+- Retorna 200 OK
+
+LOGS EMITIDOS:
+
+1. gate_audit: {"decision": "ALLOW", "action": "process", "trace_id": "..."}
+2. action_audit: {"status": "PENDING", "action": "process", "reason_codes": ["EXECUTION_ATTEMPT"], "trace_id": "..."}
+3. action_audit: {"status": "SUCCESS", "action": "process", "output_digest": "...", "trace_id": "..."}
+
+OUTPUT BRUTO ("HELLO"): Nunca retornado ao cliente, nunca logado.
+
+
+================================================================================
+22. INVARIANTES DECLARADAS NO CÓDIGO (COMENTÁRIOS E DOCSTRINGS)
+================================================================================
+
+GATE:
+- "Determinístico e fail-closed" (gate_engine.py)
+- "Qualquer exceção => DENY" (gate_engine.py)
+- "Short-circuit: primeira regra negada interrompe avaliação" (gate_engine.py)
+
+PIPELINE:
+- "All executors MUST be deterministic and side-effect free" (executors/base.py)
+- "Raw outputs are NEVER included" (action_contracts.py)
+- "No raw payloads, outputs, or stack traces. Only digests and metadata" (action_audit_log.py)
+
+CONTRACTS:
+- "Immutable" (ActionRequest, DecisionRecord: frozen=True)
+- "All fields are auditable and non-repudiable" (action_contracts.py)
+- "ts_utc must be timezone-aware (UTC)" (validadores Pydantic)
+
+AUDIT:
+- "Logs MUST occur even on FAILED/BLOCKED outcomes" (action_audit_log.py docstring)
+- "One line per execution for parsing and audit analysis" (action_audit_log.py)
+
+LIMITS:
+- "All checks use iterative traversal" (payload_limits.py)
+- "Bounded traversal to prevent unbounded recursion" (payload_limits.py)
+
+THREADING:
+- "Thread-safe access via threading.RLock()" (executors/registry.py)
+
+
+================================================================================
+23. MECANISMOS DE FAIL-CLOSED OBSERVADOS
+================================================================================
+
+GATE:
+1. Profile ausente → DENY (UNKNOWN_ACTION)
+2. Exception em rule → DENY (RULE_EXCEPTION_FAIL_CLOSED)
+3. Chave forbidden → DENY (ADMIN_SIGNAL_FORBIDDEN)
+4. Campo unknown com deny_unknown_fields=True → DENY (UNKNOWN_FIELDS_PRESENT)
+5. Campo external sem allow_external → DENY (EXTERNAL_FIELDS_NOT_ALLOWED)
+
+PIPELINE:
+1. Payload não-JSON-serializável → BLOCKED (NON_JSON_PAYLOAD)
+2. Ação desconhecida → BLOCKED (ACTION_UNKNOWN)
+3. action_version ausente (não-legacy) → BLOCKED (ACTION_VERSION_MISSING)
+4. action_version inválida → BLOCKED (ACTION_VERSION_INVALID)
+5. Executor não encontrado → BLOCKED (EXECUTOR_NOT_FOUND)
+6. executor_version < min_executor_version → BLOCKED (EXECUTOR_VERSION_INCOMPATIBLE)
+7. Executor sem capabilities → BLOCKED (EXECUTOR_CAPABILITY_MISSING)
+8. Executor com capabilities insuficientes → BLOCKED (EXECUTOR_CAPABILITY_MISMATCH)
+9. Payload excede limites → BLOCKED (LIMIT_EXCEEDED)
+10. Executor lança TimeoutError → FAILED (EXECUTOR_TIMEOUT)
+11. Executor lança Exception → FAILED (EXECUTOR_EXCEPTION)
+
+HTTP:
+1. Gate DENY → HTTPException 403
+2. Ação não em action_matrix → HTTPException 403 (PROFILE_ACTION_MISMATCH)
+
+
+================================================================================
+24. CENÁRIOS NÃO COBERTOS (OBSERVADOS NO CÓDIGO)
+================================================================================
+
+CONCORRÊNCIA:
+- Lock em executor registry (B2-FIX) protege apenas leitura do dict
+- Se múltiplos workers modificarem registry, não há sincronização
+- action_matrix é global mutável sem lock
+
+TIMEOUT:
+- ExecutorLimits.timeout_ms existe mas não é enforced
+- TimeoutError é detectado mas nunca gerado (sem async timeout)
+
+COMPOSIÇÃO:
+- Pipeline executa UMA ação por request
+- Sem suporte para DAGs, workflows, ou composição de ações
+
+RETRY:
+- Executor falha → FAILED imediatamente
+- Sem retry logic em nenhum layer
+
+ROLLBACK:
+- Executors declarados "side-effect free"
+- Mas se executor violar contrato e tiver side-effect, nenhum rollback
+
+MULTI-TENANT:
+- trace_id não inclui tenant_id
+- Sem isolamento entre tenants
+- Sem rate limiting por tenant
+
+DRIFT DETECTION:
+- Fingerprints existem (actions_fingerprint.lock, profiles_fingerprint.lock)
+- Verificados apenas em testes
+- Sem verificação em runtime
+
+
+================================================================================
+END OF STAGE 0
+================================================================================
+
+PRÓXIMOS ESTÁGIOS (não executados ainda):
+
+Stage 1: Análise de fluxo de execução e pontos de decisão
+Stage 2: Avaliação de invariantes e garantias
+Stage 3: Identificação de riscos estruturais
+Stage 4: Análise de adequação para sistemas agênticos
+Stage 5: Recomendações técnicas priorizadas
+Stage 6: Veredito final e condições de deployment
+
+Este documento enumera O QUE EXISTE no codebase. Nenhum julgamento foi feito.

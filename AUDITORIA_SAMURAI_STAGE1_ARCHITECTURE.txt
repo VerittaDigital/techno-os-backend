@@ -1,0 +1,1178 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 1: ARCHITECTURAL ANALYSIS
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, arquitetural
+ESCOPO: Análise puramente arquitetural (sem testes, performance, ou soluções)
+AUDIÊNCIA: Arquitetos sêniores e auditores de governança
+
+AVISO: Este documento analisa estrutura arquitetural. NÃO contém sugestões de
+melhorias, discussão de testes, ou análise de performance.
+
+================================================================================
+1. HIGH-LEVEL ARCHITECTURE
+================================================================================
+
+CAMADAS VERTICAIS (Top-Down):
+
+┌──────────────────────────────────────────────────────────────┐
+│                       HTTP LAYER                              │
+│  FastAPI app: /health, /process                              │
+│  Dependency: gate_request                                     │
+│  Gerenciamento: trace_id, serialização JSON                  │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ HTTP Request
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       GATE LAYER                              │
+│  Fail-closed validation: GateEngine + PolicyProfiles         │
+│  Rules: forbidden_keys, external_fields, unknown_fields      │
+│  Output: ALLOW/DENY + DecisionRecord                         │
+│  Audit: gate_audit logger                                     │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ if ALLOW
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    ROUTING LAYER                              │
+│  ActionMatrix: verifica ação em allowed_actions              │
+│  ActionRouter: resolve action → executor_id                  │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ executor_id, trace_id
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   PIPELINE LAYER                              │
+│  8-step governance pipeline (agentic_pipeline.py)            │
+│  1. Routing                                                   │
+│  2. JSON validation                                           │
+│  3. Action registry lookup                                    │
+│  3A. action_version validation (AG-03)                       │
+│  4. Executor resolution                                       │
+│  4A. min_executor_version validation (AG-03)                 │
+│  4B. required_capabilities validation (AG-03)                │
+│  5. Payload limits enforcement                                │
+│  6. PRE-AUDIT + Executor.execute() + POST-AUDIT              │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ ActionRequest
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   EXECUTOR LAYER                              │
+│  Implementações: TextProcessExecutorV1                       │
+│  Contrato: determinístico, side-effect free                  │
+│  Protocolo: executor_id, version, capabilities, limits       │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ output
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    AUDIT LAYER                                │
+│  action_audit logger: PRE (PENDING) + POST (SUCCESS/FAILED)  │
+│  Structured JSON: apenas digests, sem payloads brutos        │
+└──────────────────────────────────────────────────────────────┘
+
+FLUXO DE CONTROLE (Sequence):
+
+HTTP Request
+    → gate_request (dependency)
+        → evaluate_gate()
+            → if DENY: log_decision() → raise HTTPException(403)
+            → if ALLOW: log_decision() → return gate_data
+    → Verifica action_matrix
+        → if not allowed: raise HTTPException(403)
+    → run_agentic_action()
+        → Validações AG-03 (version, capabilities)
+        → Payload limits
+        → PRE-AUDIT: log_action_result(PENDING)
+        → executor.execute()
+        → POST-AUDIT: log_action_result(SUCCESS/FAILED)
+        → return (ActionResult, None)
+    → Serializa ActionResult para JSON
+    → return 200 OK
+
+
+FLUXO DE DADOS (Data Flow):
+
+1. HTTP body → GateInput.payload
+2. GateInput → GateResult.decision
+3. payload → ActionRequest.payload
+4. ActionRequest → executor.execute() → output
+5. output → output_digest (SHA256)
+6. Digests → ActionResult
+7. ActionResult → HTTP response JSON
+
+PONTO CRÍTICO:
+Output bruto NUNCA retorna ao HTTP layer. Apenas digests e metadata.
+
+
+================================================================================
+2. CONTROL-PLANE VS. RUNTIME SEPARATION
+================================================================================
+
+CONTROL-PLANE (Configuration and Governance):
+
+1. GATE PROFILES (gate_profiles.py):
+   - DEFAULT_PROFILES dict
+   - PolicyProfile: allowlist, deny_unknown_fields, allow_external
+   - Imutável: frozen=True, FrozenSet
+   - Modificação: requer mudança de código
+   - Fingerprinting: profiles_fingerprint.lock
+
+2. ACTION REGISTRY (action_registry.py):
+   - get_action_registry() retorna ActionRegistry
+   - Metadados: action_version, required_capabilities, min_executor_version
+   - Imutável: frozen=True
+   - Modificação: requer mudança de código
+   - Fingerprinting: actions_fingerprint.lock
+
+3. ACTION MATRIX (action_matrix.py):
+   - ActionMatrix: profile → allowed_actions
+   - Mutável (frozen=False) mas globalmente compartilhado
+   - Modificação: via set_action_matrix() (apenas testes)
+   - SEM fingerprinting
+
+4. ACTION ROUTER (action_router.py):
+   - ACTION_REGISTRY dict: action → executor_id
+   - Hardcoded
+   - Modificação: requer mudança de código
+   - SEM versioning, SEM fingerprinting
+
+5. EXECUTOR REGISTRY (executors/registry.py):
+   - _EXECUTORS dict: executor_id → instance
+   - Hardcoded
+   - Modificação: requer mudança de código
+   - SEM versioning, SEM fingerprinting
+
+RUNTIME (Execution and Audit):
+
+1. GATE EVALUATION:
+   - evaluate_gate(inp: GateInput) → GateResult
+   - Consulta: get_profile(action)
+   - Decisão: ALLOW/DENY baseado em rules
+   - Audit: log_decision(DecisionRecord)
+
+2. PIPELINE EXECUTION:
+   - run_agentic_action(...) → (ActionResult, None)
+   - Consulta: get_action_registry(), get_executor()
+   - Validações: AG-03 compliance
+   - Audit: log_action_result (PRE + POST)
+
+3. EXECUTOR INVOCATION:
+   - executor.execute(ActionRequest) → output
+   - Sem acesso a registries ou profiles
+   - Isolado: apenas recebe ActionRequest
+
+SEPARATION CHARACTERISTICS:
+
+✓ WELL-SEPARATED:
+  - Executors não acessam Gate ou Pipeline
+  - Gate não acessa Executors
+  - Audit não acessa nenhuma lógica de decisão
+
+✗ POORLY SEPARATED:
+  - Control-plane (profiles, registries) é código Python, não config
+  - Sem API para modificar registries em runtime
+  - Sem reload mechanism para profiles ou actions
+  - Drift detection apenas em testes, não em runtime
+
+IMPLICAÇÕES:
+
+1. Para adicionar nova ação:
+   - Modificar action_registry.py (código)
+   - Modificar action_router.py (código)
+   - Modificar gate_profiles.py (código)
+   - Modificar action_matrix.py (código)
+   - Redeployar aplicação
+
+2. Para adicionar novo executor:
+   - Criar classe em executors/registry.py (código)
+   - Adicionar em _EXECUTORS dict (código)
+   - Redeployar aplicação
+
+3. Para modificar policy:
+   - Modificar gate_profiles.py (código)
+   - Recomputar profiles_fingerprint.lock
+   - Redeployar aplicação
+
+OBSERVAÇÃO:
+Control-plane é "configuration-as-code" mas SEM separation da runtime.
+Toda mudança de configuração requer rebuild e redeploy.
+
+
+================================================================================
+3. COUPLING POINTS AND ISOLATION BOUNDARIES
+================================================================================
+
+COUPLING ANALYSIS:
+
+┌─────────────────────────────────────────────────────────────┐
+│ TIGHT COUPLING (Direct Import Dependencies)                 │
+└─────────────────────────────────────────────────────────────┘
+
+main.py imports:
+  - agentic_pipeline (run_agentic_action)
+  - action_audit_log (log_action_result)
+  - action_matrix (get_action_matrix)
+  - audit_log (log_decision)
+  - gate_engine (evaluate_gate)
+  - contracts.gate_v1 (GateInput, GateResult, GateDecision)
+  - decision_record (DecisionRecord)
+  - schemas (ProcessRequest, ProcessResponse)
+
+agentic_pipeline.py imports:
+  - action_audit_log (log_action_result)
+  - action_contracts (ActionRequest, ActionResult)
+  - action_registry (get_action_registry)
+  - action_router (route_action_deterministic)
+  - executors.registry (get_executor, UnknownExecutorError)
+  - payload_limits (check_payload_limits, LimitExceeded)
+  - packaging.version (B1-FIX)
+
+gate_engine.py imports:
+  - contracts.gate_v1 (GateInput, GateResult, GateDecision, etc.)
+  - gate_profiles (PolicyProfile, get_profile)
+
+executors/registry.py imports:
+  - action_contracts (ActionRequest)
+  - executors.base (Executor, ExecutorLimits)
+  - threading (RLock)
+
+COUPLING SCORE:
+  HTTP Layer → 8 imports (ALTA)
+  Pipeline Layer → 6 imports (ALTA)
+  Gate Layer → 2 imports (BAIXA)
+  Executor Layer → 3 imports (BAIXA)
+  Audit Layer → 0 imports stdlib only (NULA)
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ISOLATION BOUNDARIES (What is Protected)                    │
+└─────────────────────────────────────────────────────────────┘
+
+BOUNDARY 1: Executor Isolation
+  Executor recebe: ActionRequest (imutável)
+  Executor retorna: output (Any)
+  Executor NÃO acessa:
+    - Gate profiles
+    - Action registry
+    - HTTP context
+    - Audit loggers
+    - Outros executors
+  
+  STRENGTH: ✓ Executors são plug-and-play
+  WEAKNESS: ✗ Sem verificação de side-effects em runtime
+
+BOUNDARY 2: Gate Isolation
+  Gate recebe: GateInput
+  Gate retorna: GateResult
+  Gate NÃO acessa:
+    - Executors
+    - Action registry
+    - Pipeline state
+  
+  STRENGTH: ✓ Gate é pré-execução pura
+  WEAKNESS: ✗ Gate não conhece action_version ou capabilities
+
+BOUNDARY 3: Audit Isolation
+  Audit recebe: DecisionRecord ou ActionResult
+  Audit retorna: None (side-effect: log emission)
+  Audit NÃO acessa:
+    - Gate
+    - Pipeline
+    - Executors
+  
+  STRENGTH: ✓ Audit é observação pura
+  WEAKNESS: ✗ Sem garantia de delivery (apenas logging.info)
+
+BOUNDARY 4: Contract Isolation
+  Contracts são Pydantic models
+  Contracts NÃO importam:
+    - Gate
+    - Pipeline
+    - Executors
+  
+  STRENGTH: ✓ Contracts são dados puros
+  WEAKNESS: ✗ Contratos estão em arquivos diferentes (gate_v1, action_contracts)
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ SHARED STATE (Global Mutable)                               │
+└─────────────────────────────────────────────────────────────┘
+
+1. _EXECUTORS (executors/registry.py):
+   - Dict global
+   - Protegido por _EXECUTORS_LOCK (B2-FIX)
+   - Inicializado no import
+   - Modificação: apenas via código
+
+2. _global_matrix (action_matrix.py):
+   - Dict global
+   - SEM lock
+   - Modificação: via set_action_matrix() (testes)
+   - Reset: via reset_action_matrix()
+
+3. DEFAULT_PROFILES (gate_profiles.py):
+   - Dict global
+   - Imutável (frozen dataclasses)
+   - Inicializado no import
+   - Modificação: apenas via código
+
+4. ACTION_REGISTRY (action_router.py):
+   - Dict global
+   - Imutável de facto (nenhum set_* function)
+   - Inicializado no import
+   - Modificação: apenas via código
+
+RISK ASSESSMENT:
+  - _EXECUTORS: thread-safe (locked)
+  - _global_matrix: NOT thread-safe (no lock)
+  - DEFAULT_PROFILES: safe (immutable)
+  - ACTION_REGISTRY: safe (no mutation)
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ DEPENDENCY INVERSION (Missing)                              │
+└─────────────────────────────────────────────────────────────┘
+
+Pipeline depende de:
+  - Concrete get_action_registry()
+  - Concrete get_executor()
+  - Concrete evaluate_gate()
+
+Sem abstractions:
+  - Sem interface ActionRegistryProvider
+  - Sem interface ExecutorProvider
+  - Sem interface GateEngine protocol
+
+IMPLICATION:
+  - Impossível substituir registry backend sem modificar pipeline
+  - Impossível testar pipeline com mock registry sem monkeypatch
+  - Impossível rodar múltiplas configurações de registry em paralelo
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ TRACE PROPAGATION (Coupling via trace_id)                   │
+└─────────────────────────────────────────────────────────────┘
+
+trace_id é gerado em: main.py (gate_request)
+trace_id é propagado para:
+  1. DecisionRecord (gate audit)
+  2. ActionRequest (pipeline input)
+  3. ActionResult (PRE + POST audit)
+  4. HTTP response
+
+COUPLING:
+  - trace_id é UUID string, sem estrutura
+  - Sem tenant_id
+  - Sem session_id
+  - Sem parent_trace_id (para composição)
+
+STRENGTH: ✓ Correlação entre gate + pipeline + HTTP
+WEAKNESS: ✗ Sem suporte para distributed tracing ou spans
+
+
+================================================================================
+4. ARCHITECTURAL STRENGTHS
+================================================================================
+
+STRENGTH 1: FAIL-CLOSED BY DESIGN
+
+Gate Layer:
+  - DENY é default
+  - Exception em rule → DENY
+  - Profile ausente → DENY
+  - Campo unknown → DENY (se deny_unknown_fields=True)
+
+Pipeline Layer:
+  - Payload não-JSON → BLOCKED
+  - Ação desconhecida → BLOCKED
+  - Versão incompatível → BLOCKED
+  - Capability ausente → BLOCKED
+  - Limite excedido → BLOCKED
+
+HTTP Layer:
+  - Gate DENY → 403
+  - Action não permitida → 403
+
+IMPLICATION:
+Sistema nunca executa ação que não passa por todas as validações.
+"Fail open" é impossível por design.
+
+
+STRENGTH 2: IMMUTABILITY OF CONTRACTS
+
+Pydantic models com frozen=True:
+  - ActionRequest: imutável
+  - ActionResult: semi-imutável (extra="forbid")
+  - DecisionRecord: imutável
+  - GateInput: imutável
+  - GateResult: imutável
+  - PolicyProfile: dataclass frozen
+  - ActionRegistry: frozen
+
+IMPLICATION:
+Uma vez criado, contrato não pode ser mutado.
+Auditoria é non-repudiable.
+
+
+STRENGTH 3: PRIVACY BY DESIGN
+
+Output bruto nunca retorna:
+  - executor.execute() retorna output
+  - run_agentic_action() retorna (ActionResult, None)
+  - HTTP response contém apenas ActionResult.output_digest
+
+Payload bruto nunca logado:
+  - gate_audit: apenas input_digest
+  - action_audit: apenas input_digest
+
+IMPLICATION:
+Dados sensíveis nunca aparecem em logs ou responses.
+LGPD compliance by design.
+
+
+STRENGTH 4: AUDITABILITY
+
+Toda decisão é logada:
+  - Gate: DecisionRecord → gate_audit
+  - Pipeline PRE: ActionResult(PENDING) → action_audit
+  - Pipeline POST: ActionResult(SUCCESS/FAILED) → action_audit
+
+trace_id propagado:
+  - Correlação entre gate_audit e action_audit
+  - Correlação entre PRE e POST audit
+
+IMPLICATION:
+Toda tentativa de execução deixa trilha.
+Forensics é possível.
+
+
+STRENGTH 5: DETERMINISM
+
+Gate:
+  - Mesmo GateInput sempre produz mesmo GateResult
+  - Rules são puras (sem I/O, sem random)
+
+Pipeline:
+  - Validações são puras
+  - Ordem de steps é fixa
+
+Executors:
+  - Contrato exige determinismo
+  - TextProcessExecutorV1 é determinístico
+
+IMPLICATION:
+Replay de audit logs é possível.
+Debugging é reproduzível.
+
+
+STRENGTH 6: SEPARATION OF CONCERNS
+
+Gate não conhece Pipeline:
+  - evaluate_gate() não chama executors
+  - Gate validation é pré-execução pura
+
+Pipeline não conhece HTTP:
+  - run_agentic_action() não acessa request context
+  - Pipeline é testável sem FastAPI
+
+Executors não conhecem Gate:
+  - executor.execute() não acessa profiles
+  - Executor é testável isoladamente
+
+IMPLICATION:
+Layers podem ser testados independentemente.
+Mudanças em Gate não afetam Executors.
+
+
+STRENGTH 7: AG-03 GOVERNANCE
+
+Action versioning:
+  - action_version: semver
+  - min_executor_version: semver
+  - Comparação correta: packaging.version (B1-FIX)
+
+Capability enforcement:
+  - required_capabilities: normalized, ordered
+  - Executor capabilities: normalized, ordered
+  - MISSING vs MISMATCH distinction
+
+IMPLICATION:
+Executors podem evoluir sem quebrar ações antigas.
+Capabilities garantem compatibility.
+
+
+STRENGTH 8: PRE-AUDIT SAFETY (B3-FIX)
+
+PRE-AUDIT antes de executor.execute():
+  - ActionResult(PENDING) logado ANTES
+  - Se executor falha, PRE-AUDIT existe
+  - Se executor tem side-effect, tentativa é registrada
+
+IMPLICATION:
+Auditability mesmo se executor viola contrato (side-effects).
+Forensics pode distinguir "nunca tentou" vs "tentou e falhou".
+
+
+================================================================================
+5. ARCHITECTURAL WEAKNESSES
+================================================================================
+
+WEAKNESS 1: CONFIGURATION-AS-CODE (Control-Plane Rigidity)
+
+Profiles são código Python:
+  - DEFAULT_PROFILES em gate_profiles.py
+  - Modificação requer code change + redeploy
+
+Actions são código Python:
+  - get_action_registry() retorna hardcoded dict
+  - ACTION_REGISTRY em action_router.py
+
+Executors são código Python:
+  - _EXECUTORS dict hardcoded
+  - Novas implementações requerem code change
+
+IMPLICATION:
+  - Impossível adicionar ação em runtime
+  - Impossível modificar policy sem redeploy
+  - Impossível A/B test de policies
+  - Impossível canary deployment de novo executor
+
+
+WEAKNESS 2: LACK OF DEPENDENCY INVERSION
+
+Pipeline importa concrete implementations:
+  - get_action_registry() (concrete function)
+  - get_executor() (concrete function)
+  - evaluate_gate() (concrete function)
+
+Sem interfaces ou protocols:
+  - Nenhum ActionRegistryProvider protocol
+  - Nenhum ExecutorProvider protocol
+  - Nenhum GateEvaluator protocol
+
+IMPLICATION:
+  - Impossível swap registry backend (e.g., DB, Redis)
+  - Difícil mock em testes (requer monkeypatch)
+  - Impossível plugin architecture
+  - Vendor lock-in para implementation choices
+
+
+WEAKNESS 3: GLOBAL MUTABLE STATE
+
+_global_matrix (action_matrix.py):
+  - Global dict
+  - Modificável via set_action_matrix()
+  - SEM lock (não thread-safe)
+
+IMPLICATION:
+  - Race condition se múltiplas threads modificarem
+  - Test isolation depende de reset_action_matrix()
+  - Difícil paralelizar testes
+  - State leakage entre tests
+
+
+WEAKNESS 4: NO COMPOSITION SUPPORT
+
+Pipeline executa UMA ação:
+  - run_agentic_action() retorna resultado de UMA execução
+  - Sem suporte para multi-step workflows
+  - Sem suporte para DAGs
+  - Sem suporte para chaining
+
+ActionRequest não tem predecessor:
+  - Sem parent_action_id
+  - Sem workflow_id
+  - Sem step_number
+
+IMPLICATION:
+  - Agentic systems frequentemente precisam de composition
+  - Impossível "ação A, depois ação B se A sucedeu"
+  - Impossível fan-out/fan-in patterns
+  - Limitado a single-shot executions
+
+
+WEAKNESS 5: GATE DOESN'T KNOW ACTION SEMANTICS
+
+Gate valida payload structure:
+  - Fields present vs allowlist
+  - Forbidden keys
+  - External fields policy
+
+Gate NÃO valida:
+  - action_version compatibility
+  - required_capabilities
+  - min_executor_version
+
+IMPLICATION:
+  - Ação pode passar Gate mas falhar no Pipeline (BLOCKED)
+  - Duas fases de validação: Gate (structure) + Pipeline (semantics)
+  - Decisão de execução não é atomic
+  - Client recebe 200 OK mesmo se Pipeline bloqueia (após Gate ALLOW)
+
+
+WEAKNESS 6: ACTION REGISTRY FRAGMENTATION
+
+Metadados de ações estão em TRÊS lugares:
+
+1. action_registry.py:
+   - action_version
+   - required_capabilities
+   - min_executor_version
+   - executor (field, mas não usado)
+
+2. action_router.py:
+   - ACTION_REGISTRY: action → executor_id (usado)
+
+3. gate_profiles.py:
+   - DEFAULT_PROFILES: action → PolicyProfile
+
+IMPLICATION:
+  - Adicionar ação requer modificar 3 arquivos
+  - Inconsistência possível (e.g., action em router mas não em registry)
+  - Sem single source of truth
+  - Drift risk entre registries
+
+
+WEAKNESS 7: NO EXECUTOR LIFECYCLE MANAGEMENT
+
+Executors são instâncias globais:
+  - _EXECUTORS inicializado no import
+  - Instâncias vivem forever
+
+Sem lifecycle:
+  - Sem initialize()
+  - Sem shutdown()
+  - Sem health check
+  - Sem reload
+
+IMPLICATION:
+  - Impossível warm-up de executors
+  - Impossível graceful shutdown
+  - Impossível reload de executor sem restart
+  - Impossível pooling de executors (se fossem stateful)
+
+
+WEAKNESS 8: AUDIT LOG DELIVERY NOT GUARANTEED
+
+Audit usa logging.info():
+  - log_decision(record) → logger.info(...)
+  - log_action_result(result) → logger.info(...)
+
+Sem garantia de delivery:
+  - Se logger não configurado, logs são perdidos
+  - Se disk full, logs podem ser truncados
+  - Sem retry
+  - Sem ack
+
+IMPLICATION:
+  - Audit trail pode ter gaps
+  - Non-repudiation depende de infraestrutura externa
+  - Compliance risk se logs não chegam
+  - Sem detecção de log loss
+
+
+WEAKNESS 9: TRACE_ID WITHOUT STRUCTURE
+
+trace_id é UUID string:
+  - Gerado em main.py
+  - Propagado como string opaca
+
+Sem estrutura:
+  - Sem tenant_id
+  - Sem user_id
+  - Sem session_id
+  - Sem parent_trace_id
+
+IMPLICATION:
+  - Impossível filtrar logs por tenant
+  - Impossível multi-tenant isolation via trace
+  - Impossível distributed tracing (sem spans)
+  - Impossível composition tracing (parent-child)
+
+
+WEAKNESS 10: TIMEOUT NOT ENFORCED
+
+ExecutorLimits.timeout_ms existe:
+  - Definido em executor (e.g., 1000ms)
+  - Documentado como "simulated"
+
+Pipeline detecta TimeoutError:
+  - except TimeoutError: FAILED
+
+Mas timeout nunca gerado:
+  - executor.execute() é síncrono
+  - Sem async timeout mechanism
+  - Sem signal.alarm (Unix only)
+  - Sem threading.Timer
+
+IMPLICATION:
+  - Executor pode rodar indefinitely
+  - Denial of service via slow executor
+  - timeout_ms é documentação, não enforcement
+
+
+WEAKNESS 11: NO RETRY OR CIRCUIT BREAKER
+
+Executor falha → FAILED imediatamente:
+  - Sem retry logic
+  - Sem exponential backoff
+  - Sem circuit breaker
+
+IMPLICATION:
+  - Transient failures não são recuperáveis
+  - Cascading failures se executor depende de serviço externo
+  - Sem resilience patterns
+
+
+WEAKNESS 12: SINGLE EXECUTOR PER ACTION
+
+ActionRouter mapeia action → executor_id (1:1):
+  - ACTION_REGISTRY = {"process": "text_process_v1"}
+
+Sem suporte para:
+  - Executor selection based on payload
+  - Executor versioning (v1, v2)
+  - Fallback executor
+  - Load balancing entre executors
+
+IMPLICATION:
+  - Impossível gradual rollout de novo executor
+  - Impossível A/B test de executors
+  - Impossível canary deployment
+  - Impossível blue-green deployment
+
+
+WEAKNESS 13: DRIFT DETECTION ONLY IN TESTS
+
+Fingerprints existem:
+  - actions_fingerprint.lock
+  - profiles_fingerprint.lock
+
+Verificados apenas em:
+  - test_profiles_governance_lock.py
+  - test_action_registry_sync.py (presumido)
+
+Não verificados em runtime:
+  - Aplicação não computa fingerprint ao iniciar
+  - Aplicação não compara com lock files
+  - Aplicação não alerta se drift
+
+IMPLICATION:
+  - Drift pode ir para produção sem detecção
+  - Developer pode modificar profile sem atualizar lock
+  - Governance pode quebrar silenciosamente
+
+
+WEAKNESS 14: PAYLOAD LIMITS NOT PARAMETERIZED
+
+ExecutorLimits são hardcoded:
+  - TextProcessExecutorV1: max_payload_bytes=10_000
+  - Definido em código do executor
+
+Sem parameterization:
+  - Sem configuração por ambiente (dev vs prod)
+  - Sem override por tenant
+  - Sem dynamic adjustment
+
+IMPLICATION:
+  - Limites são iguais para todos os contextos
+  - Impossível relaxar limites para tenant premium
+  - Impossível endurecer limites sob DoS
+
+
+WEAKNESS 15: NO MULTI-TENANT ISOLATION
+
+trace_id não contém tenant_id:
+  - UUID opaco
+
+ActionRequest não contém tenant_id:
+  - Apenas action, payload, trace_id
+
+ActionResult não contém tenant_id:
+  - Apenas action, executor_id, status, etc.
+
+IMPLICATION:
+  - Impossível filtrar audit logs por tenant
+  - Impossível rate limit por tenant
+  - Impossível isolamento de recursos por tenant
+  - Todos os tenants compartilham mesmo pipeline
+
+
+WEAKNESS 16: LEGACY_ACTIONS HARDCODED
+
+LEGACY_ACTIONS = {"process"}:
+  - Set hardcoded em agentic_pipeline.py
+  - Bypass de AG-03 validation
+
+Sem mecanismo de deprecation:
+  - Ações legadas podem viver forever
+  - Sem warning para client
+  - Sem sunset date
+
+IMPLICATION:
+  - Technical debt acumula
+  - Impossível forçar migração de clients
+  - Impossível remover actions antigas
+
+
+WEAKNESS 17: ACTION_MATRIX PROFILE HARDCODED
+
+ActionMatrix.profile = "default":
+  - Todos os requests usam profile "default"
+  - Sem multi-profile support
+
+get_action_matrix() não recebe profile_id:
+  - Retorna sempre mesmo profile
+
+IMPLICATION:
+  - Impossível diferentes policies para diferentes contexts
+  - Impossível restringir ações para tenant guest
+  - Impossível relaxar ações para tenant admin
+
+
+WEAKNESS 18: EXECUTOR CAPABILITIES NOT VERSIONED
+
+Executor.capabilities = ["TEXT_PROCESSING"]:
+  - Lista de strings
+  - Sem versioning
+
+Action.required_capabilities = ["TEXT_PROCESSING"]:
+  - Matching é exact string
+
+Sem capability versioning:
+  - "TEXT_PROCESSING" v1 vs v2 não distinguível
+  - Breaking change em capability requer novo nome
+  - Impossível backward compatibility de capabilities
+
+
+WEAKNESS 19: NO COMPENSATION OR ROLLBACK
+
+Executors são side-effect free (declarado):
+  - Mas não enforced
+
+Se executor viola contrato:
+  - Executa side-effect (e.g., webhook)
+  - Pipeline detecta FAILED
+  - Mas side-effect já ocorreu
+
+Sem compensation:
+  - Sem undo operation
+  - Sem rollback mechanism
+  - Sem saga pattern
+
+IMPLICATION:
+  - Trust-based: depende de executor respeitar contrato
+  - Se executor mal-comportado, sem recovery
+  - Inconsistent state possível
+
+
+WEAKNESS 20: SCHEMAS.PY USES DEPRECATED PYDANTIC
+
+ProcessRequest usa @validator:
+  - Pydantic V1 style
+  - Warning emitido em testes
+  - Deprecated in Pydantic V2.0
+
+IMPLICATION:
+  - Technical debt
+  - Migration necessária antes de Pydantic V3
+  - Warning noise em test output
+
+
+================================================================================
+6. ARCHITECTURAL COUPLING MATRIX
+================================================================================
+
+LAYER         | HTTP | Gate | Router | Pipeline | Registry | Executor | Audit
+--------------|------|------|--------|----------|----------|----------|-------
+HTTP          |  -   |  ✓   |   ✓    |    ✓     |    ✓     |    ✗     |   ✓
+Gate          |  ✗   |  -   |   ✗    |    ✗     |    ✗     |    ✗     |   ✓
+Router        |  ✗   |  ✗   |   -    |    ✗     |    ✗     |    ✗     |   ✗
+Pipeline      |  ✗   |  ✗   |   ✓    |    -     |    ✓     |    ✓     |   ✓
+Registry      |  ✗   |  ✗   |   ✗    |    ✗     |    -     |    ✗     |   ✗
+Executor      |  ✗   |  ✗   |   ✗    |    ✗     |    ✗     |    -     |   ✗
+Audit         |  ✗   |  ✗   |   ✗    |    ✗     |    ✗     |    ✗     |   -
+
+LEGEND:
+  ✓ = Depends on (imports)
+  ✗ = Independent
+  - = Self
+
+OBSERVATIONS:
+  - HTTP Layer: tightly coupled (depende de 5 layers)
+  - Pipeline Layer: tightly coupled (depende de 4 layers)
+  - Executor Layer: isolated (depende de 0 layers)
+  - Audit Layer: isolated (depende de 0 layers)
+  - Gate Layer: loosely coupled (depende de 1 layer: Audit)
+
+
+================================================================================
+7. ARCHITECTURAL DECISION RECORDS (IMPLICIT)
+================================================================================
+
+Estas decisões estão IMPLÍCITAS no código (não documentadas como ADRs):
+
+DECISION 1: Configuration-as-code
+  - Profiles, actions, executors são código Python
+  - Não há config files (YAML, JSON, TOML)
+  - Rationale: implícito — simplicidade vs flexibilidade
+
+DECISION 2: Synchronous pipeline
+  - Pipeline é síncrono (não async)
+  - Executors rodam na mesma thread que HTTP request
+  - Rationale: implícito — simplicidade vs concurrency
+
+DECISION 3: Output privacy
+  - Output bruto nunca retorna ao client
+  - Apenas digests são expostos
+  - Rationale: explícito — LGPD by design, privacidade
+
+DECISION 4: Fail-closed
+  - Denial é default
+  - Exception → DENY/BLOCKED
+  - Rationale: explícito — segurança, governança
+
+DECISION 5: Immutable contracts
+  - Pydantic models frozen
+  - Contratos não podem ser mutados
+  - Rationale: implícito — auditability, non-repudiation
+
+DECISION 6: Pre-audit
+  - PENDING logado antes de executor.execute()
+  - Garante auditability de side-effects
+  - Rationale: explícito — B3-FIX, compliance
+
+DECISION 7: Single action per request
+  - Sem composition, sem workflows
+  - Cada request executa UMA ação
+  - Rationale: implícito — simplicidade vs orchestration
+
+DECISION 8: Executor determinism requirement
+  - Contrato exige determinismo
+  - Mas não enforced
+  - Rationale: implícito — confiança vs verificação
+
+DECISION 9: Global executor registry
+  - _EXECUTORS dict global
+  - Não há factory, não há DI
+  - Rationale: implícito — simplicidade vs testability
+
+DECISION 10: Logging-based audit
+  - Audit via logging.info()
+  - Não há write direto para DB ou queue
+  - Rationale: implícito — delegação para infraestrutura
+
+
+================================================================================
+8. ARCHITECTURAL PATTERNS PRESENT
+================================================================================
+
+PATTERN 1: Pipeline Pattern
+  - run_agentic_action() é pipeline de 8 steps
+  - Cada step pode fail-fast
+  - Linear flow, sem branches
+
+PATTERN 2: Dependency Injection (Partial)
+  - gate_request é FastAPI dependency
+  - Mas não há DI container
+
+PATTERN 3: Registry Pattern
+  - _EXECUTORS dict
+  - DEFAULT_PROFILES dict
+  - ACTION_REGISTRY dict
+  - Mas todos hardcoded, não lazy-loaded
+
+PATTERN 4: Strategy Pattern (Implicit)
+  - Executor protocol define interface
+  - Diferentes executors implementam interface
+  - Mas selection é static (via router)
+
+PATTERN 5: Chain of Responsibility (Implicit)
+  - Gate rules são iteradas
+  - Short-circuit na primeira negação
+  - Mas não há explict Chain interface
+
+PATTERN 6: Adapter Pattern (Absent)
+  - Executors poderiam adaptar external APIs
+  - Mas apenas um executor implementado
+
+PATTERN 7: Decorator Pattern (Absent)
+  - Pipeline poderia ter decorators (retry, timeout, cache)
+  - Mas pipeline é monolítico
+
+PATTERN 8: Observer Pattern (Implicit)
+  - Audit loggers observam execução
+  - Mas não há explicit Observer interface
+
+
+================================================================================
+9. ARCHITECTURAL SMELLS
+================================================================================
+
+SMELL 1: Feature Envy
+  - main.py acessa múltiplas layers diretamente
+  - Pipeline acessa múltiplos registries diretamente
+  - Violação de Law of Demeter
+
+SMELL 2: Shotgun Surgery
+  - Adicionar nova ação requer modificar 3-4 arquivos
+  - Mudança fragmentada
+
+SMELL 3: Primitive Obsession
+  - trace_id é string (não TraceID type)
+  - executor_id é string (não ExecutorID type)
+  - action é string (não ActionID type)
+
+SMELL 4: God Object (Mild)
+  - agentic_pipeline.py tem 481 linhas
+  - run_agentic_action() tem ~400 linhas de lógica
+  - Responsabilidade: routing + validation + execution + audit
+
+SMELL 5: Global State
+  - _EXECUTORS global
+  - _global_matrix global
+  - DEFAULT_PROFILES global
+
+SMELL 6: Hard-coded Configuration
+  - Profiles hardcoded
+  - Actions hardcoded
+  - Executors hardcoded
+
+SMELL 7: Lack of Abstraction
+  - Concrete functions, não protocols
+  - Direct imports, não DI
+
+SMELL 8: Magic Values
+  - LEGACY_ACTIONS = {"process"} (hardcoded)
+  - timeout_ms não enforced
+  - max_payload_bytes hardcoded
+
+
+================================================================================
+10. ARCHITECTURAL FITNESS FUNCTIONS
+================================================================================
+
+Estas são métricas que PODERIAM ser usadas para validar arquitetura:
+
+FUNCTION 1: Coupling Score
+  - Count imports per module
+  - Goal: minimize dependencies
+  - Current: HTTP Layer tem 8 imports (ALTA)
+
+FUNCTION 2: Cyclomatic Complexity
+  - Measure branches em run_agentic_action()
+  - Goal: < 10 per function
+  - Current: não medido
+
+FUNCTION 3: Drift Detection
+  - Compare fingerprint atual vs lock file
+  - Goal: zero drift em runtime
+  - Current: apenas em testes
+
+FUNCTION 4: Immutability Score
+  - Percentage of frozen models
+  - Goal: 100% de contracts imutáveis
+  - Current: ~90% (ActionMatrix é mutável)
+
+FUNCTION 5: Isolation Score
+  - Layers que não dependem de outras layers
+  - Goal: maximizar layers isolados
+  - Current: 2/7 layers isolados (Executor, Audit)
+
+FUNCTION 6: Test Coverage
+  - Percentage of code covered por testes
+  - Goal: > 80%
+  - Current: não medido (fora de escopo Stage 1)
+
+FUNCTION 7: Configuration Externalization
+  - Percentage of config fora de código
+  - Goal: 100%
+  - Current: 0% (tudo hardcoded)
+
+
+================================================================================
+11. ARCHITECTURAL EVOLUTION PATH (IMPLICIT)
+================================================================================
+
+Baseado em git history e comentários:
+
+PHASE 1: MVP (Pré-AG-03)
+  - Gate + Pipeline básico
+  - Sem versioning, sem capabilities
+  - Legacy action "process"
+
+PHASE 2: AG-03 Implementation
+  - action_version field
+  - required_capabilities field
+  - min_executor_version field
+  - RED tests para validação
+
+PHASE 3: Blindagem Estrutural (B1, B2, B3)
+  - B1: Semver comparison fix (packaging.version)
+  - B2: Thread-safety (RLock)
+  - B3: Pre-audit (PENDING status)
+
+PHASE 4 (Presumed Future):
+  - Fase 2: Payload limits enforcement, drift detection
+  - Fase 3: Distributed registries, composition
+
+OBSERVATION:
+Arquitetura está evoluindo de "simples e hardcoded" para "governado e seguro".
+Mas ainda mantém rigidez de configuration-as-code.
+
+
+================================================================================
+END OF STAGE 1
+================================================================================
+
+SUMMARY OF ARCHITECTURAL ANALYSIS:
+
+HIGH-LEVEL ARCHITECTURE:
+  - 7 layers: HTTP → Gate → Router → Pipeline → Registry → Executor → Audit
+  - Fluxo linear com fail-fast em cada camada
+  - Separation of concerns entre validation (Gate) e execution (Pipeline)
+
+CONTROL-PLANE VS RUNTIME:
+  - Control-plane é configuration-as-code (hardcoded)
+  - Runtime consulta control-plane via get_*() functions
+  - SEM separation: toda mudança de config requer redeploy
+
+COUPLING:
+  - HTTP Layer: tightly coupled (8 imports)
+  - Pipeline Layer: tightly coupled (6 imports)
+  - Executor Layer: isolated (0 imports business logic)
+  - Audit Layer: isolated (0 imports business logic)
+
+STRENGTHS (8 principais):
+  1. Fail-closed by design
+  2. Immutability of contracts
+  3. Privacy by design (output nunca exposto)
+  4. Auditability (PRE + POST logs)
+  5. Determinism
+  6. Separation of concerns
+  7. AG-03 governance (versioning + capabilities)
+  8. Pre-audit safety (B3-FIX)
+
+WEAKNESSES (20 principais):
+  1. Configuration-as-code (rigidity)
+  2. Lack of dependency inversion
+  3. Global mutable state (_global_matrix)
+  4. No composition support
+  5. Gate doesn't know action semantics
+  6. Action registry fragmentation (3 places)
+  7. No executor lifecycle management
+  8. Audit log delivery not guaranteed
+  9. trace_id without structure
+  10. Timeout not enforced
+  11. No retry or circuit breaker
+  12. Single executor per action
+  13. Drift detection only in tests
+  14. Payload limits not parameterized
+  15. No multi-tenant isolation
+  16. LEGACY_ACTIONS hardcoded
+  17. ACTION_MATRIX profile hardcoded
+  18. Executor capabilities not versioned
+  19. No compensation or rollback
+  20. Deprecated Pydantic usage
+
+PRÓXIMO STAGE: Stage 2 — Runtime Behavior Analysis

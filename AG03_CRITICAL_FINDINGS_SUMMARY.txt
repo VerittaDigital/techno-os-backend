@@ -1,0 +1,254 @@
+================================================================================
+ACHADOS CRÍTICOS — AG-03 É JÁ 90% IMPLEMENTADO
+================================================================================
+
+REVELAÇÃO SURPREENDENTE:
+
+1. AG-03 está **COMPLETO** no código (app/agentic_pipeline.py)
+   - Step 3B: action_version validation ✅
+   - Step 4A: executor version compatibility ✅  
+   - Step 4B: executor capabilities validation ✅
+
+2. RED tests **FALHAM** porque LEGACY_ACTIONS bypass está ATIVO
+   - LEGACY_ACTIONS = {"process"}
+   - if action not in LEGACY_ACTIONS → pula validação
+   - Todos os 12 RED tests usam action="new_action" (fora legacy)
+
+3. Solução: **Remover o bypass de 3 linhas**
+   - Edição 1: app/agentic_pipeline.py linha ~176 (Step 3B)
+   - Edição 2: app/agentic_pipeline.py linha ~245 (Step 4A)
+   - Edição 3: app/agentic_pipeline.py linha ~307 (Step 4B)
+   - Edição 4: app/action_registry.py (adicionar metadados para "process")
+
+================================================================================
+12 RED TESTS — LISTA EXATA (FACTUAL)
+================================================================================
+
+TESTES DE AÇÃO (3):
+  1. test_action_versioning_red.py :: test_action_without_version_blocked
+     → action_version missing → BLOCKED (ACTION_VERSION_MISSING)
+  
+  2. test_action_versioning_red.py :: test_action_with_invalid_version_blocked
+     → action_version="v1" (não semver) → BLOCKED (ACTION_VERSION_INVALID)
+  
+  3. test_action_versioning_red.py :: test_action_with_valid_version_not_blocked_by_version
+     → action_version="1.0.0" (válido) → NÃO BLOCKED (por versão)
+
+TESTES DE VERSÃO EXECUTOR (4):
+  4. test_executor_versioning_red.py :: test_executor_without_version_blocked
+     → executor.version missing, min="1.1.0" → BLOCKED (EXECUTOR_VERSION_MISSING)
+  
+  5. test_executor_versioning_red.py :: test_executor_with_incompatible_version_blocked
+     → executor.version="1.0.0" < min="1.1.0" → BLOCKED (EXECUTOR_VERSION_INCOMPATIBLE)
+  
+  6. test_executor_versioning_red.py :: test_executor_with_compatible_version_not_blocked
+     → executor.version="1.1.0" == min="1.1.0" → NÃO BLOCKED (por versão)
+  
+  7. test_executor_versioning_red.py :: test_executor_with_newer_version_not_blocked
+     → executor.version="1.2.0" > min="1.1.0" → NÃO BLOCKED (por versão)
+
+TESTES DE CAPACIDADE (3):
+  8. test_executor_capabilities_red.py :: test_executor_without_capabilities_blocked
+     → executor.capabilities missing, required=["TEXT_PROCESSING"] → BLOCKED (EXECUTOR_CAPABILITY_MISSING)
+  
+  9. test_executor_capabilities_red.py :: test_executor_with_insufficient_capabilities_blocked
+     → executor=["TEXT_PROCESSING"], required=["TEXT_PROCESSING","LOGGING"] → BLOCKED (EXECUTOR_CAPABILITY_MISMATCH)
+  
+  10. test_executor_capabilities_red.py :: test_executor_compatible_not_blocked_by_capabilities
+      → executor=["AUDIT_LOGGING","LOGGING","TEXT_PROCESSING"], required=["TEXT_PROCESSING","LOGGING"] → NÃO BLOCKED (por capacidade)
+
+TESTES RETROCOMPATIBILIDADE (2):
+  11. test_ag03_retrocompat_red.py :: test_action_process_without_version_continues
+      → action="process" (legacy), sem action_version → NÃO BLOCKED (legacy bypass)
+  
+  12. test_ag03_retrocompat_red.py :: test_executor_without_capabilities_legacy_mode
+      → action="process" (legacy), executor sem capabilities → NÃO BLOCKED (legacy bypass)
+
+================================================================================
+REASON CODES IMPLEMENTADOS
+================================================================================
+
+EXISTEM no código (Action Result validação):
+  ✅ ACTION_VERSION_MISSING
+  ✅ ACTION_VERSION_INVALID
+  ✅ EXECUTOR_VERSION_MISSING
+  ✅ EXECUTOR_VERSION_INCOMPATIBLE
+  ✅ EXECUTOR_CAPABILITY_MISSING
+  ✅ EXECUTOR_CAPABILITY_MISMATCH
+  ✅ EXECUTION_ATTEMPT (pre-audit)
+  ✅ BLOCKED (status value, não reason_code)
+
+NENHUM reason_code novo precisa ser criado.
+
+================================================================================
+PASSOS EXATOS PARA IMPLEMENTAÇÃO
+================================================================================
+
+EDIÇÃO 1: app/agentic_pipeline.py (linha 176)
+
+Antes:
+```python
+if action_version is None:
+    if action not in LEGACY_ACTIONS:
+        status = "BLOCKED"
+```
+
+Depois:
+```python
+if action_version is None:
+    status = "BLOCKED"
+```
+
+---
+
+EDIÇÃO 2: app/agentic_pipeline.py (linha 245)
+
+Antes:
+```python
+if action_meta and action not in LEGACY_ACTIONS:
+    min_executor_version = action_meta.get("min_executor_version")
+```
+
+Depois:
+```python
+if action_meta:
+    min_executor_version = action_meta.get("min_executor_version")
+```
+
+---
+
+EDIÇÃO 3: app/agentic_pipeline.py (linha 307)
+
+Antes:
+```python
+if action_meta and action not in LEGACY_ACTIONS:
+    required_capabilities = action_meta.get("required_capabilities", [])
+```
+
+Depois:
+```python
+if action_meta:
+    required_capabilities = action_meta.get("required_capabilities", [])
+```
+
+---
+
+EDIÇÃO 4: app/agentic_pipeline.py (linha 36)
+
+Antes:
+```python
+LEGACY_ACTIONS = {"process"}
+```
+
+Depois:
+```python
+# LEGACY_ACTIONS removed — all actions require AG-03 validation
+```
+
+---
+
+EDIÇÃO 5: app/action_registry.py (linha ~100)
+
+Antes:
+```python
+"process": {
+    "description": "Process text input",
+    "executor": "text_process_v1",
+    "version": "1.0",
+    "action_version": "1.0.0",
+    "required_capabilities": [],
+    "min_executor_version": None,
+},
+```
+
+Depois:
+```python
+"process": {
+    "description": "Process text input",
+    "executor": "text_process_v1",
+    "version": "1.0",
+    "action_version": "1.0.0",
+    "required_capabilities": ["TEXT_PROCESSING"],
+    "min_executor_version": "1.0.0",
+},
+```
+
+================================================================================
+TESTE DE SUCESSO
+================================================================================
+
+Comando:
+```bash
+pytest tests/test_action_versioning_red.py \
+       tests/test_executor_versioning_red.py \
+       tests/test_executor_capabilities_red.py \
+       -v
+```
+
+Resultado esperado:
+```
+test_action_without_version_blocked PASSED
+test_action_with_invalid_version_blocked PASSED
+test_action_with_valid_version_not_blocked_by_version PASSED
+test_executor_without_version_blocked PASSED
+test_executor_with_incompatible_version_blocked PASSED
+test_executor_with_compatible_version_not_blocked PASSED
+test_executor_with_newer_version_not_blocked PASSED
+test_executor_without_capabilities_blocked PASSED
+test_executor_with_insufficient_capabilities_blocked PASSED
+test_executor_compatible_not_blocked_by_capabilities PASSED
+
+========== 10 passed ==========
+```
+
+================================================================================
+MAPA MENTAL DO PIPELINE AG-03
+================================================================================
+
+HTTP Request
+  ↓
+main.py: action="process", payload={...}
+  ↓
+STEP 1: route_action("process") → "text_process_v1"
+  ↓
+STEP 2: compute_input_digest(payload)
+  ↓
+STEP 3A: action exists? check registry
+  ↓
+STEP 3B: action_version valid? ← AG-03, REMOVED BYPASS HERE
+           if action_version missing → BLOCKED (ACTION_VERSION_MISSING)
+           if action_version invalid semver → BLOCKED (ACTION_VERSION_INVALID)
+  ↓
+STEP 4: get_executor("text_process_v1")
+  ↓
+STEP 4A: executor_version >= min_executor_version? ← AG-03, REMOVED BYPASS HERE
+          if executor.version missing → BLOCKED (EXECUTOR_VERSION_MISSING)
+          if executor.version < min → BLOCKED (EXECUTOR_VERSION_INCOMPATIBLE)
+  ↓
+STEP 4B: executor.capabilities ⊇ required? ← AG-03, REMOVED BYPASS HERE
+          if executor.capabilities missing → BLOCKED (EXECUTOR_CAPABILITY_MISSING)
+          if executor.capabilities insufficient → BLOCKED (EXECUTOR_CAPABILITY_MISMATCH)
+  ↓
+STEP 5: check_payload_limits
+  ↓
+STEP 6: executor.execute(ActionRequest)
+  ↓
+STEP 7: compute_output_digest, log_action_result
+  ↓
+HTTP Response: ActionResult (status, reason_codes, digests)
+
+================================================================================
+FLUXO DE TESTES RED → GREEN
+================================================================================
+
+1. Remover byp ass (5 edições)
+2. Rodar testes: pytest tests/test_*_red.py
+3. 10 testes mudam de RED para GREEN
+4. 2 testes de retrocompatibilidade precisam ser reescritos/deletados
+5. Todos 29 testes suite passam
+
+Total tempo de implementação: 1-2 horas (implementação + validação)
+
+================================================================================
+END OF CRITICAL FINDINGS
+================================================================================

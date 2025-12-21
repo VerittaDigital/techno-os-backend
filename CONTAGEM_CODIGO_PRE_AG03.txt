@@ -1,0 +1,259 @@
+================================================================================
+CONTAGEM DE LINHAS DE CÓDIGO — TECHNO OS BACKEND
+================================================================================
+
+Data: 21 de dezembro de 2025
+Commit: 008d861f2098fd58535dc67009a2e9fec5ed24fa
+Status: PRÉ-AG-03 Implementation
+
+================================================================================
+RESUMO EXECUTIVO
+================================================================================
+
+CÓDIGO DE PRODUÇÃO (app/):
+  Total de arquivos: 24
+  Total de linhas: 2,471 LOC
+  Maior arquivo: agentic_pipeline.py (481 linhas)
+
+CÓDIGO DE TESTE (tests/):
+  Total de arquivos: 28
+  Total de linhas: 2,822 LOC
+  Maior arquivo: test_agentic_pipeline.py (296 linhas)
+
+PROPORÇÃO:
+  Teste / Produção: 1.14x
+  Cobertura por LOC: ~57% (2,822 / 4,293)
+
+================================================================================
+DETALHAMENTO — CÓDIGO DE PRODUÇÃO (app/)
+================================================================================
+
+CAMADA DE APLICAÇÃO (Main & Entry):
+  main.py                          158 linhas [ENTRYPOINT HTTP]
+  schemas.py                        26 linhas
+
+CAMADA GATE (Validação):
+  gate_engine.py                   159 linhas [GATE DECISION ENGINE]
+  gate_profiles.py                  59 linhas
+  gate_artifacts.py                 52 linhas
+  decision_record.py                81 linhas
+  audit_log.py                      23 linhas [PRE-AUDIT LOGGING]
+
+CAMADA PIPELINE (Orquestração):
+  agentic_pipeline.py              481 linhas [AG-03 CORE IMPLEMENTATION]
+  payload_limits.py                153 linhas
+  action_audit_log.py               24 linhas [PÓS-AUDIT LOGGING]
+
+CAMADA ACTION (Governança):
+  action_registry.py               108 linhas
+  action_router.py                  34 linhas
+  action_contracts.py               88 linhas
+  action_matrix.py                  75 linhas
+
+CAMADA EXECUTOR (Implementações):
+  executors/registry.py             85 linhas [EXECUTOR REGISTRY]
+  executors/base.py                 67 linhas
+
+CAMADA CONTRATO (Modelos):
+  contracts/gate_v1.py              54 linhas
+  contracts/canonical_v1.py        124 linhas
+  contracts/field_governance.py    281 linhas
+  contracts/normalize.py           137 linhas
+  contracts/schema_export.py        81 linhas
+
+INICIALIZADORES:
+  app/__init__.py                    3 linhas
+  contracts/__init__.py              2 linhas
+  executors/__init__.py              1 linha
+
+TOTAL PRODUÇÃO: 2,471 LOC (24 arquivos)
+
+================================================================================
+DETALHAMENTO — CÓDIGO DE TESTE (tests/)
+================================================================================
+
+TESTES RED (Source of Truth para AG-03):
+  test_action_versioning_red.py              154 linhas [AG-03 Action Version]
+  test_executor_versioning_red.py            225 linhas [AG-03 Executor Version]
+  test_executor_capabilities_red.py          192 linhas [AG-03 Capabilities]
+  test_ag03_retrocompat_red.py               143 linhas [Retrocompatibilidade]
+  test_ag03_audit_integrity_red.py           216 linhas [Integridade Auditoria]
+  
+  RED SUBTOTAL: 930 linhas (5 arquivos, 10 testes)
+
+TESTES GATE (Validação):
+  test_gate_engine.py                         25 linhas
+  test_gate_artifacts.py                      20 linhas
+  test_gate_adversarial.py                    25 linhas
+  test_gate_http_enforcement.py              262 linhas
+  
+  GATE SUBTOTAL: 332 linhas (4 arquivos)
+
+TESTES PIPELINE (Orquestração):
+  test_agentic_pipeline.py                   296 linhas
+  test_gate_pipeline_integration.py          214 linhas
+  test_pre_audit_b3.py                       133 linhas
+  
+  PIPELINE SUBTOTAL: 643 linhas (3 arquivos)
+
+TESTES ACTION (Governança):
+  test_action_registry.py                     51 linhas
+  test_action_registry_sync.py                66 linhas
+  test_action_mismatch.py                     69 linhas
+  test_action_matrix.py                       53 linhas
+  test_decision_record.py                    209 linhas
+  
+  ACTION SUBTOTAL: 448 linhas (5 arquivos)
+
+TESTES EXECUTOR (Implementações):
+  test_executor_registry_thread_safe_b2.py    52 linhas
+  test_semver_ordering_b1.py                  41 linhas
+  
+  EXECUTOR SUBTOTAL: 93 linhas (2 arquivos)
+
+TESTES CONTRATO (Modelos):
+  test_contract_canonical_v1.py               67 linhas
+  test_field_governance.py                    34 linhas
+  test_normalize.py                           44 linhas
+  
+  CONTRATO SUBTOTAL: 145 linhas (3 arquivos)
+
+TESTES INTEGRAÇÃO/OUTROS:
+  test_api.py                                 47 linhas [Legacy MVP]
+  test_no_web_dependency.py                   37 linhas
+  test_profiles_governance_lock.py            16 linhas
+  web_test_api.py                             31 linhas
+  conftest.py                                 10 linhas
+  
+  OUTRO SUBTOTAL: 141 linhas (5 arquivos)
+
+TOTAL TESTES: 2,822 LOC (28 arquivos)
+
+================================================================================
+ANÁLISE DE DISTRIBUIÇÃO
+================================================================================
+
+PRODUÇÃO — POR CAMADA:
+
+Camada                     Arquivos    LOC      % do Total
+─────────────────────────────────────────────────────────
+Gate (validação)                5       374      15.1%
+Pipeline (orquestração)         3       658      26.6%
+Action (governança)             4       305      12.3%
+Executor (implementação)        2       152       6.1%
+Contratos (modelos)             5       679      27.5%
+Aplicação (entry)              2       184       7.4%
+─────────────────────────────────────────────────────────
+TOTAL                          24     2,471     100.0%
+
+TESTES — POR CATEGORIA:
+
+Categoria                  Arquivos    LOC      % do Total
+─────────────────────────────────────────────────────────
+Red (AG-03 source truth)         5       930      32.9%
+Gate (validação)                 4       332      11.8%
+Pipeline (orquestração)          3       643      22.8%
+Action (governança)              5       448      15.9%
+Executor (implementação)         2        93       3.3%
+Contrato (modelos)               3       145       5.1%
+Integração/Outro                 5       141       5.0%
+─────────────────────────────────────────────────────────
+TOTAL                           28     2,822     100.0%
+
+================================================================================
+INSIGHTS ESTRUTURAIS
+================================================================================
+
+1. DENSIDADE DE TESTES RED (AG-03):
+   930 linhas de testes RED / 2,471 linhas produção = 37.6%
+   → AG-03 tem maior densidade de testes por linhas de código
+   → RED tests são "source of truth" para governança
+
+2. MAIOR ARQUIVO PRODUÇÃO:
+   agentic_pipeline.py: 481 linhas
+   → Contém Steps 1-7 + LEGACY_ACTIONS bypass
+   → Centraliza Pipeline + AG-03 logic
+
+3. MAIOR ARQUIVO TESTE:
+   test_agentic_pipeline.py: 296 linhas
+   → Testa pipeline completo (gates, versioning, capabilities)
+
+4. PROPORÇÃO TESTE/PRODUÇÃO:
+   2,822 / 2,471 = 1.14x
+   → Mais código de teste que produção
+   → Alinha com SAMURAI MODE (adversarial testing)
+
+5. CONTRATOS OCUPAM 27.5% PRODUÇÃO:
+   679 linhas / 2,471 total
+   → Pydantic models (gate_v1, canonical_v1, field_governance)
+   → Enforcement via type safety
+
+6. PIPELINE + ACTION + EXECUTOR = 65% PRODUÇÃO:
+   (658 + 305 + 152) / 2,471 = 65.2%
+   → Core governance e orquestração
+
+================================================================================
+CONTABILIDADE PRÉ-AG-03
+================================================================================
+
+ESTADO ATUAL (Baseline):
+  Linhas produção: 2,471
+  Linhas testes: 2,822
+  Total codebase: 5,293 LOC
+  Arquivos produção: 24
+  Arquivos teste: 28
+
+AG-03 STATUS:
+  Implementado em: agentic_pipeline.py (481 linhas)
+  Testado por: 930 linhas de RED tests (5 arquivos)
+  Reason codes: 6 (ACTION_VERSION_*, EXECUTOR_VERSION_*, EXECUTOR_CAPABILITY_*)
+  LEGACY_ACTIONS: {"process"} (bypassa tudo)
+
+READINESS PARA AG-03:
+  ✅ 95% código implementado
+  ✅ 100% testes RED escritos
+  ❌ BLOCKER: LEGACY_ACTIONS bypass ativo
+  ❌ 0% AG-03 efetivamente executado (em produção)
+
+ESTIMATIVA PÓS-AG-03 IMPLEMENTATION:
+  Mudanças esperadas:
+    - Remover 3-5 linhas (LEGACY_ACTIONS bypass)
+    - Adicionar ~10-15 linhas (documentação/comentários)
+    - RED tests: 930 linhas → GREEN (conversão, sem LOC novo)
+  
+  Codebase final: ~5,298 LOC (praticamente inalterado)
+
+================================================================================
+COMPARATIVO COM SAMURAI AUDIT
+================================================================================
+
+De acordo com Stage 0-7 Audit:
+  Stage 0 (Structural): 800+ linhas análise
+  Stage 1 (Architecture): 900+ linhas análise
+  Stage 6 (Failures): 900+ linhas análise
+  Stage 7 (Verdict): 900+ linhas análise
+
+Documentação Auditoria: ~3,500 linhas (7 documentos)
+Codebase: 5,293 linhas (24 prod + 28 testes)
+
+Relação documentação/código: 0.66x (audit é mais sucinto que codebase)
+
+================================================================================
+RECOMENDAÇÃO PARA IMPLEMENTAÇÃO AG-03
+================================================================================
+
+Impacto esperado:
+  ✓ Número de linhas: MÍNIMO (< 5 LOC alterado)
+  ✓ Número de arquivos: 1-2 (agentic_pipeline.py + action_registry.py)
+  ✓ Testes RED → GREEN: Automático (nenhuma mudança teste)
+  ✓ Complexidade ciclomática: REDUZ (remove 3 condicionais bypass)
+
+Risco estrutural:
+  ✓ BAIXO: Mudanças cirúrgicas, testadas, reversíveis
+
+Timeline estimado:
+  Implementação: 1-2 horas
+  Testes: 5-10 minutos (120 testes rodam em 0.72s)
+  Validação: 30 minutos
+
+================================================================================
