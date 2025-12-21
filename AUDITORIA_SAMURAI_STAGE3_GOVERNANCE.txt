@@ -1,0 +1,1291 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 3: GOVERNANCE ENFORCEMENT ANALYSIS
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, metrológico
+ESCOPO: Análise detalhada de mecanismos de governança (AG-03)
+AUDIÊNCIA: Arquitetos sêniores e auditores de conformidade
+
+AVISO: Este documento mapeia EXATAMENTE como governança é enforced vs trusted.
+Análise de: versioning, capabilities, legacy exemptions, drift detection.
+
+================================================================================
+1. ACTION VERSIONING ENFORCEMENT
+================================================================================
+
+AG-03 FIELD: action_version (semver format: X.Y.Z)
+
+DEFINED IN: app/action_registry.py
+  Class: ActionMeta
+  Field: action_version: Optional[str] = None
+  Validator: @field_validator("action_version")
+    Logic: if v is not None and not SEMVER_REGEX.match(v):
+             raise ValueError(...)
+    Pattern: SEMVER_REGEX = re.compile(r'^\d+\.\d+\.\d+$')
+  
+  Result: Pydantic validation, enforced at ActionMeta construction time
+
+
+WHERE ENFORCEMENT HAPPENS:
+
+Location 1: action_registry.py ActionMeta validation
+  Type: STATIC (at import time)
+  Mechanism: Pydantic field validator
+  Trigger: get_action_registry() returns ActionRegistry with ActionMeta instances
+  Enforcement: Immutable model_config = ConfigDict(extra="forbid", frozen=True)
+  Risk: If action_registry.py is manually edited, could have invalid semver
+
+Location 2: agentic_pipeline.py Step 3B
+  Type: RUNTIME (per execution)
+  Mechanism: _is_valid_semver() function
+  Code:
+    if action_version is None:
+        if action not in LEGACY_ACTIONS:
+            status = "BLOCKED"
+            reason_codes = ["ACTION_VERSION_MISSING"]
+            return (result, None)
+    elif not _is_valid_semver(action_version):
+        status = "BLOCKED"
+        reason_codes = ["ACTION_VERSION_INVALID"]
+        return (result, None)
+  
+  Condition: Only enforced if:
+    a) action_meta is not None (registry lookup succeeded)
+    b) action not in LEGACY_ACTIONS
+  
+  Consequence: BLOCKED if missing or invalid
+
+
+IMPLICIT ASSUMPTIONS IN ACTION VERSIONING:
+
+ASSUMPTION 1: ActionMeta is always created with valid action_version
+  Location: get_action_registry() factory function
+  Reality: Hardcoded dict in function return
+  Risk: If developer adds action without semver, Pydantic validation fails
+  Enforcement: ✓ Pydantic raises ValueError at import time
+
+ASSUMPTION 2: action_version doesn't need to match executor.version
+  Location: No cross-check between ActionMeta.action_version and executor.version
+  Reality: Separate versioning systems for action and executor
+  Risk: action_version="1.0.0" but executor.version="2.0.0" (mismatch)
+  Enforcement: ✗ No enforcement (developer discipline required)
+
+ASSUMPTION 3: action_version is used only for metadata, not for API versioning
+  Location: action_version is not used in routing or HTTP paths
+  Reality: action_version exists but execution is version-agnostic
+  Risk: Can't support multiple versions of same action in parallel
+  Enforcement: ✗ No mechanism (not enforced)
+
+
+WHAT CAN DRIFT SILENTLY IN ACTION VERSIONING:
+
+1. action_version field removed
+   Current code:
+     action_version: Optional[str] = None
+   If removed:
+     Action would still execute (falls back to action in LEGACY_ACTIONS path)
+   Detection: Step 3B: action_version = action_meta.get("action_version")
+             Returns None, treated as legacy, SKIPS validation
+   Risk: SILENT — action loses versioning constraint
+
+2. action_version changed to invalid semver
+   Current code:
+     "action_version": "1.0.0"  ✓
+   If changed to:
+     "action_version": "1.0"    ✗ (invalid, missing patch)
+   Detection: Step 3B: _is_valid_semver("1.0") returns False
+             Blocks with ACTION_VERSION_INVALID
+   Risk: LOUD — execution blocked
+
+3. action_version changed but min_executor_version not updated
+   Current code:
+     "action_version": "1.0.0"
+     "min_executor_version": "1.0.0"
+   If changed to:
+     "action_version": "2.0.0"
+     "min_executor_version": "1.0.0"  ← outdated
+   Detection: Step 3B validates action_version (OK)
+             Step 4A validates executor_version >= "1.0.0" (OK, but semantically wrong)
+   Risk: SILENT — action claims v2 but accepts v1 executors
+
+
+CRYPTOGRAPHIC LOCKS IN ACTION VERSIONING:
+
+✗ NO CRYPTOGRAPHIC LOCKS
+  - action_version is string, not signed
+  - No fingerprint of action metadata
+  - No hash-chain linking versions
+
+LOGICAL LOCKS IN ACTION VERSIONING:
+
+✓ Pydantic frozen=True on ActionRegistry
+  - Once created, ActionRegistry cannot be modified
+  - But: Created at runtime, not locked to source code
+
+✓ LEGACY_ACTIONS = {"process"} hardcoded
+  - Legacy actions bypass version check
+  - But: Only "process" is exempt, others required
+
+✗ No temporal lock (no expiration date for versions)
+✗ No canonical reference (action_version is self-referential)
+
+
+DEVELOPER DISCIPLINE REQUIRED:
+
+1. Keep action_version in sync with executor.version
+   - When bumping executor.version, also bump min_executor_version
+   - But: No tool to prevent inconsistency
+
+2. Use semantic versioning consistently
+   - GOOD: "1.0.0", "1.1.0", "2.0.0"
+   - BAD: "v1", "1", "1.0", "1.0.0-beta"
+   - Enforcement: ✓ Regex validates (only accepts X.Y.Z)
+
+3. Update min_executor_version when action_version changes
+   - Step 3B validates action_version
+   - Step 4A validates executor_version >= min_executor_version
+   - If not in sync: Silent mismatch (action claims new version but old executor works)
+
+
+================================================================================
+2. EXECUTOR VERSION COMPATIBILITY ENFORCEMENT
+================================================================================
+
+AG-03 FIELD: min_executor_version (semver format: X.Y.Z)
+
+DEFINED IN: app/action_registry.py
+  Class: ActionMeta
+  Field: min_executor_version: Optional[str] = None
+  Validator: @field_validator("min_executor_version")
+    Logic: if v is not None and not SEMVER_REGEX.match(v):
+             raise ValueError(...)
+    Pattern: SEMVER_REGEX = re.compile(r'^\d+\.\d+\.\d+$')
+  
+  Result: Pydantic validation, enforced at ActionMeta construction time
+
+
+WHERE ENFORCEMENT HAPPENS:
+
+Location 1: action_registry.py ActionMeta validation
+  Type: STATIC (at import time)
+  Mechanism: Pydantic field validator
+  Trigger: get_action_registry() returns ActionRegistry with ActionMeta instances
+  Enforcement: Immutable frozen=True
+  Risk: If manually edited, could have invalid semver
+
+Location 2: agentic_pipeline.py Step 4A
+  Type: RUNTIME (per execution)
+  Mechanism: _compare_semver() function
+  Code:
+    if action_meta and action not in LEGACY_ACTIONS:
+        min_executor_version = action_meta.get("min_executor_version")
+        if min_executor_version is not None:
+            if executor_version is None:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_VERSION_MISSING"]
+                return (result, None)
+            else:
+                try:
+                    if _compare_semver(executor_version, min_executor_version) < 0:
+                        status = "BLOCKED"
+                        reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
+                        return (result, None)
+                except ValueError:
+                    status = "BLOCKED"
+                    reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
+                    return (result, None)
+  
+  Condition: Only enforced if:
+    a) action_meta is not None (registry lookup succeeded)
+    b) action not in LEGACY_ACTIONS
+    c) min_executor_version is not None
+
+
+COMPARISON FUNCTION: _compare_semver()
+
+Implementation: Uses packaging.version.Version (B1-FIX)
+  Code: from packaging.version import Version
+       def _compare_semver(a: str, b: str) -> int:
+           v_a = Version(a)
+           v_b = Version(b)
+           if v_a < v_b:
+               return -1
+           elif v_a > v_b:
+               return 1
+           else:
+               return 0
+
+Correctness: ✓ Proper semver comparison (not string comparison)
+  String comparison would fail:
+    "10.0.0" < "2.0.0"  (string) = True ✗ WRONG
+    "10.0.0" < "2.0.0"  (semver) = False ✓ CORRECT
+
+Behavior on invalid version:
+  packaging.version.Version("abc") raises ValueError
+  Caught in Step 4A: treat as EXECUTOR_VERSION_INCOMPATIBLE
+
+
+EXECUTOR VERSION SOURCE:
+
+Location: executor.version attribute
+  Example: TextProcessExecutorV1.version = "1.0.0"
+  Type: String (should be, but not enforced)
+  Extraction: executor_version = getattr(executor, "version", None)
+             if isinstance(exec_version_raw, str):
+                 executor_version = exec_version_raw
+             else:
+                 executor_version = None
+
+Enforcement: ✗ Type check but not required
+  - If executor.version absent: executor_version = None
+  - If executor.version = 123 (int): executor_version = None
+  - If executor.version = MagicMock: isinstance(..., str) = False
+  - Result: executor_version = None, validation fails in Step 4A
+
+
+IMPLICIT ASSUMPTIONS IN EXECUTOR VERSION:
+
+ASSUMPTION 1: Executor.version exists and is a string
+  Location: agentic_pipeline.py Step 4
+  Reality: Type check present but not required
+  Risk: If executor has no version attribute or wrong type, silently becomes None
+  Enforcement: ✗ Soft check only
+
+ASSUMPTION 2: Executor.version is kept in sync with executor_id
+  Example: executor_id = "text_process_v1"
+           executor.version = "1.0.0"
+  Reality: executor_id includes "v1" but version is "1.0.0" (separate concepts)
+  Risk: executor_id = "text_process_v2" but version = "1.0.0" (misleading)
+  Enforcement: ✗ No cross-check
+
+ASSUMPTION 3: min_executor_version being None means "any version"
+  Location: agentic_pipeline.py Step 4A
+  Code: if min_executor_version is not None:
+             ...version check...
+        # implicit: if None, skip check
+  Reality: No minimum enforced
+  Risk: Action can execute with any executor version if min_executor_version = None
+  Enforcement: ✗ Implicit logic only
+
+
+WHAT CAN DRIFT SILENTLY IN EXECUTOR VERSION:
+
+1. min_executor_version removed from ActionMeta
+   Current: min_executor_version = "1.0.0"
+   If set to: min_executor_version = None
+   Effect: Version check SKIPPED (implicit)
+   Detection: None (silent)
+   Risk: SILENT DRIFT — action no longer requires minimum version
+
+2. Executor upgraded but action metadata not updated
+   Current: executor.version = "1.0.0"
+           min_executor_version = "1.0.0"
+   If changed to: executor.version = "1.1.0" (auto-upgrade)
+                 min_executor_version = "1.0.0" (not updated)
+   Effect: Executor v1.1 passes version check (>= 1.0.0)
+   Detection: None (passes validation)
+   Risk: SILENT DRIFT — executor uses new code, action metadata not updated
+
+3. Executor downgraded (executor instance replaced)
+   Current: _EXECUTORS["text_process_v1"] = TextProcessExecutorV1(version="1.0.0")
+   If changed to: _EXECUTORS["text_process_v1"] = OldExecutor(version="0.9.0")
+   Effect: Version check FAILS (0.9.0 < 1.0.0)
+   Detection: BLOCKED (loud)
+   Risk: LOUD DRIFT — caught by enforcement
+
+
+CRYPTOGRAPHIC LOCKS IN EXECUTOR VERSION:
+
+✗ NO CRYPTOGRAPHIC LOCKS
+  - executor.version is string, not signed
+  - _EXECUTORS dict is mutable (though accessed under lock)
+  - No hash-chain for executor versioning
+
+LOGICAL LOCKS IN EXECUTOR VERSION:
+
+✓ _EXECUTORS dict protected by _EXECUTORS_LOCK (B2-FIX)
+  - RLock prevents concurrent modification
+  - But: Only protects concurrent access, not replay attacks
+
+✓ packaging.version enforces semver comparison correctly
+  - Proper comparison (not lexicographic)
+  - Raises ValueError for invalid versions
+
+✗ No immutable snapshot of executor.version
+  - Executor is singleton, can theoretically mutate
+  - But: No code does this
+
+
+DEVELOPER DISCIPLINE REQUIRED:
+
+1. Maintain executor.version attribute
+   - Executor class must have version: str
+   - Enforcement: Type check present but not required
+
+2. Keep min_executor_version in sync with actual requirements
+   - When executor changes behavior, bump min_executor_version
+   - But: No tool prevents out-of-sync state
+
+3. Use semantic versioning for executor.version
+   - GOOD: "1.0.0"
+   - BAD: "v1", "1", "1.0"
+   - Enforcement: ✓ Regex validates at ActionMeta construction
+
+
+================================================================================
+3. EXECUTOR CAPABILITIES VALIDATION
+================================================================================
+
+AG-03 FIELD: required_capabilities (list of strings)
+
+DEFINED IN: app/action_registry.py
+  Class: ActionMeta
+  Field: required_capabilities: List[str] = []
+  Validator: @field_validator("required_capabilities")
+    Logic: def normalize_capabilities(cls, v: List[str]) -> List[str]:
+               if not v:
+                   return []
+               normalized = sorted(set(cap.strip().upper() for cap in v if cap.strip()))
+               return normalized
+  
+  Result: Pydantic validator, enforced at ActionMeta construction time
+
+
+WHERE ENFORCEMENT HAPPENS:
+
+Location 1: action_registry.py ActionMeta validation
+  Type: STATIC (at import time)
+  Mechanism: Pydantic field validator
+  Trigger: get_action_registry() returns ActionRegistry with ActionMeta instances
+  Effect: Normalizes to uppercase, deduplicates, sorts
+  Result: Immutable, frozen=True
+
+Location 2: agentic_pipeline.py Step 4B
+  Type: RUNTIME (per execution)
+  Mechanism: Set difference comparison
+  Code:
+    if action_meta and action not in LEGACY_ACTIONS:
+        required_capabilities = action_meta.get("required_capabilities", [])
+        if required_capabilities:
+            executor_capabilities = getattr(executor, "capabilities", None)
+            
+            if executor_capabilities is None or not isinstance(executor_capabilities, (list, tuple, set)):
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_CAPABILITY_MISSING"]
+                return (result, None)
+            
+            normalized_executor_caps = _normalize_capabilities(executor_capabilities)
+            normalized_required_caps = _normalize_capabilities(required_capabilities)
+
+            missing_capabilities = set(normalized_required_caps) - set(normalized_executor_caps)
+            if missing_capabilities:
+                status = "BLOCKED"
+                reason_codes = ["EXECUTOR_CAPABILITY_MISMATCH"]
+                return (result, None)
+  
+  Condition: Only enforced if:
+    a) action_meta is not None
+    b) action not in LEGACY_ACTIONS
+    c) required_capabilities is non-empty list
+
+
+NORMALIZATION FUNCTION: _normalize_capabilities()
+
+Implementation: Uppercase, deduplicate, sort
+  Code: def _normalize_capabilities(caps: List[str]) -> List[str]:
+           if not caps:
+               return []
+           return sorted(set(cap.strip().upper() for cap in caps if cap.strip()))
+
+Purpose: Deterministic comparison
+  Input: ["text_processing", "TEXT_PROCESSING", "Text_Processing"]
+  Output: ["TEXT_PROCESSING"]
+  Effect: Case-insensitive, whitespace-insensitive
+
+
+EXECUTOR CAPABILITIES SOURCE:
+
+Location: executor.capabilities attribute
+  Example: TextProcessExecutorV1.capabilities = ["TEXT_PROCESSING"]
+  Type: List of strings (should be, but not enforced)
+  Extraction: executor_capabilities = getattr(executor, "capabilities", None)
+             if not isinstance(executor_capabilities, (list, tuple, set)):
+                 status = "BLOCKED"
+                 reason_codes = ["EXECUTOR_CAPABILITY_MISSING"]
+
+Enforcement: ✓ Type check required (must be list/tuple/set)
+  - If executor.capabilities absent: None → BLOCKED
+  - If executor.capabilities = "TEXT_PROCESSING" (string): TypeError → BLOCKED
+  - If executor.capabilities = ["TEXT_PROCESSING"]: OK → comparison
+
+
+IMPLICIT ASSUMPTIONS IN CAPABILITIES:
+
+ASSUMPTION 1: Capabilities are declared accurately by executor
+  Location: executor.capabilities attribute
+  Reality: No validation of actual capability implementation
+  Risk: Executor could declare TEXT_PROCESSING but not implement it
+  Enforcement: ✗ Trust-based only
+
+ASSUMPTION 2: Capability string has stable meaning
+  Location: Capabilities are just strings (e.g., "TEXT_PROCESSING")
+  Reality: No versioning, no definition, no semantic binding
+  Risk: "TEXT_PROCESSING" v1 vs v2 are indistinguishable
+  Enforcement: ✗ No versioning mechanism
+
+ASSUMPTION 3: Capability requirement is static per action
+  Location: required_capabilities is list in ActionMeta
+  Reality: Requirements don't change between action versions
+  Risk: Action v1 requires ["CAPABILITY_A"], v2 requires ["CAPABILITY_A", "CAPABILITY_B"]
+        But both have same action_id, so executor can't know which version
+  Enforcement: ✗ No versioning of capabilities
+
+
+WHAT CAN DRIFT SILENTLY IN CAPABILITIES:
+
+1. Executor removes capability
+   Current: executor.capabilities = ["TEXT_PROCESSING"]
+           required_capabilities = ["TEXT_PROCESSING"]
+   If changed to: executor.capabilities = [] (capability removed)
+                 required_capabilities = ["TEXT_PROCESSING"] (not updated)
+   Effect: Comparison: missing = {"TEXT_PROCESSING"} - {} = {"TEXT_PROCESSING"}
+   Detection: BLOCKED with EXECUTOR_CAPABILITY_MISMATCH
+   Risk: LOUD DRIFT — caught by enforcement
+
+2. Action adds required capability
+   Current: executor.capabilities = ["TEXT_PROCESSING"]
+           required_capabilities = []
+   If changed to: executor.capabilities = ["TEXT_PROCESSING"]
+                 required_capabilities = ["TEXT_PROCESSING", "NEW_CAPABILITY"]
+   Effect: missing = {"TEXT_PROCESSING", "NEW_CAPABILITY"} - {"TEXT_PROCESSING"} = {"NEW_CAPABILITY"}
+   Detection: BLOCKED with EXECUTOR_CAPABILITY_MISMATCH
+   Risk: LOUD DRIFT — caught by enforcement
+
+3. Executor claims capability but doesn't implement it
+   Current: executor.capabilities = ["TEXT_PROCESSING"]
+           Actual implementation: raises NotImplementedError
+   If changed to: Executor.execute() raises NotImplementedError for some inputs
+   Effect: Capability check PASSES (trust-based)
+           Execution FAILS (EXECUTOR_EXCEPTION)
+   Detection: PRE-AUDIT logged, execution blocked, but not capabilities fault
+   Risk: SILENT — capability claim not validated
+
+
+CRYPTOGRAPHIC LOCKS IN CAPABILITIES:
+
+✗ NO CRYPTOGRAPHIC LOCKS
+  - Capabilities are string list, not signed
+  - No hash-chain for capability evolution
+  - No proof of capability implementation
+
+LOGICAL LOCKS IN CAPABILITIES:
+
+✓ Normalization is deterministic
+  - Case-insensitive, whitespace-trimmed, sorted
+  - Comparison is deterministic set difference
+
+✗ No capability versioning
+  - "TEXT_PROCESSING" has no version
+  - Can't express backward compatibility (v1 compatible with v2)
+
+✗ No capability definition registry
+  - Capabilities are just strings
+  - No metadata about what "TEXT_PROCESSING" means
+
+
+DEVELOPER DISCIPLINE REQUIRED:
+
+1. Declare all executor capabilities
+   - Executor must list all capabilities accurately
+   - Enforcement: Type check (must be list) but contents not validated
+
+2. Keep executor implementation in sync with capability declaration
+   - If executor.capabilities includes "X", executor must implement "X"
+   - But: No automated check
+
+3. Don't use capability versioning (it's not supported)
+   - GOOD: "TEXT_PROCESSING"
+   - AVOID: "TEXT_PROCESSING_V1", "TEXT_PROCESSING_V2"
+   - Enforcement: None (string matching only)
+
+
+================================================================================
+4. LEGACY EXEMPTIONS AND THEIR RISKS
+================================================================================
+
+LEGACY_ACTIONS DEFINITION:
+
+Location: app/agentic_pipeline.py
+  Code: LEGACY_ACTIONS = {"process"}
+  Type: Set[str] (hardcoded, not configurable)
+  Purpose: Bypass AG-03 validation for specific actions
+
+
+WHERE LEGACY EXEMPTION IS APPLIED:
+
+Location 1: agentic_pipeline.py Step 3B (action_version)
+  Code: if action_version is None:
+            if action not in LEGACY_ACTIONS:
+                status = "BLOCKED"
+                reason_codes = ["ACTION_VERSION_MISSING"]
+                return (result, None)
+  Effect: Legacy actions with action_version = None are ALLOWED
+  Severity: MEDIUM (version tracking lost)
+
+Location 2: agentic_pipeline.py Step 4A (min_executor_version)
+  Code: if action_meta and action not in LEGACY_ACTIONS:
+            min_executor_version = action_meta.get("min_executor_version")
+            if min_executor_version is not None:
+                # version check
+  Effect: Legacy actions SKIP version compatibility check
+  Severity: HIGH (compatibility validation bypassed)
+
+Location 3: agentic_pipeline.py Step 4B (required_capabilities)
+  Code: if action_meta and action not in LEGACY_ACTIONS:
+            required_capabilities = action_meta.get("required_capabilities", [])
+            if required_capabilities:
+                # capability check
+  Effect: Legacy actions SKIP capability validation
+  Severity: HIGH (capability validation bypassed)
+
+
+LEGACY ACTION IN CODEBASE: "process"
+
+Current status:
+  - action_version: "1.0.0" (has version, but exempted from check)
+  - min_executor_version: None (no minimum, even though exempted)
+  - required_capabilities: [] (empty, even though exempted)
+  - executor: "text_process_v1"
+
+Validation path for "process" action:
+  Step 3B: action_version = "1.0.0"
+           if action in LEGACY_ACTIONS (YES):
+               Skip action_version validation
+  Step 4A: if action in LEGACY_ACTIONS (YES):
+               Skip min_executor_version check
+  Step 4B: if action in LEGACY_ACTIONS (YES):
+               Skip required_capabilities check
+  Result: ALL AG-03 validation SKIPPED
+
+
+PROBLEM 1: LEGACY ACTIONS CANNOT BE DEPRECATED
+
+Current mechanism:
+  LEGACY_ACTIONS = {"process"}  (hardcoded set)
+  
+  To remove legacy exemption:
+    1. Change LEGACY_ACTIONS = {} (no more exemptions)
+    2. Add action_version to "process" action
+    3. Add min_executor_version if needed
+    4. Redeploy
+
+Risk:
+  - No sunset date
+  - No warning to clients
+  - No migration period
+  - Legacy exemption can live forever
+
+
+PROBLEM 2: NEW LEGACY ACTIONS CAN ONLY BE ADDED VIA CODE
+
+Current mechanism:
+  To add new legacy action "admin_signal":
+    1. Add to LEGACY_ACTIONS set
+    2. Add to action_registry.get_action_registry()
+    3. Add to action_router.ACTION_REGISTRY
+    4. Add to gate_profiles.DEFAULT_PROFILES
+    5. Add to action_matrix.get_action_matrix()
+    6. Redeploy
+
+Consequence:
+  - All governance mechanisms bypass for new legacy action
+  - No way to make legacy action without code change
+  - Test pollution: _global_matrix can override matrix, but legacy exemption is code-only
+
+
+PROBLEM 3: LEGACY STATUS IS IMPLICIT
+
+Current mechanism:
+  LEGACY_ACTIONS set is code comment/documentation only
+  No annotation on action itself (no deprecated=True flag)
+
+Effect:
+  - Pipeline code reads LEGACY_ACTIONS to decide
+  - Audit trail doesn't show "this is legacy"
+  - Client can't know if action is deprecated
+
+Risk:
+  - Confusion about which actions are stable
+  - No discovery mechanism for legacy status
+
+
+IMPLICIT ASSUMPTIONS IN LEGACY EXEMPTIONS:
+
+ASSUMPTION 1: Legacy actions are safe to exempt
+  Reality: "process" has no version, no capability requirements
+  Risk: If "process" executor changes behavior, no version check prevents incompatibility
+  Enforcement: ✗ Trust-based
+
+ASSUMPTION 2: Legacy actions don't need governance
+  Reality: LEGACY_ACTIONS completely bypasses AG-03
+  Risk: Legacy actions have fewer guarantees than new actions
+  Enforcement: ✗ Implicit assumption
+
+ASSUMPTION 3: Legacy actions will eventually be replaced
+  Reality: No mechanism to force replacement
+  Risk: Legacy actions can remain in production indefinitely
+  Enforcement: ✗ No sunset mechanism
+
+
+WHAT CAN DRIFT SILENTLY IN LEGACY EXEMPTIONS:
+
+1. Legacy action added to LEGACY_ACTIONS but not properly marked
+   Current: LEGACY_ACTIONS = {"process"}
+   If changed to: LEGACY_ACTIONS = {"process", "admin_signal"}
+   Effect: "admin_signal" bypasses ALL AG-03 checks
+   Detection: None (silent)
+   Risk: SILENT DRIFT — new action loses governance
+
+2. Legacy action removed from LEGACY_ACTIONS without preparing executor
+   Current: LEGACY_ACTIONS = {"process"}
+   If changed to: LEGACY_ACTIONS = {}
+   Effect: "process" now requires action_version, min_executor_version, required_capabilities
+   Detection: Execution FAILS (BLOCKED)
+   Risk: LOUD DRIFT — all "process" requests blocked until action updated
+
+3. Executor changed for legacy action
+   Current: action_registry.get_action_registry() → "process" → executor="text_process_v1"
+           _EXECUTORS["text_process_v1"] = TextProcessExecutorV1()
+   If changed to: executor="text_process_v2"
+                 _EXECUTORS["text_process_v2"] = NewExecutor()
+   Effect: Routing finds new executor, but AG-03 doesn't validate compatibility
+   Detection: None (silent)
+   Risk: SILENT DRIFT — executor change not validated
+
+
+CRYPTOGRAPHIC LOCKS IN LEGACY EXEMPTIONS:
+
+✗ NO CRYPTOGRAPHIC LOCKS
+  - LEGACY_ACTIONS is hardcoded set, not signed
+  - No attestation of legacy status
+  - No tamper-evident lock
+
+
+LOGICAL LOCKS IN LEGACY EXEMPTIONS:
+
+✗ No logical locks
+  - LEGACY_ACTIONS is module-level set
+  - Not immutable (could be modified at runtime)
+  - No read-only accessor
+
+Example mutation risk:
+  Code: LEGACY_ACTIONS.add("dangerous_action")  # Adds to set at runtime
+  Effect: "dangerous_action" now exempted from ALL AG-03 validation
+  Detection: None (runtime mutation)
+  Risk: CRITICAL — governance bypassed at runtime
+
+
+DEVELOPER DISCIPLINE REQUIRED:
+
+1. Document why action is legacy
+   - Comment in code explaining purpose
+   - Enforcement: ✗ Documentation only
+
+2. Plan migration path for legacy actions
+   - When will legacy action be removed?
+   - How will clients migrate?
+   - Enforcement: ✗ No tracking
+
+3. Don't add new legacy actions unnecessarily
+   - Only exempt when genuinely required for backward compat
+   - Enforcement: ✗ Code review only
+
+4. Never mutate LEGACY_ACTIONS at runtime
+   - Keep as constants
+   - Enforcement: ✗ Python allows mutation
+
+
+================================================================================
+5. STRICT GOVERNANCE VS IMPLICIT GOVERNANCE
+================================================================================
+
+GOVERNANCE CLASSIFICATION:
+
+STRICT ENFORCEMENT (Hard Blocks):
+
+1. ACTION MUST EXIST
+   Location: agentic_pipeline.py Step 3A
+   Code: if action_meta is None and not action_routed:
+             status = "BLOCKED"
+   Mechanism: Explicit check, fail-closed
+   Trigger: Execution blocked immediately
+   Consequence: Client receives 403 or BLOCKED status
+
+2. ACTION_VERSION MUST BE SEMVER (non-legacy)
+   Location: agentic_pipeline.py Step 3B
+   Code: elif not _is_valid_semver(action_version):
+             status = "BLOCKED"
+   Mechanism: Regex pattern match
+   Trigger: Invalid semver format rejected
+   Consequence: Execution blocked with ACTION_VERSION_INVALID
+
+3. PAYLOAD MUST BE JSON-SERIALIZABLE
+   Location: agentic_pipeline.py Step 2
+   Code: if input_digest is None:
+             status = "BLOCKED"
+   Mechanism: JSON serialization attempted
+   Trigger: TypeError or ValueError caught
+   Consequence: Execution blocked with NON_JSON_PAYLOAD
+
+4. EXECUTOR MUST EXIST
+   Location: agentic_pipeline.py Step 4
+   Code: except UnknownExecutorError:
+             status = "BLOCKED"
+   Mechanism: Registry lookup with exception
+   Trigger: executor_id not in _EXECUTORS dict
+   Consequence: Execution blocked with EXECUTOR_NOT_FOUND
+
+5. EXECUTOR VERSION >= MIN_EXECUTOR_VERSION (non-legacy)
+   Location: agentic_pipeline.py Step 4A
+   Code: if _compare_semver(executor_version, min_executor_version) < 0:
+             status = "BLOCKED"
+   Mechanism: Semver comparison using packaging.version
+   Trigger: Version comparison fails
+   Consequence: Execution blocked with EXECUTOR_VERSION_INCOMPATIBLE
+
+6. EXECUTOR HAS ALL REQUIRED_CAPABILITIES (non-legacy)
+   Location: agentic_pipeline.py Step 4B
+   Code: if missing_capabilities:
+             status = "BLOCKED"
+   Mechanism: Set difference calculation
+   Trigger: Required capability absent
+   Consequence: Execution blocked with EXECUTOR_CAPABILITY_MISMATCH
+
+7. PAYLOAD RESPECTS SIZE LIMITS
+   Location: agentic_pipeline.py Step 5
+   Code: except LimitExceeded:
+             status = "BLOCKED"
+   Mechanism: Payload limits checked (max_bytes, max_depth, max_list_items)
+   Trigger: Payload exceeds executor limits
+   Consequence: Execution blocked with LIMIT_EXCEEDED
+
+8. PROFILES FINGERPRINT MATCHES LOCK (tests only)
+   Location: tests/test_profiles_governance_lock.py
+   Code: assert locked == current
+   Mechanism: SHA256 fingerprint comparison
+   Trigger: Test execution
+   Consequence: Test fails if profiles drift
+
+
+IMPLICIT GOVERNANCE (Trust-Based):
+
+1. EXECUTOR DECLARES CAPABILITIES ACCURATELY
+   Location: executor.capabilities attribute
+   Assumption: Executor lists all capabilities truthfully
+   Reality: No validation of actual implementation
+   Risk: Executor could lie about capabilities
+   Mechanism: ✗ None (trust only)
+
+2. EXECUTOR RESPECTS TIMEOUT
+   Location: executor.limits.timeout_ms
+   Assumption: Executor raises TimeoutError if exceeding limit
+   Reality: Timeout not enforced, TimeoutError never generated
+   Risk: Executor can run indefinitely
+   Mechanism: ✗ None (timeout_ms is documentation)
+
+3. EXECUTOR IS DETERMINISTIC
+   Location: Executor protocol requirement
+   Assumption: executor.execute() is deterministic for same input
+   Reality: No check, could use random, timestamps, network calls
+   Risk: Execution replay produces different results
+   Mechanism: ✗ None (trust only)
+
+4. EXECUTOR IS SIDE-EFFECT FREE
+   Location: Executor protocol requirement
+   Assumption: executor.execute() has no side-effects
+   Reality: Could send webhooks, write database, call APIs
+   Risk: Executor violates contract without detection
+   Mechanism: ✓ PRE-AUDIT mitigates (logs attempt before execution)
+
+5. ACTION_VERSION IS IN SYNC WITH EXECUTOR.VERSION
+   Location: ActionMeta.action_version vs executor.version
+   Assumption: Both are kept in sync during upgrades
+   Reality: Separate fields, separate owners
+   Risk: Versions can diverge silently
+   Mechanism: ✗ None (developer discipline only)
+
+6. MIN_EXECUTOR_VERSION IS IN SYNC WITH ACTUAL REQUIREMENTS
+   Location: ActionMeta.min_executor_version
+   Assumption: Field accurately reflects executor feature requirements
+   Reality: Field is assertion, not validated
+   Risk: min_executor_version can be outdated
+   Mechanism: ✗ None (developer discipline only)
+
+7. LEGACY_ACTIONS SET IS ACCURATE
+   Location: agentic_pipeline.py LEGACY_ACTIONS = {"process"}
+   Assumption: Only truly legacy actions are in set
+   Reality: No review, no timestamp, no justification
+   Risk: Actions added to legacy without proper evaluation
+   Mechanism: ✗ None (code review only)
+
+8. GATE PROFILES ARE IN SYNC WITH ACTIONS
+   Location: gate_profiles.DEFAULT_PROFILES vs action_registry
+   Assumption: Every action in registry has profile in DEFAULT_PROFILES
+   Reality: Separate dicts, independent modification
+   Risk: Profile added but not action, or vice versa
+   Mechanism: ✗ None (developer discipline only)
+
+9. ACTION NAMES ARE CONSISTENT ACROSS REGISTRIES
+   Location: action_router vs action_registry vs gate_profiles vs action_matrix
+   Assumption: All registries use same action name strings
+   Reality: Four separate registries, independent updates
+   Risk: Name inconsistency causes silent failures
+   Mechanism: ✗ None (developer discipline only)
+
+
+CLASSIFICATION SUMMARY:
+
+┌──────────────────────────────────────────────────────┐
+│ STRICT (Hard Enforcement)                            │
+├──────────────────────────────────────────────────────┤
+│ ✓ Action exists                                      │
+│ ✓ action_version is semver format (non-legacy)       │
+│ ✓ Payload is JSON-serializable                       │
+│ ✓ Executor exists                                    │
+│ ✓ executor_version >= min_executor_version           │
+│ ✓ Executor has required_capabilities                 │
+│ ✓ Payload respects limits                            │
+│ ✓ Profiles fingerprint matches (test only)           │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│ IMPLICIT (Trust-Based)                               │
+├──────────────────────────────────────────────────────┤
+│ ✗ Executor declares capabilities truthfully          │
+│ ✗ Executor respects timeout_ms limit                 │
+│ ✗ Executor is deterministic                          │
+│ ✗ Executor is side-effect free (PRE-AUDIT mitigates) │
+│ ✗ action_version in sync with executor.version       │
+│ ✗ min_executor_version accurate for requirements    │
+│ ✗ LEGACY_ACTIONS set is correct                      │
+│ ✗ Gate profiles in sync with actions                 │
+│ ✗ Action names consistent across registries          │
+└──────────────────────────────────────────────────────┘
+
+
+================================================================================
+6. WHAT CAN DRIFT SILENTLY
+================================================================================
+
+SILENT DRIFT INVENTORY:
+
+DRIFT 1: Executor version updated without updating min_executor_version
+  Location: executor.version field vs ActionMeta.min_executor_version
+  Detection: ✗ No mechanism
+  Example:
+    BEFORE: executor.version = "1.0.0", min_executor_version = "1.0.0"
+    AFTER: executor.version = "1.0.1", min_executor_version = "1.0.0"
+    Result: Validation still passes but semantic mismatch
+  Impact: Inconsistent audit trail (executor version in ActionResult vs required version)
+
+DRIFT 2: New executor capability not added to required_capabilities
+  Location: executor.capabilities list vs ActionMeta.required_capabilities
+  Detection: ✗ No mechanism
+  Example:
+    BEFORE: executor.capabilities = ["TEXT_PROCESSING"], required = ["TEXT_PROCESSING"]
+    AFTER: executor.capabilities = ["TEXT_PROCESSING", "NLP"], required = ["TEXT_PROCESSING"]
+    Result: New capability silently added but not required
+  Impact: Action doesn't declare use of new executor feature
+
+DRIFT 3: Action added to registry but not to action_matrix
+  Location: action_registry.get_action_registry() vs action_matrix.get_action_matrix()
+  Detection: ✗ No mechanism
+  Example:
+    BEFORE: registry = {"process"}, matrix.allowed_actions = ["process"]
+    AFTER: registry = {"process", "admin"}, matrix.allowed_actions = ["process"]
+    Result: "admin" action exists but not allowed
+  Impact: User-facing 403 error, confusing messaging
+
+DRIFT 4: Action added to registry but not to action_router
+  Location: action_registry.get_action_registry() vs action_router.ACTION_REGISTRY
+  Detection: Loud (BLOCKED in Step 1 routing)
+  Example:
+    BEFORE: registry = {"process"}, router = {"process": "text_process_v1"}
+    AFTER: registry = {"process", "admin"}, router = {"process": "text_process_v1"}
+    Result: Routing fails for "admin", fallback to registry works
+  Impact: Inconsistent execution path (sometimes uses router, sometimes fallback)
+
+DRIFT 5: Executor implementation changed but version not bumped
+  Location: TextProcessExecutorV1 code vs executor.version string
+  Detection: ✗ No mechanism
+  Example:
+    BEFORE: executor.version = "1.0.0", implementation = uppercase text
+    AFTER: executor.version = "1.0.0", implementation = convert to reverse
+    Result: Same version number, different behavior
+  Impact: Audit trail shows version "1.0.0" but behavior changed
+
+DRIFT 6: Gate profile modified but fingerprint not updated
+  Location: gate_profiles.DEFAULT_PROFILES vs profiles_fingerprint.lock
+  Detection: Loud (test fails only)
+  Example:
+    BEFORE: fingerprint = "abc123", profile.allowlist = {"text"}
+    AFTER: fingerprint = "abc123", profile.allowlist = {"text", "admin"}
+    Result: Fingerprint mismatch in test, but runtime doesn't check
+  Impact: Runtime doesn't detect profile drift, test detects it
+
+DRIFT 7: min_executor_version set but action_version not set
+  Location: ActionMeta.action_version vs ActionMeta.min_executor_version
+  Detection: ✗ No mechanism
+  Example:
+    BEFORE: action_version = "1.0.0", min_executor_version = "1.0.0"
+    AFTER: action_version = None, min_executor_version = "1.0.0" (manually edited)
+    Result: action_version check SKIPPED (legacy), min_executor_version check RUNS
+    Impact: Inconsistent governance (action has no version but requires min executor)
+
+DRIFT 8: Executor removed from _EXECUTORS dict but action still routed to it
+  Location: _EXECUTORS registry vs action_router.ACTION_REGISTRY
+  Detection: Loud (BLOCKED in Step 4)
+  Example:
+    BEFORE: _EXECUTORS["text_process_v1"] exists, ACTION_REGISTRY = {"process": "text_process_v1"}
+    AFTER: _EXECUTORS["text_process_v1"] deleted, ACTION_REGISTRY unchanged
+    Result: Routing succeeds, executor lookup FAILS
+  Impact: EXECUTOR_NOT_FOUND error
+
+DRIFT 9: Legacy action upgraded to non-legacy without updating metadata
+  Location: LEGACY_ACTIONS set vs ActionMeta fields
+  Detection: Loud (BLOCKED in Step 3B/4A/4B)
+  Example:
+    BEFORE: LEGACY_ACTIONS = {"process"}, action_version = None
+    AFTER: LEGACY_ACTIONS = {}, action_version = None
+    Result: action_version check FAILS (None is invalid non-legacy)
+    Impact: All requests BLOCKED until action_version added
+
+DRIFT 10: Capability string spelling changed
+  Location: executor.capabilities vs required_capabilities
+  Detection: Loud (BLOCKED in Step 4B)
+  Example:
+    BEFORE: executor.capabilities = ["TEXT_PROCESSING"], required = ["TEXT_PROCESSING"]
+    AFTER: executor.capabilities = ["TEXT_PROC"], required = ["TEXT_PROCESSING"]
+    Result: Set difference = {"TEXT_PROCESSING"}
+    Impact: EXECUTOR_CAPABILITY_MISMATCH
+
+
+SILENT DRIFT RISK RANKING:
+
+CRITICAL (Governance Bypass):
+  1. Executor capability not added to required_capabilities
+  2. Executor implementation changed but version not bumped
+  3. min_executor_version set but action_version not set (mixed governance)
+
+HIGH (Configuration Consistency):
+  1. Executor version updated without updating min_executor_version
+  2. Action added to registry but not to action_matrix
+
+MEDIUM (Operational Issues):
+  1. Gate profile modified but fingerprint not updated (detectable in tests)
+  2. Action added to registry but not to action_router (detectable at runtime)
+
+LOW (Self-Healing):
+  1. Executor removed from registry but still routed (detectable in Step 4)
+  2. Capability string spelling changed (detectable in Step 4B)
+  3. Legacy action upgraded without metadata (detectable in Step 3B)
+
+
+================================================================================
+7. CRYPTOGRAPHICALLY LOCKED VS LOGICALLY LOCKED
+================================================================================
+
+CRYPTOGRAPHIC LOCKS (Tamper-Evident):
+
+✗ NO CRYPTOGRAPHIC LOCKS IN CODEBASE
+  - No signatures on action metadata
+  - No HMAC of action registry
+  - No hash-chain of executor versions
+  - No attestation of capability declaration
+
+Only cryptographic element:
+  - SHA256 fingerprint of profiles (profiles_fingerprint.lock)
+    Used: Test only (test_profiles_governance_lock.py)
+    Not used: Runtime validation
+    Consequence: Drift detectable in tests, not production
+
+
+LOGICAL LOCKS (Immutability Guarantees):
+
+LOCK 1: ActionRegistry frozen=True
+  Location: action_registry.py
+  Mechanism: Pydantic ConfigDict(frozen=True)
+  Scope: Once created, ActionRegistry cannot be modified
+  Consequence: action_registry.get_action_registry() returns immutable object
+  Strength: ✓✓✓ Strong (Pydantic enforces)
+  
+  Limitation:
+    - Immutable only after creation
+    - Factory function can return different registry on each call
+    - No version check, no hash verification
+
+LOCK 2: ActionMeta frozen=True
+  Location: action_registry.py
+  Mechanism: Pydantic ConfigDict (inherited by ActionRegistry)
+  Scope: Once created, ActionMeta cannot be modified
+  Consequence: Metadata fields cannot change during execution
+  Strength: ✓✓✓ Strong
+  
+  Limitation:
+    - Immutable only after creation
+    - Next action can have different metadata
+    - No atomicity across action_meta and executor
+
+LOCK 3: PolicyProfile frozen=True (dataclass)
+  Location: gate_profiles.py
+  Mechanism: @dataclass(frozen=True)
+  Scope: Once created, PolicyProfile cannot be modified
+  Consequence: profile.allowlist, profile.deny_unknown_fields, etc. cannot change
+  Strength: ✓✓✓ Strong
+  
+  Limitation:
+    - DEFAULT_PROFILES dict is mutable
+    - Profile could theoretically be replaced in DEFAULT_PROFILES dict
+    - But: Dictionary replacement requires code change
+
+LOCK 4: _EXECUTORS protected by _EXECUTORS_LOCK (RLock)
+  Location: executors/registry.py
+  Mechanism: threading.RLock with get_executor(executor_id)
+  Scope: Concurrent access to _EXECUTORS dict is serialized
+  Consequence: Executor instances cannot be concurrently modified
+  Strength: ✓✓ Medium
+  
+  Limitation:
+    - Protects concurrent access, not replay
+    - Protects dict structure, not executor internals
+    - Executor instance could theoretically mutate internal state
+
+LOCK 5: ActionResult frozen=True with extra="forbid"
+  Location: action_contracts.py
+  Mechanism: Pydantic ConfigDict(frozen=True, extra="forbid")
+  Scope: Once created, ActionResult cannot be modified or extended
+  Consequence: Audit trail is immutable, no field additions
+  Strength: ✓✓✓ Strong
+  
+  Limitation:
+    - Immutable only after creation
+    - No signature, no hash verification
+
+
+LOGICAL LOCKS APPLIED DURING EXECUTION:
+
+LOCK 6: Semver validation with packaging.version
+  Location: agentic_pipeline.py _compare_semver()
+  Mechanism: packaging.version.Version class (industry standard)
+  Scope: Version comparison is semantically correct
+  Consequence: "1.10.0" > "1.9.0" (correct semver, not lexicographic)
+  Strength: ✓✓✓ Strong (well-tested library)
+  
+  But:
+    - Invalid versions raise ValueError (caught, treated as incompatible)
+    - Comparison is correct, but min_executor_version could be wrong value
+
+LOCK 7: Capability normalization with set logic
+  Location: agentic_pipeline.py _normalize_capabilities()
+  Mechanism: Set difference for missing capabilities
+  Scope: Capability comparison is deterministic and case-insensitive
+  Consequence: {"TEXT_PROCESSING"} - {"text_processing"} = {} (normalized)
+  Strength: ✓✓✓ Strong (set logic is deterministic)
+  
+  But:
+    - No semantic validation of capability names
+    - No check if capability actually implemented
+
+LOCK 8: JSON serialization validation
+  Location: agentic_pipeline.py _compute_input_digest()
+  Mechanism: json.dumps() with sort_keys=True, separators fixed
+  Scope: Input digest is deterministic if payload is serializable
+  Consequence: Same payload → same digest (reproducible)
+  Strength: ✓✓✓ Strong
+  
+  But:
+    - Doesn't prevent two different payloads with same digest
+    - Doesn't prevent mutation between digest computation and execution
+
+
+LOCKS NOT IMPLEMENTED (but needed):
+
+✗ No signature on ActionMeta
+✗ No hash-chain linking versions
+✗ No timestamp lock (no creation date validation)
+✗ No executor interface version lock
+✗ No audit log hash-chain
+✗ No version attestation
+✗ No LEGACY_ACTIONS immutability
+
+
+================================================================================
+8. DEVELOPER DISCIPLINE REQUIRED (COMPLETE INVENTORY)
+================================================================================
+
+DISCIPLINE 1: Keep action_version in sync with executor capability
+  Where: action_registry.py ActionMeta fields
+  Required: action_version and required_capabilities match executor release
+  Enforcement: ✗ None (no tool)
+  Consequence: SILENT drift if inconsistent
+
+DISCIPLINE 2: Keep min_executor_version in sync with version requirements
+  Where: action_registry.py min_executor_version field
+  Required: min_executor_version reflects actual executor feature requirements
+  Enforcement: ✗ None (no tool)
+  Consequence: SILENT drift if outdated
+
+DISCIPLINE 3: Bump action_version when action semantics change
+  Where: action_registry.py action_version field
+  Required: Increment version following semver when adding required_capabilities
+  Enforcement: ✗ None (no tool)
+  Consequence: SILENT drift if version not updated
+
+DISCIPLINE 4: Bump executor.version when executor behavior changes
+  Where: executor.version attribute
+  Required: Increment following semver when behavior changes
+  Enforcement: ✗ None (no tool)
+  Consequence: SILENT drift if version not bumped
+
+DISCIPLINE 5: Keep executor.capabilities declaration accurate
+  Where: executor.capabilities list
+  Required: List all capabilities executor actually implements
+  Enforcement: ✗ None (no validation of implementation)
+  Consequence: SILENT drift if executor lies about capabilities
+
+DISCIPLINE 6: Keep executor.version attribute typed correctly
+  Where: executor.version attribute
+  Required: Must be string (type check present but not required)
+  Enforcement: ✓ Type check in Step 4 (soft enforcement)
+  Consequence: SILENT degradation if version not string (becomes None)
+
+DISCIPLINE 7: Implement executor deterministically
+  Where: executor.execute() method
+  Required: Same input → same output always
+  Enforcement: ✗ None (test only)
+  Consequence: SILENT drift if executor uses random/timestamps
+
+DISCIPLINE 8: Implement executor without side-effects
+  Where: executor.execute() method
+  Required: No network calls, no database writes, no webhook sends
+  Enforcement: ✓ PRE-AUDIT logs attempt (mitigates forensics)
+  Consequence: Side-effects occur but are logged
+
+DISCIPLINE 9: Implement executor to respect timeout_ms
+  Where: executor.execute() method
+  Required: Raise TimeoutError if exceeding executor.limits.timeout_ms
+  Enforcement: ✗ None (timeout never enforced)
+  Consequence: SILENT drift if executor doesn't implement timeout
+
+DISCIPLINE 10: Keep LEGACY_ACTIONS set minimal
+  Where: agentic_pipeline.py LEGACY_ACTIONS set
+  Required: Only add actions that truly need governance exemption
+  Enforcement: ✗ Code review only
+  Consequence: SILENT drift if legacy exemption added unnecessarily
+
+DISCIPLINE 11: Keep action names consistent across registries
+  Where: action_router vs action_registry vs gate_profiles vs action_matrix
+  Required: All registries use same action name strings
+  Enforcement: ✗ None (no cross-registry validation)
+  Consequence: SILENT drift (silent failure or confusing error)
+
+DISCIPLINE 12: Update action_matrix when adding actions
+  Where: action_matrix.allowed_actions list
+  Required: Add new action to allowed_actions list
+  Enforcement: ✗ None (no validation)
+  Consequence: New action not allowed (403 error) until matrix updated
+
+DISCIPLINE 13: Update gate_profiles when adding actions
+  Where: gate_profiles.DEFAULT_PROFILES dict
+  Required: Add profile for every action
+  Enforcement: ✗ None (gate fails if profile missing)
+  Consequence: GATE_EXCEPTION if profile not found
+
+DISCIPLINE 14: Update profiles_fingerprint.lock when modifying profiles
+  Where: app/profiles_fingerprint.lock file
+  Required: Update lock file when DEFAULT_PROFILES changes
+  Enforcement: ✓ Test failure (test_profiles_governance_lock.py)
+  Consequence: LOUD (tests fail if lock not updated)
+
+DISCIPLINE 15: Document why action is legacy
+  Where: LEGACY_ACTIONS set comment
+  Required: Explain purpose and planned migration
+  Enforcement: ✗ Documentation only
+  Consequence: Confusion about legacy status
+
+
+DEVELOPER DISCIPLINE RANKING:
+
+CRITICAL (Affects Governance Integrity):
+  1. Keep min_executor_version synchronized with real requirements
+  2. Keep executor.version synchronized with actual implementation
+  3. Keep action_version synchronized with capability changes
+  4. Keep executor.capabilities declaration accurate
+
+HIGH (Affects Configuration Consistency):
+  5. Bump versions following semver correctly
+  6. Keep action names consistent across registries
+  7. Update action_matrix when adding actions
+
+MEDIUM (Affects Operational Visibility):
+  8. Update profiles_fingerprint.lock when profiles change
+  9. Implement executor deterministically
+  10. Implement executor without side-effects
+
+LOW (Nice to Have):
+  11. Keep LEGACY_ACTIONS minimal
+  12. Document legacy status
+  13. Respect timeout_ms limit
+
+
+================================================================================
+END OF STAGE 3
+================================================================================
+
+SUMMARY OF GOVERNANCE ENFORCEMENT:
+
+WHAT IS CRYPTOGRAPHICALLY LOCKED:
+  - SHA256 fingerprint of profiles (profiles_fingerprint.lock)
+    Used in tests only, not in runtime
+
+WHAT IS LOGICALLY LOCKED:
+  - ActionRegistry frozen=True (immutable after creation)
+  - ActionMeta frozen=True (immutable after creation)
+  - PolicyProfile frozen=True (immutable after creation)
+  - ActionResult frozen=True (immutable after creation)
+  - Semver comparison logic (packaging.version)
+  - Capability set logic (deterministic normalization)
+  - JSON serialization (deterministic with sort_keys)
+
+WHAT IS STRICTLY ENFORCED (Hard Blocks):
+  - Action must exist (registry or routing)
+  - action_version must be semver format (non-legacy)
+  - Payload must be JSON-serializable
+  - Executor must exist in registry
+  - executor_version >= min_executor_version (non-legacy)
+  - Executor has all required_capabilities (non-legacy)
+  - Payload respects size limits
+  - Profiles fingerprint matches lock (test only)
+
+WHAT IS IMPLICITLY TRUSTED (Developer Discipline):
+  - Executor declares capabilities truthfully
+  - Executor respects timeout_ms limit
+  - Executor is deterministic
+  - Executor is side-effect free (PRE-AUDIT mitigates)
+  - action_version in sync with executor.version
+  - min_executor_version accurate for requirements
+  - LEGACY_ACTIONS set is correct
+  - Gate profiles in sync with actions
+  - Action names consistent across 4 registries
+
+WHAT CAN DRIFT SILENTLY (No Detection):
+  1. Executor capability not added to required_capabilities
+  2. Executor implementation changed but version not bumped
+  3. Executor version updated without updating min_executor_version
+  4. Action added to registry but not to action_matrix
+  5. min_executor_version set but action_version not set
+  6. New executor capability silently added
+
+END OF STAGE 3

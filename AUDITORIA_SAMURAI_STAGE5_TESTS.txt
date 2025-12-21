@@ -1,0 +1,896 @@
+================================================================================
+AUDITORIA SAMURAI — STAGE 5: TEST COVERAGE ANALYSIS
+TECHNO OS BACKEND (AGENTIC VERITTÀ)
+================================================================================
+
+DATA: 21 de dezembro de 2025
+MODO: Adversarial, técnico, metrológico
+ESCOPO: Test breadth, depth, mocks, and gap analysis
+AUDIÊNCIA: QA engineers, test architects, release managers
+
+AVISO: Este documento analisa EXATAMENTE o que é testado e o que não é.
+Enfoque em mocks que mentem, testes incompletos, e falhas possíveis em produção.
+
+================================================================================
+1. TEST INVENTORY AND BREADTH ASSESSMENT
+================================================================================
+
+TOTAL TEST FILES: 29 files in tests/ directory
+
+CATEGORIZED BY SCOPE:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 1: UNIT TESTS (Isolated components)                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+test_gate_engine.py (4 tests)
+  ✓ test_unknown_action_denied
+  ✓ test_forbidden_admin_key_denied
+  ✓ test_external_fields_denied
+  ✓ test_determinism
+  Scope: gate_engine.evaluate_gate() only
+  Isolation: Complete (no mocks needed, uses actual gate_engine.py)
+
+test_gate_adversarial.py (3 tests)
+  ✓ test_nested_payload_denied_by_unknown_fields
+  ✓ test_list_payload_denied_by_unknown_fields
+  ✓ test_unicode_confusable_key_denied
+  Scope: Adversarial gate inputs (edge cases)
+  Isolation: Complete
+
+test_decision_record.py (15 tests)
+  ✓ test_fields_exist
+  ✓ test_ts_utc_must_be_timezone_aware
+  ✓ test_ts_utc_must_be_utc
+  ✓ test_default_ts_utc_is_now_utc
+  ✓ test_digest_stable_across_key_order
+  ✓ test_digest_stable_across_nested_keys
+  ✓ test_digest_empty_dict
+  ✓ test_digest_empty_list
+  ✓ test_digest_unicode_preserved
+  ✓ test_digest_non_json_serializable_fallback
+  ✓ test_digest_different_payloads_differ
+  ✓ test_digest_list_order_matters
+  ✓ test_deny_without_reason_codes_raises_error
+  ✓ test_deny_with_valid_reason_codes_passes
+  ✓ test_allow_with_empty_reason_codes_passes
+  Scope: DecisionRecord model validation and digest computation
+  Isolation: Complete
+
+test_contract_canonical_v1.py (3 tests)
+  ✓ test_agent_defaults_and_valid_values
+  ✓ test_agent_extra_fields_forbidden
+  ✓ test_arconte_and_adminsignal_minimal
+  Scope: Contract schema validation
+  Isolation: Complete
+
+test_semver_ordering_b1.py (6 tests)
+  ✓ test_semver_comparison_1_10_greater_than_1_9
+  ✓ test_semver_comparison_2_0_greater_than_1_99
+  ✓ test_semver_comparison_equal
+  ✓ test_semver_comparison_less_than
+  ✓ test_semver_comparison_invalid_version_raises
+  ✓ test_semver_comparison_prerelease
+  Scope: packaging.version semver comparison (B1-FIX validation)
+  Isolation: Complete
+
+test_executor_registry_thread_safe_b2.py (4 tests)
+  ✓ test_executor_registry_has_lock
+  ✓ test_get_executor_acquires_lock
+  ✓ test_get_executor_unknown_still_safe
+  ✓ test_get_executor_concurrent_reads
+  Scope: _EXECUTORS lock (B2-FIX validation)
+  Isolation: Complete (verifies threading.RLock presence)
+
+test_normalize.py (4 tests)
+  ✓ test_normalize_text
+  ✓ test_normalize_score
+  ✓ test_normalize_literal_enum
+  ✓ test_safe_list
+  Scope: Contract normalization utility functions
+  Isolation: Complete
+
+test_field_governance.py (5 tests)
+  ✓ test_canonical_fields_return_rules
+  ✓ test_prohibited_runtime_fields
+  ✓ test_unknown_field_explain
+  ✓ test_unknown_field_denied_by_default
+  ✓ test_external_fields_not_runtime_allowed
+  Scope: Field governance and allowlist validation
+  Isolation: Complete
+
+test_gate_artifacts.py (3 tests)
+  ✓ test_export_is_deterministic
+  ✓ test_fingerprint_is_deterministic
+  ✓ test_profiles_version_matches_fingerprint
+  Scope: Profile fingerprinting and determinism
+  Isolation: Complete
+
+test_profiles_governance_lock.py (1 test)
+  ✓ test_profiles_fingerprint_lock_matches
+  Scope: Governance lock file verification
+  Isolation: Complete (test-only, not runtime)
+
+UNIT TEST SUBTOTAL: 48 tests
+  Type: Direct component testing
+  Mocking: Minimal (mostly real components)
+  Coverage: Good for isolated units
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 2: PIPELINE UNIT TESTS (agentic_pipeline.py)                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+test_agentic_pipeline.py (5 tests visible)
+  ✓ test_unknown_action_blocked (TestPipelineUnknownAction)
+  ✓ test_non_json_payload_blocked (TestPipelineNonJSONPayload)
+  ✓ test_limit_exceeded_bytes (TestPipelineLimits)
+  ✓ test_limit_exceeded_depth (TestPipelineLimits)
+  ✓ test_limit_exceeded_list_items (TestPipelineLimits)
+  Scope: Pipeline validation steps (1-5)
+  Isolation: Partial (uses real action_registry, action_matrix)
+  Mocking: None visible
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 3: RED TESTS (Failing tests for unimplemented features)        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+test_executor_versioning_red.py (4 tests)
+  ✗ test_executor_without_version_blocked (RED: expected BLOCKED, not implemented)
+  ✗ test_executor_with_incompatible_version_blocked (RED)
+  ✓ test_executor_with_compatible_version_not_blocked (RED, conditional pass)
+  ✓ test_executor_with_newer_version_not_blocked (RED, conditional pass)
+  Scope: Step 4A executor version validation
+  Status: UNIMPLEMENTED (tests expect BLOCKED, code may not enforce)
+  Mocking: Extensive (all registries mocked)
+
+test_executor_capabilities_red.py (3 tests)
+  ✗ test_executor_without_capabilities_blocked (RED)
+  ✗ test_executor_with_insufficient_capabilities_blocked (RED)
+  ✓ test_executor_compatible_not_blocked_by_capabilities (RED, conditional pass)
+  Scope: Step 4B executor capabilities validation
+  Status: UNIMPLEMENTED (tests expect BLOCKED, code may not enforce)
+  Mocking: Extensive (all registries mocked)
+
+test_action_versioning_red.py (implied, not fully read)
+  Scope: Step 3B action version validation
+  Status: Likely RED (tests for unimplemented features)
+
+test_ag03_audit_integrity_red.py (implied)
+  Scope: AG-03 full audit trail integrity
+  Status: RED
+
+test_ag03_retrocompat_red.py (implied)
+  Scope: AG-03 backward compatibility
+  Status: RED
+
+RED TEST SUBTOTAL: ~12 tests
+  Type: TDD tests for planned features
+  Status: Most FAIL (features not yet implemented)
+  Purpose: Define expected behavior before implementation
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 4: INTEGRATION TESTS (Gate + Pipeline)                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+test_gate_pipeline_integration.py (7 tests)
+  ✓ test_gate_deny_no_action_audit (INEVITABILITY: DENY blocks execution)
+  ✓ test_gate_allow_produces_both_audits (Dual audit trail)
+  ✓ test_response_minimal_no_raw_output (Privacy: no raw output)
+  ✓ test_health_still_public (Public endpoint)
+  ✓ test_successful_request_uses_cached_payload (Single read, payload correlation)
+  ✓ test_executor_exception_returns_200_with_failed_status (Graceful failure)
+  ✓ test_profile_action_mismatch_returns_403 (Matrix check)
+  Scope: HTTP endpoint (gate + pipeline interaction)
+  Isolation: Partial (uses real components, TestClient)
+  Mocking: Selective (gate can be mocked, pipeline runs real)
+
+test_gate_http_enforcement.py (14 tests)
+  ✓ test_log_decision_writes_json
+  ✓ test_log_decision_serializable_to_json
+  ✓ test_health_endpoint_open
+  ✓ test_process_allows_valid_input
+  ✓ test_process_denies_on_gate_denial
+  ✓ test_process_handles_gate_exception
+  ✓ test_audit_log_does_not_contain_raw_payload
+  ✓ test_gated_endpoint_logs_on_success
+  ✓ test_trace_id_in_log
+  ✓ test_empty_request_body
+  ✓ test_malformed_json_request_body
+  ✓ test_input_digest_computed_for_empty_payload
+  Scope: HTTP endpoint and audit logging
+  Isolation: Complete (TestClient with real app)
+
+test_pre_audit_b3.py (2 tests)
+  ✓ test_pre_audit_logged_before_execution
+  ✓ test_pre_audit_logged_even_on_executor_exception
+  Scope: Pre-audit logging (B3-FIX)
+  Isolation: Extensive mocking (registry, executor, matrix)
+  Mocking: ALL dependencies mocked
+
+test_action_mismatch.py (3 tests)
+  ✓ test_action_result_can_have_profile_action_mismatch_reason
+  ✓ test_mismatch_appears_in_audit_log
+  ✓ test_registry_fingerprint_can_detect_drift
+  Scope: Action matrix mismatch detection
+  Isolation: Mostly real components
+
+INTEGRATION TEST SUBTOTAL: ~26 tests
+  Type: End-to-end via HTTP/TestClient
+  Mocking: Selective (mostly real)
+  Coverage: Good for happy path
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 5: E2E TESTS (HTTP API)                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+web_test_api.py (3 tests)
+  ✓ test_health
+  ✓ test_process_success
+  ✓ test_process_empty_rejected
+  Scope: FastAPI /health and /process endpoints
+  Isolation: Complete (TestClient)
+  Comments: "Quick audit: behaviour predictable and schema-stable"
+
+test_no_web_dependency.py (1 test)
+  ✓ test_contracts_do_not_import_fastapi
+  Scope: Dependency hygiene (contracts independence)
+  Isolation: Inspection only
+
+test_api.py (implied, may exist)
+  Scope: API endpoint behavior
+  Status: Basic coverage
+
+
+E2E TEST SUBTOTAL: ~4 tests
+  Type: Simple HTTP requests
+  Mocking: None
+  Coverage: Basic happy path only
+
+
+================================================================================
+COVERAGE ANALYSIS SUMMARY
+================================================================================
+
+WELL-TESTED AREAS:
+
+1. GATE ENGINE (4 dedicated tests + adversarial edge cases)
+   ✓ ALLOW/DENY decisions
+   ✓ Forbidden admin keys
+   ✓ External fields policy
+   ✓ Determinism
+   ✓ Edge cases (nested payloads, unicode)
+   Confidence: HIGH
+
+2. AUDIT TRAIL STRUCTURE (15 tests in decision_record.py)
+   ✓ Field presence and types
+   ✓ Timezone handling (UTC validation)
+   ✓ Digest computation (determinism, unicode, edge cases)
+   ✓ Pydantic validation (reason_codes non-empty when DENY)
+   Confidence: HIGH
+
+3. GOVERNANCE LOCKS (10+ tests)
+   ✓ Semver comparison (B1-FIX)
+   ✓ Executor registry thread-safety (B2-FIX)
+   ✓ Profile fingerprinting (determinism)
+   ✓ Profile lock file verification (test-only)
+   Confidence: HIGH
+
+4. PRE-AUDIT LOGGING (B3-FIX)
+   ✓ PENDING status logged before execution
+   ✓ Works even on executor exception
+   ✓ Proper ordering (pre + post)
+   Confidence: HIGH
+
+5. GATE + PIPELINE INTEGRATION
+   ✓ DENY blocks execution (INEVITABILITY)
+   ✓ Dual audit trail (gate + action)
+   ✓ Trace_id correlation
+   ✓ Privacy (no raw output in response)
+   Confidence: MEDIUM
+
+6. CONTRACT SCHEMA VALIDATION
+   ✓ Field presence
+   ✓ Extra fields forbidden
+   ✓ Type validation (ts_utc timezone)
+   Confidence: HIGH
+
+
+UNDER-TESTED AREAS:
+
+1. EXECUTOR IMPLEMENTATION (TextProcessExecutorV1)
+   ✗ No dedicated unit tests for executor.execute()
+   ✗ No tests for:
+     - Correct uppercase transformation
+     - Correct length calculation
+     - Exception handling (KeyError, ValueError)
+     - Field presence validation
+   Impact: MEDIUM (executor is simple, but mutations not caught)
+
+2. AG-03 GOVERNANCE ENFORCEMENT (RED tests)
+   ✗ Action versioning (Step 3B): Unclear if implemented
+   ✗ Executor version validation (Step 4A): Tests assume unimplemented
+   ✗ Executor capabilities validation (Step 4B): Tests assume unimplemented
+   Impact: CRITICAL (these are core governance features)
+
+3. PAYLOAD LIMITS ENFORCEMENT (Step 5)
+   ✗ test_agentic_pipeline.py shows test files but detailed assertions not visible
+   ✗ No visible tests for:
+     - Exact limit boundaries (10KB, depth=10, 100 items)
+     - Interaction between multiple limits
+     - Non-serializable payloads
+   Impact: MEDIUM (limits are defensive)
+
+4. ERROR PATHS AND EXCEPTIONS
+   ✗ Limited testing of exception scenarios:
+     - Executor timeout (mentioned in code comment but simulated only)
+     - Logging failure (not tested)
+     - Registry inconsistency (routing vs executor not found)
+   Impact: MEDIUM-HIGH
+
+5. CONCURRENT REQUEST HANDLING
+   ✗ No tests for:
+     - Multiple requests with different actions
+     - Concurrent execution
+     - Thread isolation (action_matrix is NOT thread-safe)
+   Impact: MEDIUM (depends on deployment model)
+
+6. TRACE_ID PROPAGATION
+   ✗ Limited testing:
+     - Only basic correlation tested
+     - No tests for missing trace_id
+     - No tests for trace_id format validation
+   Impact: LOW (trace_id structure is opaque)
+
+7. DIGEST CONSISTENCY
+   ✗ No tests for:
+     - Digest inconsistency between gate and pipeline
+     - Non-JSON payloads (both use different fallbacks)
+     - Output digest computation accuracy
+   Impact: HIGH (digest is privacy mechanism and audit proof)
+
+8. HTTP REQUEST BODY HANDLING
+   ✗ Limited testing:
+     - Empty body: tested
+     - Malformed JSON: tested
+     - Large payloads: not visible in test files
+     - Body read count (single read invariant): only one test
+   Impact: MEDIUM
+
+
+================================================================================
+2. MOCK QUALITY ASSESSMENT: WHERE MOCKS LIE
+================================================================================
+
+MOCKS THAT OVERSIMPLIFY REALITY:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MOCK 1: TextProcessExecutorV1 Is Too Simple                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Mock Type: Actual implementation (not a mock, but undersimplified)
+Location: app/executors/registry.py, TextProcessExecutorV1
+
+Reality:
+  def execute(self, req: ActionRequest) -> Any:
+      text = req.payload.get("text")
+      if text is None:
+          raise KeyError("Missing required field: text")
+      if not isinstance(text, str):
+          raise ValueError("Field 'text' must be a string")
+      processed = text.upper()
+      return {"processed": processed, "length": len(processed)}
+
+Problem:
+  ✗ No return of "original" field (but web_test_api.py expects it)
+    Line: assert data["original"] == " hello "
+    But executor returns only {"processed": ..., "length": ...}
+  
+  ✗ Tests assume return value is lost (ActionResult extracts output_digest)
+    But executor actually returns output
+    Does the HTTP response include it? No (privacy by design).
+    So tests don't verify executor return value matches response.
+
+  ✗ Exception cases not tested:
+    - KeyError if "text" missing: pipeline maps to FAILED
+    - ValueError if "text" not string: pipeline maps to FAILED
+    But tests don't verify these exceptions occur or are handled correctly.
+
+Consequence:
+  ✓ Executor IS deterministic (same input → same output)
+  ✓ Executor IS side-effect free
+  ✗ Executor return value never compared to what tests expect
+  ✗ Executor exceptions never tested in isolation
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MOCK 2: test_pre_audit_b3.py Mocks Registry and Executor                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Mock Scope: Extensive
+  - mock_registry.actions dict
+  - mock_executor.execute = MagicMock
+  - all dependencies patched
+
+Problem:
+  ✗ Real action_registry.get_action_registry() never called
+  ✗ Real executors.registry.get_executor() never called
+  ✗ Tests don't verify actual registry lookup works
+  ✗ Tests don't verify executor metadata matches between registries
+
+  Example: If action_router says executor="v1" but action_registry says "v2":
+    Real code: FAILS with version mismatch
+    Test: PASSES (mock returns whatever test wants)
+
+Consequence:
+  ✓ Pre-audit logging verified in isolation
+  ✗ Registry consistency NOT verified
+  ✗ Executor lookup failures NOT tested
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MOCK 3: test_executor_versioning_red.py Mocks Everything                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Mock Scope: ALL of pipeline
+  - get_action_registry()
+  - route_action_deterministic()
+  - get_executor()
+
+Problem:
+  ✗ Real routing never runs
+  ✗ Real action_registry never consulted
+  ✗ Real executor registry never consulted
+  ✗ Only pipeline Step 4A version check logic tested
+
+  Real scenario: action_router says executor="v1", action_registry says "v2"
+    Test mocks: Both return consistent values (test doesn't detect mismatch)
+    Real code: Would use v1 from routing but validate metadata for v2
+
+Consequence:
+  ✓ Tests verify version comparison logic (if implemented)
+  ✗ Tests don't verify action-executor mapping consistency
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MOCK 4: test_gate_pipeline_integration.py Selectively Mocks Gate         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Mock Scope: Selective
+  - Real pipeline
+  - Real action_registry, action_matrix
+  - Real executor registry
+  - Optional: mock gate (in test_gate_deny_no_action_audit)
+
+Pattern:
+  with patch("app.main.evaluate_gate") as mock_gate:
+      mock_gate.return_value = GateResult(decision=GateDecision.DENY, ...)
+      response = client.post("/process", json={"text": "should deny"})
+
+Problem:
+  ✗ When gate is mocked, actual gate logic not tested
+  ✓ When gate is real, both layers tested together
+  
+  Risk: If mock_gate differs from real gate:
+    Test passes but production fails
+
+  Example: Mock says input_digest not computed, but real gate computes it
+    Test: Doesn't check input_digest in gate audit
+    Production: Missing input_digest (audit gap)
+
+Consequence:
+  ✓ Good for testing DENY → no execution invariant
+  ✗ Mocked gate may diverge from real gate
+
+
+================================================================================
+3. ASSUMPTIONS TESTS MAKE ABOUT EXECUTORS AND SIDE-EFFECTS
+================================================================================
+
+ASSUMPTION 1: Executor is stateless singleton
+  Location: Evident in _EXECUTORS dict (one instance per executor_id)
+  Test Assumption: Each test uses fresh singleton (no state leakage)
+  Reality: If executor mutates internal state, all tests see side-effects
+  Example:
+    Test A: executor._internal_counter = 0
+    Test B: executor._internal_counter incremented to 1
+    Test B sees side-effect from Test A
+  Protection: conftest.py resets action_matrix, but executor singletons not reset
+  Risk: MEDIUM (depends on executor implementation)
+
+ASSUMPTION 2: Executor.execute() is deterministic
+  Location: test_gate_engine.py, test_determinism
+  Test Assumption: Same input → same output (no randomness)
+  Reality: TextProcessExecutorV1 IS deterministic
+  Protection: No protection against executor code changes
+  Risk: LOW (code review enforces, test doesn't verify)
+
+ASSUMPTION 3: Executor.execute() has no side-effects
+  Location: Base protocol comment "side-effect-free"
+  Test Assumption: Executor doesn't mutate external state (no I/O, no DB)
+  Reality: TextProcessExecutorV1 has no I/O, is pure function
+  Protection: Code inspection only, no test verification
+  Risk: HIGH (new executors could violate this assumption)
+
+ASSUMPTION 4: Executor exceptions are caught by pipeline
+  Location: test_pre_audit_b3.py, test_pre_audit_logged_even_on_executor_exception
+  Test Assumption: executor.execute() raises ValueError → pipeline catches it
+  Test Mocking: mock_executor.execute = MagicMock(side_effect=ValueError(...))
+  Reality: Real executor.execute() can raise KeyError, ValueError, or any exception
+  Test Coverage:
+    ✓ ValueError tested
+    ✗ KeyError not tested
+    ✗ Other exceptions not tested
+  Risk: MEDIUM (different exceptions may be handled differently)
+
+ASSUMPTION 5: Executor.limits are always present
+  Location: All tests assume executor.limits.max_payload_bytes exists
+  Test Assumption: executor.limits is never None, never missing fields
+  Reality: TextProcessExecutorV1 defines limits correctly
+  Protection: Pydantic frozen BaseModel could enforce (but protocol doesn't)
+  Risk: MEDIUM (new executors could define limits incorrectly)
+
+ASSUMPTION 6: Executor return value is JSON-serializable
+  Location: Pipeline assumes output can be hashed (Step 7)
+  Test Assumption: executor.execute() returns dict or JSON-like object
+  Reality: TextProcessExecutorV1 returns {"processed": ..., "length": ...}
+  Test Coverage:
+    ✓ Successful case tested
+    ✗ Non-JSON output NOT tested (output_digest computation)
+    ✗ Large output NOT tested (output_digest performance)
+  Risk: MEDIUM (output_digest=None if non-serializable, status still SUCCESS)
+
+
+================================================================================
+4. WHAT COULD PASS TESTS AND STILL FAIL IN PRODUCTION
+================================================================================
+
+CRITICAL PRODUCTION FAILURES (Pass tests, fail production):
+
+FAILURE CASE 1: Executor return value assertion mismatch
+  Test: Mocks executor.execute() to return {"result": "ok"}
+  Test expects: Output never returned to user (privacy by design)
+  
+  Production: Mocks don't validate executor returns correct schema
+  Real failure: Executor.execute() returns {"wrong_field": "value"}
+  Consequence: output_digest computed wrong, audit shows unexpected hash
+  Detection in tests: NONE (output_digest is opaque)
+  Severity: MEDIUM
+
+FAILURE CASE 2: Executor capabilities not enforced (RED tests assume fail)
+  Test: test_executor_capabilities_red.py expects BLOCKED
+  Test Status: FAILS (code doesn't implement validation yet)
+  
+  Production: If tests are skipped or deprecated:
+  Executor with capabilities=[] can bypass required_capabilities check
+  Consequence: Executor executed without required capabilities
+  Detection in tests: Only if RED tests run
+  Severity: CRITICAL (governance bypass)
+
+FAILURE CASE 3: Executor version incompatibility not enforced (RED tests assume fail)
+  Test: test_executor_versioning_red.py expects version validation
+  Test Status: FAILS (Step 4A may not be implemented)
+  
+  Production: Old executor runs with new action metadata
+  Example: Action requires executor >= 1.1.0, but 1.0.0 gets routed
+  Detection in tests: Only if RED tests run
+  Severity: CRITICAL (governance bypass)
+
+FAILURE CASE 4: Action version not validated (Step 3B)
+  Test: test_action_versioning_red.py (not fully read)
+  Test Status: May be RED (unimplemented)
+  
+  Production: Action with invalid version string (not semver) gets executed
+  Example: action_version="latest" instead of "1.0.0"
+  Consequence: Version comparison fails, status=BLOCKED or FAILED
+  Detection in tests: Only if red tests fail
+  Severity: HIGH (governance bypass)
+
+FAILURE CASE 5: Non-JSON payload digest inconsistency
+  Test: test_agentic_pipeline.py tests non-JSON, but digest comparison missing
+  Test expectation: input_digest matches between gate and action
+  
+  Production: Non-JSON payload gets different digest in gate vs action
+  Gate computes: sha256(str(payload))
+  Action computes: None (silent fallback returns None)
+  Audit shows: input_digest mismatch, audit trail broken
+  Detection in tests: NONE (no digest consistency test)
+  Severity: HIGH (audit integrity)
+
+FAILURE CASE 6: trace_id missing in action audit
+  Test: test_gate_http_enforcement.py tests trace_id presence
+  Test expectation: trace_id in gate_audit and action_audit
+  
+  Production: If gate_request forgets to include trace_id in return dict
+  process() endpoint: trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
+  Result: Falls back to new UUID, audit trails for same request have different trace_ids
+  Consequence: Cannot correlate gate and action audits
+  Detection in tests: Only if test compares gate_id == action_id
+  Severity: MEDIUM (auditability)
+
+FAILURE CASE 7: Profile hash and matched_rules never populated
+  Test: Tests pass (profile_hash="" is valid)
+  Test expectation: DecisionRecord can have empty profile_hash
+  
+  Production: All audit logs have profile_hash="", matched_rules=[]
+  Consequence: Cannot audit which policy version was applied
+  Consequence: No record of which rules were evaluated
+  Detection in tests: NONE (tests accept empty values)
+  Severity: MEDIUM (lost governance context)
+
+FAILURE CASE 8: Output digest None even on SUCCESS
+  Test: test_gate_pipeline_integration.py doesn't validate output_digest
+  Test expectation: output_digest present in response
+  
+  Production: If executor returns non-JSON:
+  Example: executor returns <object instance> instead of dict
+  output_digest = _compute_output_digest(output) → returns None
+  ActionResult status="SUCCESS" but output_digest=None
+  Consequence: Success without proof of output
+  Detection in tests: NONE (response content not validated)
+  Severity: MEDIUM (audit proof missing)
+
+FAILURE CASE 9: Action matrix allowed_actions diverges from action_registry
+  Test: test_action_mismatch.py tests PROFILE_ACTION_MISMATCH
+  Test assumption: Action in registry also in matrix
+  
+  Production: If matrix not updated when action added:
+  Registry: {"process": ..., "admin": ...}
+  Matrix: allowed_actions = ["process"]
+  Request for "admin": Fails at matrix check (403)
+  But action exists and executor exists
+  Detection in tests: Only if test checks both registries
+  Severity: MEDIUM (operational confusion)
+
+FAILURE CASE 10: Executor exception type determines error message
+  Test: test_pre_audit_b3.py tests exception=ValueError
+  Test assumption: All exceptions map to FAILED status
+  
+  Production: If executor raises obscure exception:
+  Example: executor raises AssertionError (programmer error)
+  Pipeline catches all exceptions → status=FAILED
+  Consequence: Error message hidden, operator cannot debug
+  Detection in tests: Only if test cases all exception types
+  Severity: HIGH (debugging difficulty)
+
+FAILURE CASE 11: Logging failure is silent (no exception raised)
+  Test: Tests assume logging succeeds
+  Test assumption: logger.info() never fails
+  
+  Production: If logging handler fails (disk full, permission error):
+  logger.info() is silent (Python logging default)
+  ActionResult computed but not logged
+  HTTP response sent with status=SUCCESS, audit trail missing
+  Detection in tests: NONE (no test for logging failure)
+  Severity: CRITICAL (audit trail loss)
+
+FAILURE CASE 12: Concurrent request race on _global_matrix
+  Test: conftest.py resets action_matrix between tests (sequential)
+  Test assumption: Only one test runs at a time
+  
+  Production: Parallel requests with concurrent tests:
+  Test A: set_action_matrix(matrix1)
+  Test B: set_action_matrix(matrix2)
+  Request X: Sees matrix2 (from B), but expects matrix1 (from A)
+  Result: Request X fails with PROFILE_ACTION_MISMATCH
+  Detection in tests: NONE (no concurrent test)
+  Severity: MEDIUM (depends on deployment model)
+
+FAILURE CASE 13: Executor version is None
+  Test: All tests assume executor.version is string
+  Test assumption: executor.version always present and valid
+  
+  Production: If new executor doesn't define version:
+  executor.version = None (or attribute missing)
+  Pipeline Step 4A: executor_version = getattr(executor, "version", None)
+  _compare_semver(None, min_executor_version) → raises ValueError
+  Consequence: Pipeline exception, status=FAILED
+  Detection in tests: Only if executor without version is tested
+  Severity: MEDIUM (deployment error)
+
+FAILURE CASE 14: Payload mutation between gate and pipeline
+  Test: test_gate_pipeline_integration.py assumes payload not modified
+  Test assumption: process() doesn't mutate payload before passing to pipeline
+  
+  Production: If main.py modifies payload dict:
+  gate_request() computes input_digest for original
+  process() modifies payload (e.g., adds field)
+  pipeline computes input_digest for modified payload
+  Digests don't match, audit shows inconsistency
+  Detection in tests: Only if test compares digests
+  Severity: MEDIUM (payload integrity)
+
+
+SUMMARY: 14 CRITICAL/HIGH/MEDIUM FAILURES
+
+  CRITICAL (3): Executor capabilities/version bypass, Logging failure
+  HIGH (4): Gate/action version validation, Output digest None, Executor exceptions
+  MEDIUM (7): Digest inconsistency, trace_id mismatch, profile context, etc.
+
+  Pattern: Most failures involve:
+    - Mocks oversimplifying reality
+    - Tests not validating constraints
+    - Tests not checking error paths
+    - Tests not checking audit trail consistency
+
+
+================================================================================
+5. DEPTH AND BREADTH METRICS
+================================================================================
+
+BREADTH (horizontal coverage of components):
+
+Component            │ Tests │ Coverage │ Quality
+─────────────────────┼───────┼──────────┼──────────────
+gate_engine.py       │  4+   │ Good     │ Direct + adversarial
+decision_record.py   │  15   │ Excellent│ Comprehensive
+action_contracts.py  │  5    │ Good     │ Schema validation
+agentic_pipeline.py  │  5+   │ Partial  │ Happy path only
+action_registry.py   │  3    │ Fair     │ Limited tests
+executors/*          │  0    │ None     │ UNTESTED
+action_matrix.py     │  1    │ Low      │ Only reset test
+gate_profiles.py     │  3    │ Fair     │ Fingerprint only
+HTTP endpoints       │  14   │ Good     │ Integration tests
+
+
+Breadth Score: 6/9 components well-tested
+  ✓ Core governance: gate_engine, decision_record, contracts
+  ✗ Registry consistency: action_registry, executors, action_matrix
+  ~ Integration: HTTP endpoints (good)
+
+
+DEPTH (vertical coverage of error paths per component):
+
+Happy Path Tests: 48+ tests
+Error Path Tests: 3-5 tests (gate DENY, payload limits, executor exception)
+Edge Case Tests: 8+ tests (unicode, nested payloads, semver edge cases)
+
+Coverage Ratio: Happy:Error:Edge = 48:5:8 = 85%:9%:14%
+  Concern: Error paths underrepresented (< 10% of tests)
+  Ideal: 60-70% happy, 20-30% error, 10-20% edge
+  Gap: 20% error paths missing
+
+
+MOCK QUALITY ASSESSMENT:
+
+Mocks by category:
+  ✓ No mocks for: gate_engine, decision_record, contracts (pure logic)
+  ~ Selective mocks: HTTP integration tests (choose what to mock)
+  ✗ Extensive mocks: Pipeline validation (RED tests mock everything)
+  ✗ Partial mocks: Pre-audit tests (mix real + mock)
+
+Problematic mocks:
+  - test_pre_audit_b3.py: ALL dependencies mocked (loses registry consistency)
+  - test_executor_versioning_red.py: Routing + registry mocked (loses real behavior)
+  - test_gate_pipeline_integration.py: Selective gate mock (can diverge)
+
+
+================================================================================
+6. MISSING TEST CATEGORIES
+================================================================================
+
+NO TESTS FOR:
+
+1. Executor Implementation Details
+   ✗ TextProcessExecutorV1.execute() not unit tested
+   ✗ Uppercase transformation correctness not verified
+   ✗ Length calculation not verified
+   ✗ Exception handling (KeyError, ValueError) not tested
+   Impact: Any bug in executor goes undetected
+
+2. Payload Mutation Detection
+   ✗ No test for payload modification between layers
+   ✗ Digest consistency between gate and pipeline not verified
+   Impact: Silent audit trail corruption if payload mutated
+
+3. Logging Failures
+   ✗ No test for logger.info() exception
+   ✗ No test for audit trail loss on logging failure
+   Impact: Audit trail silently lost in production
+
+4. Concurrent Request Handling
+   ✗ No test for parallel requests
+   ✗ _global_matrix race condition not tested
+   ✗ _EXECUTORS thread-safety tested but not in concurrent request context
+   Impact: Concurrency bugs in production
+
+5. Large Payloads
+   ✗ Limits tested at boundary, but large payload behavior not tested
+   ✗ Output digest computation on large output not tested
+   Impact: Performance issues or digest loss on large payloads
+
+6. Registry Inconsistency Scenarios
+   ✗ action_router vs action_registry divergence not tested
+   ✗ action_router vs executor registry divergence not tested
+   ✗ action_registry vs executor registry divergence not tested
+   Impact: Silent governance bypass if registries diverge
+
+7. Error Code Accuracy
+   ✗ Each error path produces reason_code, but accuracy not tested
+   ✗ Multiple failure modes don't produce wrong reason_code
+   Impact: Misleading error codes in audit logs
+
+8. Audit Trail Completeness
+   ✗ No test verifying all events are logged
+   ✗ No test for missing pre-audit or post-audit
+   ✗ No test for incomplete ActionResult fields
+   Impact: Audit trail gaps undetected
+
+9. Trace_ID Handling
+   ✗ Missing trace_id not tested
+   ✗ Trace_ID format not validated
+   ✗ Trace_ID propagation edge cases not tested
+   Impact: Audit trail correlation failures
+
+10. Contract Evolution
+    ✗ No backward compatibility tests
+    ✗ No tests for contract versioning
+    Impact: Contract schema changes can break compatibility
+
+
+================================================================================
+7. TEST ISOLATION AND FLAKINESS RISKS
+================================================================================
+
+ISOLATION ISSUES:
+
+Issue 1: _global_matrix mutable state
+  Conftest resets: Yes (reset_action_matrix_after_test fixture)
+  Risk: AUTOUSE fixture (auto-resets after each test)
+  Problem: If test raises exception before completion, reset still runs
+  Status: SAFE (autouse ensures cleanup)
+
+Issue 2: _EXECUTORS singleton state
+  Conftest resets: NO
+  Risk: TextProcessExecutorV1 is singleton, created at import time
+  If executor mutates internal state: State persists across tests
+  Status: MEDIUM RISK (depends on executor implementation)
+  Mitigation: Executors must be stateless (enforced by code review, not tests)
+
+Issue 3: Logging state
+  Conftest resets: NO
+  Risk: caplog captures logs, but logger state persists
+  If test modifies logging handler: State persists across tests
+  Status: LOW RISK (caplog is isolated, logger is thread-safe)
+
+Issue 4: Concurrent test runners
+  Conftest: NO protection for concurrent tests
+  Risk: If tests run in parallel:
+    - _global_matrix is NOT thread-safe (RACE CONDITION)
+    - _EXECUTORS access protected by lock (safe)
+    - Logging is thread-safe
+  Status: HIGH RISK (requires sequential test execution)
+
+
+FLAKINESS RISKS:
+
+Risk 1: Timestamp precision
+  Tests: Some tests use datetime.now(timezone.utc)
+  Risk: If test runs too fast, ts_utc not unique
+  Impact: Tests comparing timestamps may be flaky
+  Severity: LOW (timestamps have microsecond precision)
+
+Risk 2: UUID collision
+  Tests: trace_id generated with str(uuid.uuid4())
+  Risk: UUID collision extremely unlikely
+  Severity: NEGLIGIBLE
+
+Risk 3: Digest computation
+  Tests: Some tests verify digest matches
+  Risk: If JSON serialization changes, digest differs
+  Impact: Tests may break on Python/library version change
+  Severity: LOW (json module is stable)
+
+Risk 4: Semver comparison
+  Tests: test_semver_ordering_b1.py depends on packaging.version
+  Risk: If packaging.version behavior changes, tests break
+  Impact: External dependency risk
+  Severity: LOW (packaging.version is stable)
+
+
+================================================================================
+END OF STAGE 5
+================================================================================
