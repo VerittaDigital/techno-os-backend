@@ -9,6 +9,12 @@ import logging
 
 from app.decision_record import DecisionRecord
 
+
+class AuditLogError(Exception):
+    """Raised when audit logging fails. Signals critical failure in governance trail."""
+    pass
+
+
 # Named logger for gate audit trail
 logger = logging.getLogger("gate_audit")
 
@@ -19,5 +25,10 @@ def log_decision(record: DecisionRecord) -> None:
     - Serializes DecisionRecord to JSON
     - Contains only structured metadata (no raw payload)
     - One line per decision for parsing and audit analysis
+    
+    Raises AuditLogError if logging fails (fail-closed).
     """
-    logger.info(record.model_dump_json())
+    try:
+        logger.info(record.model_dump_json())
+    except Exception as e:
+        raise AuditLogError(f"Failed to log gate decision (trace_id={getattr(record, 'trace_id', 'unknown')}): {e}") from e

@@ -25,6 +25,7 @@ from app.action_audit_log import log_action_result
 from app.action_contracts import ActionRequest, ActionResult
 from app.action_registry import get_action_registry
 from app.action_router import route_action as route_action_deterministic
+from app.audit_log import AuditLogError
 from app.executors.registry import get_executor
 from app.executors.registry import UnknownExecutorError
 
@@ -102,6 +103,35 @@ def _compute_output_digest(output: Any) -> Optional[str]:
         return None
 
 
+def _safe_log_action_result(result: ActionResult) -> ActionResult:
+    """
+    Log action result with fail-closed behavior.
+    If logging fails, return BLOCKED result with AUDIT_LOG_FAILED reason.
+    """
+    try:
+        log_action_result(result)
+        return result
+    except AuditLogError:
+        # Audit log failed — convert to BLOCKED
+        blocked_result = ActionResult(
+            action=result.action,
+            executor_id=result.executor_id,
+            executor_version=result.executor_version,
+            status="BLOCKED",
+            reason_codes=["AUDIT_LOG_FAILED"],
+            input_digest=result.input_digest,
+            output_digest=result.output_digest,
+            trace_id=result.trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        # Try to log the blocked result (if this also fails, we have a bigger problem)
+        try:
+            log_action_result(blocked_result)
+        except AuditLogError:
+            pass  # Last resort: logging is completely down
+        return blocked_result
+
+
 def run_agentic_action(
     action: str,
     payload: Dict[str, Any],
@@ -154,7 +184,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
     
     # Step 3: Get action metadata from registry (ALWAYS, not skipped)
@@ -182,7 +212,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
     
     # Step 3B: Validate action_version (always enforced when metadata exists)
@@ -202,7 +232,7 @@ def run_agentic_action(
                 trace_id=trace_id,
                 ts_utc=datetime.now(timezone.utc),
             )
-            log_action_result(result)
+            result = _safe_log_action_result(result)
             return (result, None)
         elif not _is_valid_semver(action_version):
             status = "BLOCKED"
@@ -218,7 +248,7 @@ def run_agentic_action(
                 trace_id=trace_id,
                 ts_utc=datetime.now(timezone.utc),
             )
-            log_action_result(result)
+            result = _safe_log_action_result(result)
             return (result, None)
     
     # Step 4: Resolve executor (needed for capability and limit checks below)
@@ -245,7 +275,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
     
     # Step 4A: Validate executor version (AG-03)
@@ -266,7 +296,7 @@ def run_agentic_action(
                     trace_id=trace_id,
                     ts_utc=datetime.now(timezone.utc),
                 )
-                log_action_result(result)
+                result = _safe_log_action_result(result)
                 return (result, None)
             else:
                 # Use semver comparison instead of string comparison
@@ -285,7 +315,7 @@ def run_agentic_action(
                             trace_id=trace_id,
                             ts_utc=datetime.now(timezone.utc),
                         )
-                        log_action_result(result)
+                        result = _safe_log_action_result(result)
                         return (result, None)
                 except ValueError:
                     # If version comparison fails, treat as incompatible
@@ -302,7 +332,7 @@ def run_agentic_action(
                         trace_id=trace_id,
                         ts_utc=datetime.now(timezone.utc),
                     )
-                    log_action_result(result)
+                    result = _safe_log_action_result(result)
                     return (result, None)
 
     # Step 4B: Validate executor capabilities (AG-03)
@@ -329,7 +359,7 @@ def run_agentic_action(
                     trace_id=trace_id,
                     ts_utc=datetime.now(timezone.utc),
                 )
-                log_action_result(result)
+                result = _safe_log_action_result(result)
                 return (result, None)
             
             # If executor has capabilities but insufficient -> MISMATCH
@@ -351,7 +381,7 @@ def run_agentic_action(
                     trace_id=trace_id,
                     ts_utc=datetime.now(timezone.utc),
                 )
-                log_action_result(result)
+                result = _safe_log_action_result(result)
                 return (result, None)
 
     # Step 5: Enforce payload limits
@@ -378,7 +408,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
     except LimitExceeded:
         status = "BLOCKED"
@@ -394,7 +424,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
 
     # Step 6: Execute executor (with pre-audit for safety)
@@ -412,7 +442,7 @@ def run_agentic_action(
         trace_id=trace_id,
         ts_utc=datetime.now(timezone.utc),
     )
-    log_action_result(pre_audit_result)
+    pre_audit_result = _safe_log_action_result(pre_audit_result)
     
     try:
         # Create ActionRequest
@@ -437,7 +467,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
     except Exception as e:
         # Any other exception during execution
@@ -454,7 +484,7 @@ def run_agentic_action(
             trace_id=trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
-        log_action_result(result)
+        result = _safe_log_action_result(result)
         return (result, None)
 
     # Step 7: Success — Compute output digest and return
@@ -472,5 +502,5 @@ def run_agentic_action(
         trace_id=trace_id,
         ts_utc=datetime.now(timezone.utc),
     )
-    log_action_result(result)
+    result = _safe_log_action_result(result)
     return (result, None)  # Raw output never returned (privacy by design)
