@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from typing import List
 from pydantic import BaseModel, ConfigDict
 
@@ -21,6 +22,7 @@ class ActionMatrix(BaseModel):
 
 
 _global_matrix = None
+_global_matrix_lock = threading.RLock()
 
 
 def get_action_matrix() -> ActionMatrix:
@@ -28,31 +30,43 @@ def get_action_matrix() -> ActionMatrix:
     
     Defines which actions can be executed within each governance profile.
     In testing, allows dynamic addition of test actions via set_action_matrix().
+    
+    Thread-safe: acquires _global_matrix_lock for consistent read.
     """
     global _global_matrix
     
-    if _global_matrix is not None:
-        return _global_matrix
-    
-    return ActionMatrix(
-        profile="default",
-        allowed_actions=["process"],
-    )
+    with _global_matrix_lock:
+        if _global_matrix is not None:
+            return _global_matrix
+        
+        return ActionMatrix(
+            profile="default",
+            allowed_actions=["process"],
+        )
 
 
 def set_action_matrix(matrix: ActionMatrix) -> None:
     """Override action matrix (for testing only).
     
     This is used in tests to temporarily add test actions to the allowed list.
+    
+    Thread-safe: acquires _global_matrix_lock for exclusive write.
     """
     global _global_matrix
-    _global_matrix = matrix
+    
+    with _global_matrix_lock:
+        _global_matrix = matrix
 
 
 def reset_action_matrix() -> None:
-    """Reset action matrix to default (for testing cleanup)."""
+    """Reset action matrix to default (for testing cleanup).
+    
+    Thread-safe: acquires _global_matrix_lock for exclusive write.
+    """
     global _global_matrix
-    _global_matrix = None
+    
+    with _global_matrix_lock:
+        _global_matrix = None
 
 
 def is_action_allowed_in_profile(
