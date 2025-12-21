@@ -30,9 +30,6 @@ from app.executors.registry import UnknownExecutorError
 
 
 
-# Legacy actions exempt from strict AG-03 version/capability checks
-LEGACY_ACTIONS = {"process"}
-
 # Semver pattern: X.Y.Z
 SEMVER_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
 
@@ -188,26 +185,25 @@ def run_agentic_action(
         log_action_result(result)
         return (result, None)
     
-    # Step 3B: Validate action_version (ALWAYS for non-legacy, never skip)
+    # Step 3B: Validate action_version (always enforced when metadata exists)
     if action_meta is not None:
         action_version = action_meta.get("action_version")
         if action_version is None:
-            if action not in LEGACY_ACTIONS:
-                status = "BLOCKED"
-                reason_codes = ["ACTION_VERSION_MISSING"]
-                result = ActionResult(
-                    action=action,
-                    executor_id=executor_id,
-                    executor_version="unknown",
-                    status=status,
-                    reason_codes=reason_codes,
-                    input_digest=input_digest,
-                    output_digest=output_digest,
-                    trace_id=trace_id,
-                    ts_utc=datetime.now(timezone.utc),
-                )
-                log_action_result(result)
-                return (result, None)
+            status = "BLOCKED"
+            reason_codes = ["ACTION_VERSION_MISSING"]
+            result = ActionResult(
+                action=action,
+                executor_id=executor_id,
+                executor_version="unknown",
+                status=status,
+                reason_codes=reason_codes,
+                input_digest=input_digest,
+                output_digest=output_digest,
+                trace_id=trace_id,
+                ts_utc=datetime.now(timezone.utc),
+            )
+            log_action_result(result)
+            return (result, None)
         elif not _is_valid_semver(action_version):
             status = "BLOCKED"
             reason_codes = ["ACTION_VERSION_INVALID"]
@@ -253,8 +249,7 @@ def run_agentic_action(
         return (result, None)
     
     # Step 4A: Validate executor version (AG-03)
-    # Only check min_executor_version for non-legacy actions
-    if action_meta and action not in LEGACY_ACTIONS:
+    if action_meta:
         min_executor_version = action_meta.get("min_executor_version")
         if min_executor_version is not None:
             if executor_version is None:
@@ -312,7 +307,7 @@ def run_agentic_action(
 
     # Step 4B: Validate executor capabilities (AG-03)
     # Check that executor has all required_capabilities
-    if action_meta and action not in LEGACY_ACTIONS:
+    if action_meta:
         required_capabilities = action_meta.get("required_capabilities", [])
         if required_capabilities:
             # Get capabilities attribute

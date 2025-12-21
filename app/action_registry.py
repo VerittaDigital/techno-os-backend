@@ -85,8 +85,8 @@ def get_action_registry() -> ActionRegistry:
                 "executor": "text_process_v1",
                 "version": "1.0",  # Legacy field
                 "action_version": "1.0.0",  # AG-03: explicit semver
-                "required_capabilities": [],  # No specific capabilities required for now
-                "min_executor_version": None,  # No minimum version enforced yet
+                "required_capabilities": ["TEXT_PROCESSING"],
+                "min_executor_version": "1.0.0",
             },
         }
     )
