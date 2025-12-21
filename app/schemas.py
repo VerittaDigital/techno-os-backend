@@ -2,7 +2,7 @@
 
 Comments explain design reasoning (por que), not what the code does.
 """
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProcessRequest(BaseModel):
@@ -11,7 +11,8 @@ class ProcessRequest(BaseModel):
     # surprising mutations.
     text: str = Field(..., description="Texto de entrada (não vazio)")
 
-    @validator("text")
+    @field_validator("text")
+    @classmethod
     def not_empty_after_trim(cls, v: str) -> str:
         if not isinstance(v, str):
             raise TypeError("text must be a string")
