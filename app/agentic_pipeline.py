@@ -19,12 +19,15 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
+from packaging import version as pkg_version
+
 from app.action_audit_log import log_action_result
 from app.action_contracts import ActionRequest, ActionResult
 from app.action_registry import get_action_registry
 from app.action_router import route_action as route_action_deterministic
 from app.executors.registry import get_executor
 from app.executors.registry import UnknownExecutorError
+
 
 
 # Legacy actions exempt from strict AG-03 version/capability checks
@@ -51,7 +54,35 @@ def _is_valid_semver(version_str):
     return bool(SEMVER_PATTERN.match(version_str))
 
 
-def _compute_input_digest(payload: Dict[str, Any]) -> Optional[str]:
+def _compare_semver(version_a: str, version_b: str) -> int:
+    """Compare two semantic versions using packaging.version.
+    
+    Args:
+        version_a: version string (e.g., "1.0.0")
+        version_b: version string to compare against (e.g., "1.1.0")
+    
+    Returns:
+        -1 if version_a < version_b
+         0 if version_a == version_b
+         1 if version_a > version_b
+    
+    Raises:
+        ValueError if either version is invalid
+    """
+    try:
+        va = pkg_version.Version(version_a)
+        vb = pkg_version.Version(version_b)
+    except pkg_version.InvalidVersion as exc:
+        raise ValueError(f"Invalid semantic version: {exc}")
+    
+    if va < vb:
+        return -1
+    elif va > vb:
+        return 1
+    else:
+        return 0
+
+
     """Compute SHA256 digest of payload. Return None if payload is not JSON-serializable."""
     try:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -241,22 +272,42 @@ def run_agentic_action(
                 )
                 log_action_result(result)
                 return (result, None)
-            elif executor_version < min_executor_version:
-                status = "BLOCKED"
-                reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
-                result = ActionResult(
-                    action=action,
-                    executor_id=executor_id,
-                    executor_version=executor_version,
-                    status=status,
-                    reason_codes=reason_codes,
-                    input_digest=input_digest,
-                    output_digest=output_digest,
-                    trace_id=trace_id,
-                    ts_utc=datetime.now(timezone.utc),
-                )
-                log_action_result(result)
-                return (result, None)
+            else:
+                # Use semver comparison instead of string comparison
+                try:
+                    if _compare_semver(executor_version, min_executor_version) < 0:
+                        status = "BLOCKED"
+                        reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
+                        result = ActionResult(
+                            action=action,
+                            executor_id=executor_id,
+                            executor_version=executor_version,
+                            status=status,
+                            reason_codes=reason_codes,
+                            input_digest=input_digest,
+                            output_digest=output_digest,
+                            trace_id=trace_id,
+                            ts_utc=datetime.now(timezone.utc),
+                        )
+                        log_action_result(result)
+                        return (result, None)
+                except ValueError:
+                    # If version comparison fails, treat as incompatible
+                    status = "BLOCKED"
+                    reason_codes = ["EXECUTOR_VERSION_INCOMPATIBLE"]
+                    result = ActionResult(
+                        action=action,
+                        executor_id=executor_id,
+                        executor_version=executor_version,
+                        status=status,
+                        reason_codes=reason_codes,
+                        input_digest=input_digest,
+                        output_digest=output_digest,
+                        trace_id=trace_id,
+                        ts_utc=datetime.now(timezone.utc),
+                    )
+                    log_action_result(result)
+                    return (result, None)
 
     # Step 4B: Validate executor capabilities (AG-03)
     # Check that executor has all required_capabilities
