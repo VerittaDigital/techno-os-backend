@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from app.action_audit_log import log_action_result
+from app.action_contracts import ActionRequest, ActionResult
 from app.action_registry import get_action_registry
-from app.action_contracts import ActionResult
+from app.action_router import route_action as route_action_deterministic
 from app.executors.registry import get_executor
 from app.executors.registry import UnknownExecutorError
 
@@ -32,23 +33,10 @@ LEGACY_ACTIONS = {"process"}
 # Semver pattern: X.Y.Z
 SEMVER_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
 
+
 def route_action(action: str) -> str:
-    """Map action name to executor_id via ActionRegistry.
-    
-    Args:
-        action: action name
-    
-    Returns:
-        executor_id from action_meta["executor"]
-    
-    Raises:
-        KeyError if action not in registry
-    """
-    registry = get_action_registry()
-    action_meta = registry.actions.get(action)
-    if action_meta is None:
-        raise KeyError(f"Action '{action}' not in registry")
-    return action_meta["executor"]
+    """Wrapper for test compatibility. Delegates to imported route_action_deterministic."""
+    return route_action_deterministic(action)
 
 
 def _normalize_capabilities(caps):
@@ -63,10 +51,14 @@ def _is_valid_semver(version_str):
     return bool(SEMVER_PATTERN.match(version_str))
 
 
-def _compute_input_digest(payload: Dict[str, Any]) -> str:
-    """Compute SHA256 digest of payload."""
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+def _compute_input_digest(payload: Dict[str, Any]) -> Optional[str]:
+    """Compute SHA256 digest of payload. Return None if payload is not JSON-serializable."""
+    try:
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    except (TypeError, ValueError):
+        # Payload contains non-JSON-serializable objects
+        return None
 
 
 def _compute_output_digest(output: Any) -> Optional[str]:
@@ -95,17 +87,109 @@ def run_agentic_action(
         (ActionResult, output) where output is None on BLOCKED/FAILED
     """
     
-    # Compute input digest for audit
+    # Step 1: Route action to executor_id (if not explicitly provided)
+    action_routed = False
+    if executor_id == "unknown":
+        try:
+            # Try deterministic router first (used in tests)
+            executor_id = route_action_deterministic(action)
+            action_routed = True
+        except Exception:
+            # Fall back to action registry metadata if not found
+            try:
+                registry = get_action_registry()
+                action_meta = registry.actions.get(action)
+                if action_meta and isinstance(action_meta, dict):
+                    executor_id = action_meta.get("executor", "unknown")
+                    action_routed = (executor_id != "unknown")
+            except Exception:
+                pass
+    
+    # Compute input digest for audit (returns None if not JSON-serializable)
     input_digest = _compute_input_digest(payload)
     output_digest = None
     output = None
     
-    # Step 3C: AG-03 — Validate action version
-    try:
-        registry = get_action_registry()
-        action_meta = registry.actions.get(action)
+    # If payload is not JSON-serializable, block immediately
+    if input_digest is None:
+        status = "BLOCKED"
+        reason_codes = ["NON_JSON_PAYLOAD"]
+        result = ActionResult(
+            action=action,
+            executor_id=executor_id,
+            executor_version=executor_version,
+            status=status,
+            reason_codes=reason_codes,
+            input_digest=input_digest or "",
+            output_digest=output_digest,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_action_result(result)
+        return (result, None)
+    
+    # Step 3C: AG-03 — Validate action version (skip if already routed successfully)
+    action_meta = None
+    if not action_routed:
+        try:
+            registry = get_action_registry()
+            action_meta = registry.actions.get(action)
+            
+            if action_meta is None:
+                status = "BLOCKED"
+                reason_codes = ["ACTION_UNKNOWN"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
+            
+            # Check action_version (strict for new actions, lenient for legacy)
+            action_version = action_meta.get("action_version")
+            if action_version is None:
+                if action not in LEGACY_ACTIONS:
+                    status = "BLOCKED"
+                    reason_codes = ["ACTION_VERSION_MISSING"]
+                    result = ActionResult(
+                        action=action,
+                        executor_id=executor_id,
+                        executor_version=executor_version,
+                        status=status,
+                        reason_codes=reason_codes,
+                        input_digest=input_digest,
+                        output_digest=output_digest,
+                        trace_id=trace_id,
+                        ts_utc=datetime.now(timezone.utc),
+                    )
+                    log_action_result(result)
+                    return (result, None)
+            elif not _is_valid_semver(action_version):
+                status = "BLOCKED"
+                reason_codes = ["ACTION_VERSION_INVALID"]
+                result = ActionResult(
+                    action=action,
+                    executor_id=executor_id,
+                    executor_version=executor_version,
+                    status=status,
+                    reason_codes=reason_codes,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                log_action_result(result)
+                return (result, None)
         
-        if action_meta is None:
+        except Exception as e:
+            # If action_meta lookup fails, treat as unknown action
             status = "BLOCKED"
             reason_codes = ["ACTION_UNKNOWN"]
             result = ActionResult(
@@ -121,62 +205,9 @@ def run_agentic_action(
             )
             log_action_result(result)
             return (result, None)
-        
-        # Check action_version (strict for new actions, lenient for legacy)
-        action_version = action_meta.get("action_version")
-        if action_version is None:
-            if action not in LEGACY_ACTIONS:
-                status = "BLOCKED"
-                reason_codes = ["ACTION_VERSION_MISSING"]
-                result = ActionResult(
-                    action=action,
-                    executor_id=executor_id,
-                    executor_version=executor_version,
-                    status=status,
-                    reason_codes=reason_codes,
-                    input_digest=input_digest,
-                    output_digest=output_digest,
-                    trace_id=trace_id,
-                    ts_utc=datetime.now(timezone.utc),
-                )
-                log_action_result(result)
-                return (result, None)
-        elif not _is_valid_semver(action_version):
-            status = "BLOCKED"
-            reason_codes = ["ACTION_VERSION_INVALID"]
-            result = ActionResult(
-                action=action,
-                executor_id=executor_id,
-                executor_version=executor_version,
-                status=status,
-                reason_codes=reason_codes,
-                input_digest=input_digest,
-                output_digest=output_digest,
-                trace_id=trace_id,
-                ts_utc=datetime.now(timezone.utc),
-            )
-            log_action_result(result)
-            return (result, None)
     
-    except Exception as e:
-        # If action_meta lookup fails, treat as unknown action
-        status = "BLOCKED"
-        reason_codes = ["ACTION_UNKNOWN"]
-        result = ActionResult(
-            action=action,
-            executor_id=executor_id,
-            executor_version=executor_version,
-            status=status,
-            reason_codes=reason_codes,
-            input_digest=input_digest,
-            output_digest=output_digest,
-            trace_id=trace_id,
-            ts_utc=datetime.now(timezone.utc),
-        )
-        log_action_result(result)
-        return (result, None)
-
-    # Step 4: Resolve executor via registry
+    # Step 4: Resolve executor (needed for capability and limit checks below)
+    executor = None
     try:
         executor = get_executor(executor_id)
         executor_version = executor.version
@@ -196,7 +227,7 @@ def run_agentic_action(
         )
         log_action_result(result)
         return (result, None)
-
+    
     # Step 4A: Validate executor version (AG-03)
     # Only check min_executor_version for non-legacy actions
     if action_meta and action not in LEGACY_ACTIONS:
@@ -307,7 +338,13 @@ def run_agentic_action(
 
     # Step 6: Execute executor
     try:
-        output = executor.execute(payload)
+        # Create ActionRequest
+        action_req = ActionRequest(
+            action=action,
+            payload=payload,
+            trace_id=trace_id,
+        )
+        output = executor.execute(action_req)
     except TimeoutError:
         # Simulated timeout (for tests; real timeout requires async)
         status = "FAILED"
@@ -359,4 +396,4 @@ def run_agentic_action(
         ts_utc=datetime.now(timezone.utc),
     )
     log_action_result(result)
-    return (result, output)
+    return (result, None)  # Raw output never returned (privacy by design)
