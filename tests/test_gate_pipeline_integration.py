@@ -55,7 +55,7 @@ class TestGateAllowThenExecute:
     """Test that gate ALLOW flows into pipeline execution."""
 
     def test_gate_allow_produces_both_audits(self, client, caplog):
-        """Gate ALLOW produces gate_audit + action_audit."""
+        """Gate ALLOW produces gate_audit + action_audit (PENDING + SUCCESS)."""
         with caplog.at_level(logging.INFO):
             response = client.post("/process", json={"text": "hello"})
 
@@ -67,14 +67,21 @@ class TestGateAllowThenExecute:
         gate_json = json.loads(gate_logs[0])
         assert gate_json["decision"] == "ALLOW"
 
-        # Check action_audit
+        # Check action_audit (now should have PENDING + SUCCESS)
         action_logs = [r.message for r in caplog.records if r.name == "action_audit"]
-        assert len(action_logs) > 0
-        action_json = json.loads(action_logs[0])
-        assert action_json["status"] == "SUCCESS"
+        assert len(action_logs) >= 2, f"Expected at least 2 action logs (PENDING + SUCCESS), got {len(action_logs)}"
+        
+        # First should be PENDING (pre-audit)
+        first_action = json.loads(action_logs[0])
+        assert first_action["status"] == "PENDING"
+        
+        # Last should be SUCCESS
+        last_action = json.loads(action_logs[-1])
+        assert last_action["status"] == "SUCCESS"
 
-        # Same trace_id in both
-        assert gate_json["trace_id"] == action_json["trace_id"]
+        # Same trace_id in all
+        assert gate_json["trace_id"] == first_action["trace_id"]
+        assert gate_json["trace_id"] == last_action["trace_id"]
 
     def test_response_minimal_no_raw_output(self, client):
         """Response contains only status, trace_id, action, output_digest."""

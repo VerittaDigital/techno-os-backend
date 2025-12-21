@@ -83,6 +83,7 @@ def _compare_semver(version_a: str, version_b: str) -> int:
         return 0
 
 
+def _compute_input_digest(payload: Dict[str, Any]) -> Optional[str]:
     """Compute SHA256 digest of payload. Return None if payload is not JSON-serializable."""
     try:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -401,7 +402,23 @@ def run_agentic_action(
         log_action_result(result)
         return (result, None)
 
-    # Step 6: Execute executor
+    # Step 6: Execute executor (with pre-audit for safety)
+    
+    # PRE-AUDIT: Log execution attempt BEFORE executor runs
+    # This guarantees auditability even if executor has side-effects or fails
+    pre_audit_result = ActionResult(
+        action=action,
+        executor_id=executor_id,
+        executor_version=executor_version,
+        status="PENDING",  # Special: indicates execution was attempted
+        reason_codes=["EXECUTION_ATTEMPT"],  # Marker for pre-audit
+        input_digest=input_digest,
+        output_digest=None,  # Not known yet
+        trace_id=trace_id,
+        ts_utc=datetime.now(timezone.utc),
+    )
+    log_action_result(pre_audit_result)
+    
     try:
         # Create ActionRequest
         action_req = ActionRequest(
