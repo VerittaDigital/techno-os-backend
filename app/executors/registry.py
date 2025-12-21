@@ -1,13 +1,16 @@
 """Executor registry and implementations.
 
 Provides executor instances by executor_id. All executors are deterministic.
+Thread-safe access via threading.RLock().
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
+
 
 
 class TextProcessExecutorV1:
@@ -55,6 +58,9 @@ _EXECUTORS: dict[str, Executor] = {
     "text_process_v1": TextProcessExecutorV1(),
 }
 
+# Thread-safe lock for executor registry access
+_EXECUTORS_LOCK = threading.RLock()
+
 
 class UnknownExecutorError(Exception):
     """Raised when executor_id is not found in registry."""
@@ -62,7 +68,7 @@ class UnknownExecutorError(Exception):
 
 
 def get_executor(executor_id: str) -> Executor:
-    """Retrieve executor by executor_id.
+    """Retrieve executor by executor_id (thread-safe).
 
     Args:
         executor_id: unique identifier for executor
@@ -73,6 +79,7 @@ def get_executor(executor_id: str) -> Executor:
     Raises:
         UnknownExecutorError: if executor_id not in registry
     """
-    if executor_id not in _EXECUTORS:
-        raise UnknownExecutorError(f"Executor '{executor_id}' not found in registry")
-    return _EXECUTORS[executor_id]
+    with _EXECUTORS_LOCK:
+        if executor_id not in _EXECUTORS:
+            raise UnknownExecutorError(f"Executor '{executor_id}' not found in registry")
+        return _EXECUTORS[executor_id]
