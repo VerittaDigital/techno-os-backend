@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from app.action_contracts import ActionResult
+from app.audit_log import AuditLogError
 
 # Named logger for action execution audit trail
 logger = logging.getLogger("action_audit")
@@ -20,5 +21,10 @@ def log_action_result(result: ActionResult) -> None:
     - Contains only structured metadata (no raw payload/output)
     - One line per execution for parsing and audit analysis
     - Logs MUST occur even on FAILED/BLOCKED outcomes
+    
+    Raises AuditLogError if logging fails (fail-closed).
     """
-    logger.info(result.model_dump_json())
+    try:
+        logger.info(result.model_dump_json())
+    except Exception as e:
+        raise AuditLogError(f"Failed to log action result (trace_id={result.trace_id}, action={result.action}): {e}") from e
