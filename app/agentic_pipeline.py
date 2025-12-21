@@ -263,10 +263,12 @@ def run_agentic_action(
     if action_meta and action not in LEGACY_ACTIONS:
         required_capabilities = action_meta.get("required_capabilities", [])
         if required_capabilities:
+            # Get capabilities attribute
             executor_capabilities = getattr(executor, "capabilities", None)
             
             # If executor has no capabilities attribute at all -> MISSING
-            if executor_capabilities is None:
+            # Check for None or non-list types (e.g. MagicMock)
+            if executor_capabilities is None or not isinstance(executor_capabilities, (list, tuple, set)):
                 status = "BLOCKED"
                 reason_codes = ["EXECUTOR_CAPABILITY_MISSING"]
                 result = ActionResult(
