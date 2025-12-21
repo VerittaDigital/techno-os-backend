@@ -251,7 +251,7 @@ class TestPipelineSuccess:
     """Test successful execution path."""
 
     def test_successful_execution(self, caplog):
-        """Successful execution produces SUCCESS with output_digest."""
+        """Successful execution produces SUCCESS with output_digest (after pre-audit PENDING)."""
         with caplog.at_level(logging.INFO, logger="action_audit"):
             result, output = run_agentic_action(
                 action="process",
@@ -264,10 +264,17 @@ class TestPipelineSuccess:
         assert result.output_digest is not None
         assert output is None  # Raw output NEVER returned
 
-        # Check audit log
+        # Check audit logs (should be 2: PENDING + SUCCESS)
         action_logs = [r.message for r in caplog.records if r.name == "action_audit"]
-        assert len(action_logs) > 0
-        logged = json.loads(action_logs[0])
+        assert len(action_logs) >= 2, f"Expected at least 2 audit logs (PRE + POST), got {len(action_logs)}"
+        
+        # First log should be PENDING (pre-audit)
+        pre_audit = json.loads(action_logs[0])
+        assert pre_audit["status"] == "PENDING"
+        assert "EXECUTION_ATTEMPT" in pre_audit["reason_codes"]
+        
+        # Last log should be SUCCESS
+        logged = json.loads(action_logs[-1])
         assert logged["status"] == "SUCCESS"
         assert logged["output_digest"] is not None
 

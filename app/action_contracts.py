@@ -47,7 +47,7 @@ class ActionResult(BaseModel):
     - action: canonical action identifier
     - executor_id: which executor handled the request
     - executor_version: immutable version of executor code
-    - status: SUCCESS, FAILED, or BLOCKED
+    - status: SUCCESS, FAILED, BLOCKED, or PENDING (pre-audit only)
     - reason_codes: MUST be non-empty if status != SUCCESS
     - input_digest: SHA256 of canonical input (never raw payload)
     - output_digest: SHA256 of canonical output (or None if not serializable)
@@ -60,7 +60,7 @@ class ActionResult(BaseModel):
     action: str
     executor_id: str
     executor_version: str
-    status: Literal["SUCCESS", "FAILED", "BLOCKED"]
+    status: Literal["SUCCESS", "FAILED", "BLOCKED", "PENDING"]
     reason_codes: list[str]
     input_digest: str
     output_digest: str | None
@@ -80,9 +80,9 @@ class ActionResult(BaseModel):
     @field_validator("reason_codes")
     @classmethod
     def validate_reason_codes_non_empty_if_not_success(cls, v: list[str], info) -> list[str]:
-        """Ensure reason_codes is non-empty when status is not SUCCESS."""
+        """Ensure reason_codes is non-empty when status is not SUCCESS or PENDING."""
         # info.data contains other validated fields
         status = info.data.get("status")
-        if status and status != "SUCCESS" and not v:
-            raise ValueError("reason_codes must be non-empty when status is not SUCCESS")
+        if status and status not in ("SUCCESS", "PENDING") and not v:
+            raise ValueError("reason_codes must be non-empty when status is not SUCCESS or PENDING")
         return v
