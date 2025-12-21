@@ -1,0 +1,1166 @@
+================================================================================
+AUDITORIA TÉCNICA INTEGRAL — BACKEND TECHNO OS — MODO SAMURAI (ABU-V)
+================================================================================
+
+DATA:        2025-12-21
+ESTÁGIO:     AG-03 SEALED
+AVALIAÇÃO:   Honesta, Adversarial, Técnica
+CONCLUSÃO:   🟡 ADEQUADO COM RESSALVAS ESTRUTURAIS
+
+Auditado por: GitHub Copilot (Modo Samurai)
+Período:     Recovery Sprint R-01/R-02 + Seal AG-03
+Código:      commit a1fa9dc (HEAD)
+
+================================================================================
+1️⃣  VISÃO GERAL ARQUITETÔNICA
+================================================================================
+
+ORGANIZAÇÃO FÍSICA:
+
+app/
+├── main.py (HTTPEndpoints: /health, /process)
+├── gate_engine.py (Gate: fail-closed rules)
+├── gate_profiles.py (PolicyProfiles: defaults)
+├── action_*.py (Registry, Matrix, Contracts)
+├── agentic_pipeline.py (Core: 8-step pipeline)
+├── action_audit_log.py (Audit: structured JSON)
+├── audit_log.py (Gate audit trail)
+├── executors/
+│   ├── base.py (Executor protocol)
+│   └── registry.py (Executor registry)
+├── contracts/ (External gate contracts)
+└── schemas.py (HTTP request/response shapes)
+
+tests/ (24 arquivos, 111 testes, 108 passing)
+docs/ (Governance documentation)
+locks/ (Profile fingerprint lock)
+
+SEPARAÇÃO DE RESPONSABILIDADES:
+
+┌─────────────┐
+│   HTTP      │ (FastAPI endpoint)
+└──────┬──────┘
+       │ gate_request (dependency)
+       ▼
+┌─────────────┐
+│   Gate      │ (Fail-closed validation)
+│  (5 rules)  │
+└──────┬──────┘
+       │ allow → trace_id propagated
+       ▼
+┌─────────────────────────────────────────┐
+│        Agentic Pipeline (8 steps)       │
+│                                         │
+│ 1. Route (action→executor_id)          │
+│ 2. Size check                          │
+│ 3. Validate action (version, registry) │
+│ 4. Resolve executor                    │
+│ 5. Validate executor (version, caps)   │
+│ 6. Execute                             │
+│ 7. Log (action_audit)                  │
+│ 8. Return ActionResult                 │
+└──────┬──────────────────────────────────┘
+       │ (ActionResult: proof object)
+       ▼
+┌─────────────┐
+│   HTTP      │ (JSON serialization)
+│ Response    │
+└─────────────┘
+
+FORTALEZAS ARQUITETÔNICAS:
+
+✅ Separação clara entre Gate e Pipeline
+   - Gate = policy enforcement
+   - Pipeline = execution governance
+   - Cada um responsável por seu domínio
+   - Sem vazamento de responsabilidades entre camadas
+
+✅ Contratos imutáveis e tipificados
+   - ActionRequest (imutável)
+   - ActionResult (imutável, proof object)
+   - GateInput/GateResult (gate contracts)
+   - Executor Protocol (tipo, não classe)
+   - Pydantic V2 com frozen=True (imutabilidade garantida)
+
+✅ Auditoria estruturada
+   - action_audit (logging estruturado)
+   - gate_audit (propagado da gate)
+   - trace_id unificado entre camadas
+   - Digests (SHA256) em vez de raw payloads
+
+✅ Determinismo + Testabilidade
+   - Action routing determinístico (action_router)
+   - Executor lookup determinístico (registry)
+   - Mocking em testes é controlado
+   - Semver parsing criptograficamente trivial
+
+FRAGILIDADES ARQUITETÔNICAS:
+
+⚠️  CRÍTICA: Execução parcial sem auditoria (rara, mas possível)
+    - Se executor.execute() inicia I/O externo e falha
+    - ActionResult é criado + logado DEPOIS
+    - Janela de risco: I/O ocorreu, mas log falhou
+    - Mitigação atual: INEXISTENTE (confiar em rarity + pytest)
+    - Impacto: Alto (quebra auditabilidade para I/O side effects)
+    - Recomendação: Implementar pre-audit ANTES de executor.execute()
+
+⚠️  MODERADA: Executor registry é MUTABLE (global state)
+    - _EXECUTORS: dict[str, Executor] é global
+    - get_executor(id) faz lookup mas não bloqueia mutação concorrente
+    - Testes usam monkeypatch (seguro em pytest)
+    - Produção: SEM LOCK
+    - Impacto: Médio (race condition se reloader/reexec de workers)
+    - Recomendação: Usar threading.Lock ou mudar para CONFIG_IMMUTABLE
+
+⚠️  MODERADA: Action registry pode ter None em ações
+    - registry.actions é Dict[str, Any] (não Dict[str, ActionMeta])
+    - Backward compat permite dict solto
+    - Type checker não força ActionMeta
+    - Impacto: Médio (confusão no tipo, possível KeyError)
+    - Recomendação: Enforcer ActionMeta type check em registry init
+
+⚠️  LEVE: Action matrix é global + set_action_matrix() permite override
+    - _global_matrix é None inicialmente
+    - Tests usam set_action_matrix() para injetar ações
+    - Impacto: Leve (mas é intenção: testabilidade)
+    - Mitigação: Conftest limpa com reset_action_matrix()
+
+================================================================================
+2️⃣  PIPELINE AGENTIC — ANÁLISE ADVERSARIAL
+================================================================================
+
+FLUXO REAL (agentic_pipeline.py, linhas 78-414):
+
+Step 1: Route action → executor_id
+  Location: lines 95-107
+  Logic:
+    - if executor_id == "unknown":
+    - Try route_action_deterministic(action)
+    - Fallback: registry.actions[action].executor
+  Risk ⚠️:
+    - Fallback lookup is exception-safe (except: pass)
+    - executor_id pode ficar "unknown" SE ambos falharem
+    - Step 3A detecta ACTION_UNKNOWN, então é bloqueado depois
+    - Ordem: CERTA (late detection is OK aqui)
+
+Step 2: Size check
+  Location: lines 110-125
+  Logic:
+    - input_digest = _compute_input_digest(payload)
+    - if input_digest is None: BLOCKED (NON_JSON_PAYLOAD)
+  Risk ⚠️:
+    - Esta é a ÚNICA verificação de tamanho na pipeline
+    - Payload massive (1GB dict) pode passar:
+      • json.dumps() seria lento mas não falharia
+      • SHA256 computaria OK
+    - ExecutorLimits definidos mas NÃO APLICADOS até agora
+    - Impacto: MODERADO (DoS possível se executor não verifica)
+    - Mitigação: Implementar max_payload_bytes check aqui
+
+Step 3A: ACTION_UNKNOWN check
+  Location: lines 138-149
+  Logic:
+    - if action_meta is None and not action_routed: BLOCKED
+  Risk ✅:
+    - Sensato: só bloqueia se não routed E não registry
+    - Ordem correta (antes de version checks)
+    - Determinístico
+
+Step 3B: ACTION_VERSION validation
+  Location: lines 153-195
+  Logic:
+    - for non-legacy: MUST have action_version
+    - action_version MUST match X.Y.Z semver
+    - Validation ALWAYS runs (não skip)
+  Risk ✅:
+    - R-02 FIX: Anteriormente havia if not action_routed: skip
+    - AGORA: Sempre valida (correto)
+    - Determinístico
+
+Step 4: Executor resolution
+  Location: lines 197-221
+  Logic:
+    - executor = get_executor(executor_id)
+    - if UnknownExecutorError: BLOCKED (EXECUTOR_NOT_FOUND)
+    - exec_version_raw = getattr(executor, "version", None)
+    - if isinstance(exec_version_raw, str): executor_version = exec_version_raw
+  Risk ⚠️:
+    - R-02 FIX: isinstance check previne MagicMock type confusion
+    - if exec_version_raw is MagicMock: executor_version = None (OK)
+    - Mas se None, step 4A não bloqueia (pode passar)
+    - Mitigação: Step 4A detecta EXECUTOR_VERSION_MISSING (certo)
+
+Step 4A: Executor version validation
+  Location: lines 223-258
+  Logic:
+    - if action not in LEGACY_ACTIONS and min_executor_version exists:
+      • if executor_version is None: BLOCKED (EXECUTOR_VERSION_MISSING)
+      • if executor_version < min_executor_version: BLOCKED (EXECUTOR_VERSION_INCOMPATIBLE)
+  Risk ✅:
+    - Sensato: só se action exige min_executor_version
+    - Criptografia: string comparison funciona para X.Y.Z (lucky!)
+    - Determinístico
+
+Step 4B: Executor capabilities validation
+  Location: lines 260-310
+  Logic:
+    - executor_capabilities = getattr(executor, "capabilities", None)
+    - if executor_capabilities is None OR not isinstance(..., (list, tuple, set)):
+      → EXECUTOR_CAPABILITY_MISSING
+    - else:
+      • normalized_executor_caps = _normalize_capabilities(executor_capabilities)
+      • normalized_required_caps = _normalize_capabilities(required_capabilities)
+      • missing_capabilities = set(required) - set(executor)
+      • if missing_capabilities: EXECUTOR_CAPABILITY_MISMATCH
+  Risk ⚠️:
+    - R-02 FIX: isinstance check previne MagicMock (correct)
+    - Normalization é determinístico (uppercase + sort)
+    - _normalize_capabilities() é idempotente
+    - Risco residual: NENHUM EVIDENTE
+
+Step 5: Execute
+  Location: lines 312-350
+  Logic:
+    - executor.execute(ActionRequest(action, payload, trace_id, ts_utc))
+    - try: output = executor.execute(req)
+    - except Exception as exc:
+      → ActionResult com status=FAILED
+  Risk 🔴 CRÍTICA:
+    - ❌ NÃO HÁ PRE-AUDIT ANTES DE EXECUTOR.EXECUTE()
+    - Executor.execute() é side-effect free POR CONVENÇÃO
+    - Tests verificam determinismo (test_gate_pipeline_integration.py)
+    - MAS: Se executor fazasser I/O antes de falhar:
+      • I/O ocorre
+      • Exception capturada
+      • ActionResult + log criado DEPOIS
+      • Auditabilidade quebrada para esse I/O
+    - Impacto: CRÍTICO se executor for untrusted
+    - Mitigação atual: Confiança + Código review
+
+Step 6: Return proof object
+  Location: lines 351-355
+  Logic:
+    - return (ActionResult, output)
+    - HTTP endpoint retorna ActionResult como JSON
+  Risk ✅:
+    - ActionResult é imutável (frozen)
+    - trace_id propagado
+    - Nenhuma raw payload
+
+VALIDAÇÃO DE FAIL-CLOSED:
+
+Todos os 8 passos checam exceções?
+  Step 1 (Route): ✅ Exception-safe (except: pass)
+  Step 2 (Size): ✅ JSON check falha seguro
+  Step 3A (ACTION): ✅ Fallback logic OK
+  Step 3B (VERSION): ✅ Validation sempre roda
+  Step 4 (EXECUTOR): ✅ UnknownExecutorError caught
+  Step 4A (VERSION): ✅ Fallback é None check
+  Step 4B (CAPS): ✅ isinstance safety
+  Step 5 (EXECUTE): ✅ Exception logged
+  Step 6 (RETURN): ✅ Imutável
+
+Ordem crítica checada?
+  Action validation (3) ANTES executor checks (4,5)? ✅ SIM
+  Executor resolution (4) ANTES execute (5)? ✅ SIM
+  Audit DEPOIS de tudo? ✅ SIM (log_action_result)
+
+PONTOS QUE FUNCIONAM "POR ACIDENTE":
+
+⚠️  CRÍTICA: Ordenação de validações
+    - Pipeline assume que ação não será quebrada entre steps
+    - SE action_meta muda entre step 3 e step 4A:
+      • Version check passou
+      • Executor version check usa version NOVO
+      • Inconsistência possível
+    - Mitigação: NENHUMA (confiar em imutabilidade de action_meta)
+    - Recomendação: Snapshot action_meta no step 3, reutilizar
+
+⚠️  ALTA: Executor.execute() é side-effect free por CONVENÇÃO
+    - Nada força isso em tempo de execução
+    - Tests verificam (test_agentic_pipeline.py::TestPipelinePrivacy)
+    - MAS: Código malicioso pode quebrar
+    - Mitigação: Type hint + docstring + code review
+
+⚠️  MODERADA: String comparison de versões
+    - executor_version < min_executor_version funciona por LUCKY
+    - "1.10.0" < "1.9.0" em string comparison? SIM, FALSE (BUG!)
+    - Tests usam versões que passam por luck (1.0.0, 1.1.0)
+    - Impacto: ALTO se versiones divergem (e.g., 2.0.0 vs 1.99.0)
+    - Mitigação: Usar semver library ou comparação numérica
+
+================================================================================
+3️⃣  GOVERNANÇA E DRIFT CONTROL
+================================================================================
+
+FINGERPRINT LOCKS:
+
+1. Profile Fingerprint (AG-02)
+   - File: app/profiles_fingerprint.lock
+   - Test: tests/test_profiles_governance_lock.py
+   - SHA256 de DEFAULT_PROFILES
+   - Change log: GOVERNANCE_PROFILES.md
+   - Status: ✅ IMPLEMENTADO
+
+2. Action Registry Fingerprint (AG-02)
+   - File: actions_fingerprint.lock (EXISTS mas não testado)
+   - Test: NENHUM TESTE RODANDO
+   - Fingerprint function: compute_registry_fingerprint() (existe)
+   - Change log: NENHUM DOCUMENTO
+   - Status: ⚠️ PREPARADO MAS NÃO ATIVADO
+
+BLINDAGEM CONTRA DRIFT:
+
+Mudança silenciosa de ações:
+  - Profile: ✅ Bloqueada por profile lock test
+  - Registry: ⚠️ Possível (lock não testado)
+  - Mitigação: Aplicar mesmo padrão da profile lock
+
+Mudança de executores:
+  - Executor registry: ⚠️ NENHUMA PROTEÇÃO
+  - _EXECUTORS é hardcoded no .py
+  - Se alguém adiciona executor:
+    • Nenhum lock, nenhuma documentação
+    • Testes podem falhar ou passar "por luck"
+  - Mitigação: Criar executor_fingerprint.lock
+
+Alteração de capabilities:
+  - Capabilities são parte de ActionMeta
+  - Se ActionMeta mudar:
+    • Profile lock detecta (pois ActionMeta ⊆ registry)
+    • EXCETO: Se capabilities adicionadas mas não em required_capabilities
+  - Mitigação: OK (coberto por action registry lock se ativado)
+
+RISCO DE DIVERGÊNCIA (Código vs Testes vs Docs):
+
+Código:
+  - agentic_pipeline.py: 414 linhas, bem estruturado
+  - action_registry.py: 109 linhas
+  - executors/registry.py: 81 linhas
+  - Todas com type hints e docstrings
+
+Testes:
+  - 111 testes coletados
+  - 108 passando (100% non-legacy)
+  - Cobertura de pipeline: ✅ BEM COBERTO
+  - Cobertura de gate: ✅ BEM COBERTO
+  - Cobertura de executors: ⚠️ MINIMAL (só text_process_v1)
+
+Documentação:
+  - docs/AG03_SEAL_CRITERIA.txt: ✅ COMPLETO
+  - docs/AG02_SEAL_CRITERIA.txt: ✅ COMPLETO
+  - GOVERNANCE_PROFILES.md: ✅ COM CHANGELOG
+  - README: ❌ NÃO ENCONTRADO
+  - Code comments: ⚠️ PRESENTES MAS SUPERFICIAIS
+
+RISCO DE DIVERGÊNCIA:
+  - 🟢 BAIXO: Código vs testes (CI roda, lock test existe)
+  - 🟡 MÉDIO: Código vs docs (docs podem cair fora de sync)
+  - 🟡 MÉDIO: Testes vs executor behavior (mocks podem mentir)
+
+================================================================================
+4️⃣  QUALIDADE DOS TESTES
+================================================================================
+
+TEST SUITE OVERVIEW:
+
+Coletados: 111 testes
+Passando:  108 testes (97.3%)
+Skipped:   3 testes (test_api.py, legacy MVP)
+Falhando:  0 testes
+
+Tempo: ~0.73s
+
+COBERTURA POR DOMÍNIO:
+
+Gate Engine (test_gate_*.py):
+  - test_gate_engine.py: 4 testes (determinism, rules)
+  - test_gate_adversarial.py: 3 testes (nested, lists, unicode)
+  - test_gate_artifacts.py: 3 testes (fingerprint, determinism)
+  - test_gate_profiles_governance_lock.py: 1 teste (lock)
+  - test_gate_http_enforcement.py: 28 testes (HTTP layer)
+  Total: ~39 testes ✅ BEM COBERTO
+
+Pipeline (test_agentic_pipeline.py, test_gate_pipeline_integration.py):
+  - TestPipelineUnknownAction: 4 testes
+  - TestPipelineNonJSONPayload: 4 testes
+  - TestPipelineLimits: 6 testes
+  - TestPipelineExecutorException: 2 testes
+  - TestPipelineTimeout: 10 testes
+  - TestPipelinePrivacy: 3 testes
+  - TestPipelineDeterminism: 1 teste
+  - test_gate_pipeline_integration.py: 8 testes (integration)
+  Total: ~38 testes ✅ BEM COBERTO
+
+AG-03 Enforcement (RED tests):
+  - test_action_versioning_red.py: 3 testes
+  - test_executor_versioning_red.py: 4 testes
+  - test_executor_capabilities_red.py: 3 testes
+  - test_ag03_audit_integrity_red.py: ? (não visto)
+  - test_ag03_retrocompat_red.py: ? (não visto)
+  Total: ~10 testes ✅ COBERTURA DE AG-03
+
+Action Registry (test_action_*.py):
+  - test_action_registry.py: ? testes
+  - test_action_registry_sync.py: ? testes
+  - test_action_matrix.py: 7 testes
+  - test_action_mismatch.py: 3 testes
+  Total: ~15 testes ✅ COBERTURA
+
+Contracts & Utilities:
+  - test_contract_canonical_v1.py: 6 testes
+  - test_decision_record.py: 10+ testes
+  - test_field_governance.py: 6 testes
+  - test_normalize.py: 4 testes
+  - test_no_web_dependency.py: 1 teste
+  Total: ~30 testes ✅ COBERTURA
+
+BEM TESTADO ✅:
+
+✅ Gate rules (forbidden keys, external fields, unknown fields)
+✅ Pipeline order (action before executor)
+✅ Fail-closed guarantees (exception handling)
+✅ Determinism (same input = same output)
+✅ Audit logging (action_audit emitted)
+✅ trace_id propagation (gate to pipeline)
+✅ AG-03 enforcement (version, capability)
+✅ Legacy retrocompat (process action)
+✅ Input digest computation
+✅ Executor exception handling
+
+SUB-TESTADO ⚠️:
+
+⚠️  Executor registry mutations
+    - Executor swapping não é testado
+    - Concurrent access não é testado
+    - Only hardcoded text_process_v1 exists
+
+⚠️  Payload size limits
+    - ExecutorLimits definidas mas NÃO APLICADAS
+    - max_payload_bytes não validado
+    - max_depth não validado
+    - max_list_items não validado
+
+⚠️  Version string comparison
+    - "1.10.0" < "1.9.0" BUG não testado
+    - Semver comparison é string-based (lucky)
+
+⚠️  Side effects in executors
+    - Tests assume side-effect free
+    - MAS: Se executor faz I/O antes de falhar, audit breaks
+    - Pre-audit não existe
+
+⚠️  Concurrent gate + pipeline
+    - Single-threaded tests only
+    - Race conditions não testadas
+    - executor_id routing não thread-safe
+
+⚠️  Large payloads
+    - DoS via massive JSON não testado
+    - json.dumps() performance não benchmarked
+
+COBERTURA ILUSÓRIA:
+
+⚠️  Mock dependency
+    - Tests heavily monkeypatch action_registry
+    - Real registry behavior may differ
+    - E.g.: getattr(mock, "capabilities") returns MagicMock (not None)
+    - R-02 fixed this, but pattern persists elsewhere
+
+⚠️  Hardcoded test values
+    - All tests use "process" action (legacy)
+    - No tests with real new AG-03 actions
+    - Capability tests use mock actions
+    - Real-world action definitions untested
+
+⚠️  Exception paths
+    - Some exception paths tested
+    - But not all combinations
+    - E.g.: What if BOTH action_version and executor_version fail?
+    - (Currently only first failure is returned)
+
+================================================================================
+5️⃣  PRONTIDÃO PARA AGENTIC IA DE VERDADE
+================================================================================
+
+SUPORTADO ATÉ HOJE:
+
+✅ Single action execution ("process")
+✅ Deterministic routing (via action_router)
+✅ Simple executors (text_process_v1)
+✅ Version validation (semver, but lucky string comparison)
+✅ Capability validation (list-based)
+✅ Audit trail (SHA256 digests + trace_id)
+✅ Legacy retrocompat (process exemption)
+✅ Fail-closed guarantee (exception-safe pipeline)
+
+O QUE VAI DOER NO FUTURO:
+
+🔴 CRÍTICA: Múltiplos executores
+   Problem:
+     - Executor registry é hardcoded (_EXECUTORS dict)
+     - Apenas 1 executor implementado (text_process_v1)
+     - Adicionar novo executor requer .py change + redeploy
+   Impact:
+     - Executor swapping é impossível sem downtime
+     - Versioning não suporta gradual rollout
+   Solution needed:
+     - Executor registry em database ou config
+     - Hot-reload capability
+     - Fingerprint lock para executor changes
+
+🔴 ALTA: Ações dinâmicas
+   Problem:
+     - ActionRegistry é hardcoded em action_registry.py
+     - Adicionar ação nova requer .py change
+     - Não há composição de ações (e.g.: pipe A → B → C)
+   Impact:
+     - Workflow orquestração impossível
+     - Ações são "singleton" (não parametrizadas)
+   Solution needed:
+     - ActionRegistry em database
+     - Action composition language
+     - Parametrized action templates
+
+🔴 ALTA: Versioning progressivo
+   Problem:
+     - Version comparison é string-based
+     - "1.10.0" < "1.9.0" é FALSE (BUG!)
+     - Semver comparison precisa biblioteca
+   Impact:
+     - Gradual rollout de versions é perigoso
+     - Executor swapping com compatibility check é broken
+   Solution needed:
+     - Use semver library (e.g., packaging.version.parse)
+     - Validate all version comparisons in CI
+
+🟡 MODERADA: Capabilities dinâmicas
+   Problem:
+     - Capabilities são hardcoded em ActionMeta
+     - Executor.capabilities é List[str] (não negotiable)
+     - Não há capability versioning ou negotiation
+   Impact:
+     - Executor que ganha nova capability requer version bump
+     - Capability fallback logic não existe
+   Solution needed:
+     - Capability versioning
+     - Graceful degradation on missing capability
+     - Capability marketplace/registry
+
+🟡 MODERADA: Auditoria humana posterior
+   Problem:
+     - action_audit logs são JSON estruturado
+     - MAS: Nenhuma interface de query
+     - Correlação manual via trace_id (tedioso)
+   Impact:
+     - Debugging audits requer grep/awk
+     - Compliance queries são manuais
+   Solution needed:
+     - Audit query language (SQL or DSL)
+     - Correlate via trace_id + timestamp
+     - Export/search interface
+
+🟡 MODERADA: Policy evolution
+   Problem:
+     - Profiles são hardcoded em gate_profiles.py
+     - Alteração de política requer .py change + redeploy
+     - Profile versioning não existe
+   Impact:
+     - Policy A/B testing impossível
+     - Rollback de policy requer git revert
+   Solution needed:
+     - Profile versioning
+     - Policy store (database)
+     - Gradual migration path
+
+ARQUITETURA PODE COLAPSAR QUANDO:
+
+1. Dezenas de executores (hardcoding inviável)
+2. Hundreds of actions (registry file fica gigante)
+3. Dynamic workflows (composição não existe)
+4. Multi-tenant (profiles are global)
+5. High-frequency changes (redeploy cost)
+6. Cross-region replication (executor registry not distributed)
+
+PROGNÓSTICO:
+
+- Arquitetura atual suporta:
+  • ~1-10 actions
+  • ~1-3 executors
+  • Static workflows
+  • Single tenant
+  • Deployment frequency: Weekly
+
+- Arquitetura quebrará quando:
+  • >50 actions
+  • >10 executors
+  • Dynamic orchestration needed
+  • Multi-tenant required
+  • Deployment frequency: Hourly
+
+================================================================================
+6️⃣  RISCOS TÉCNICOS LATENTES (NÃO DETECTADOS POR TESTES)
+================================================================================
+
+RISCO 1: Pre-audit não existe
+🔴 ALTO
+Descrição:
+  - Pipeline chama executor.execute() SEM pre-audit
+  - Se executor faz I/O antes de falhar:
+    • I/O ocorre
+    • Falha
+    • ActionResult criado DEPOIS
+    • Auditabilidade perdida para esse I/O
+Trigger:
+  - Executor implementa execute() com side effects
+  - E.g.: "write to file THEN process THEN return"
+  - Falha durante PROCESS, file já foi escrito
+Mitigação atual:
+  - Testes assumem side-effect free (TestPipelinePrivacy)
+  - Code review esperado
+  - Nada executa automaticamente
+Status:
+  - Não quebra testes
+  - Quebra guarantee em produção se executor for untrusted
+
+RISCO 2: Executor registry sem lock
+🔴 ALTO
+Descrição:
+  - _EXECUTORS é global mutable dict
+  - Sem threading.Lock
+  - Se múltiplos workers acessam:
+    • Worker A: lê executor
+    • Worker B: substitui executor
+    • Worker A: usa executor B
+Trigger:
+  - FastAPI com múltiplos workers (uvicorn --workers 4)
+  - Hot reload ou reexec durante mudança
+Status:
+  - Não quebra testes (pytest serial)
+  - Quebra em produção com workers > 1
+
+RISCO 3: String comparison de versões
+🟡 ALTO
+Descrição:
+  - min_executor_version < executor_version é string comparison
+  - "1.10.0" < "1.9.0" é FALSE
+  - Comparação numérica é necessária
+Trigger:
+  - Executor versão 1.10.0, action requer 1.9.0
+  - Check passa (deveria passar, mas por acidente)
+  - Executor versão 1.9.0, action requer 1.10.0
+  - Check falha falso-negativo (ERROR!)
+Mitigação atual:
+  - Testes usam 1.0.0, 1.1.0 (lucky)
+  - Semver comparison nunca foi testado com edge cases
+Status:
+  - Não quebra testes atuais
+  - Pode quebrar com versões reais
+
+RISCO 4: Action registry sem type enforcement
+🟡 MÉDIO
+Descrição:
+  - ActionRegistry.actions é Dict[str, Any]
+  - Backward compat permite dicts sem ActionMeta type
+  - Type checker não força ActionMeta
+Trigger:
+  - Alguém adiciona ação com dicts faltantes
+  - KeyError em getattr(action_meta, "action_version")
+Status:
+  - Não quebra testes (registry é hardcoded)
+  - Pode quebrar com mudança de registry
+
+RISCO 5: Payload size DoS
+🟡 MÉDIO
+Descrição:
+  - ExecutorLimits.max_payload_bytes definido MAS NÃO APLICADO
+  - Payload gigante (1GB) pode ser processado
+  - json.dumps() seria lento (DoS)
+Trigger:
+  - POST /process com {"text": "x" * 1_000_000_000}
+  - json.dumps() toma minutos
+  - timeout_ms não é enforced (AG-01)
+Status:
+  - Não quebra testes (pequenos payloads)
+  - Quebra em produção (CPU DoS)
+
+RISCO 6: Action metadata change between steps
+🟡 MÉDIO
+Descrição:
+  - action_meta lido em step 3, usado em step 4A
+  - Se action_meta mudar entre steps:
+    • Step 3B validou version V1
+    • Step 4A valida compatibility com executor usando V2
+    • Inconsistência
+Trigger:
+  - Action registry mutável (não é)
+  - Concurrent update durante pipeline execution
+Status:
+  - Não quebra testes (registry é frozen)
+  - Quebra se action registry tiver mutability
+
+RISCO 7: Exception swallowing in routing
+🟡 MÉDIO
+Descrição:
+  - Step 1 (routing): except: pass
+  - Se route_action_deterministic() falha, silenciosamente
+  - Fallback para registry lookup
+Trigger:
+  - Route function tem bug
+  - Bug é silenciosamente ignorado
+  - Executor encontrado via fallback (pode estar wrongly)
+Status:
+  - Não quebra testes (mocking controla routing)
+  - Quebra se routing tem bug (silent failure)
+
+RISCO 8: Audit log write failure
+🟡 MÉDIO
+Descrição:
+  - log_action_result() não é transactional
+  - Se logger.info() falha:
+    • ActionResult criado
+    • Log write falha
+    • HTTP response enviado
+    • Auditoria perdida
+Trigger:
+  - Logging backend desconectado
+  - Disk full
+  - Permission denied
+Status:
+  - Não quebra testes (logger é mock)
+  - Quebra em produção (lost audit trail)
+
+RISCO 9: Concurrent gate + pipeline
+🟡 MÉDIO
+Descrição:
+  - HTTP /process dependency (gate_request) cria trace_id
+  - Race condition se múltiplos requests usam mesmo trace_id
+Trigger:
+  - UUID collision (impossível)
+  - UUID seed not random (possível em tests)
+Status:
+  - Não quebra testes (UUID é random seed)
+  - Improvável em produção (uuid.uuid4())
+
+RISCO 10: Legacy "process" action hardcoded bypass
+🟡 MÉDIO
+Descrição:
+  - LEGACY_ACTIONS = {"process"} permite bypass de checks
+  - Se novo action é adicionado mas accidentalmente treated como legacy
+  - Versioning/capability checks são skipped
+Trigger:
+  - Action name collision
+  - Copy-paste error na registry
+Status:
+  - Não quebra testes (process é único legacy)
+  - Pode quebra se nova action não tem version
+
+================================================================================
+7️⃣  SUGESTÕES DE BLINDAGEM (CONCEITUAL, SEM IMPLEMENTAÇÃO)
+================================================================================
+
+PRIORIDADE 1 — CRÍTICA: Implementar pre-audit
+
+Conceito:
+  - Log ActionResult ANTES de executor.execute()
+  - Estrutura: ActionResult(status="PENDING", reason_codes=[])
+  - Se execute() sucede: atualizar status="SUCCESS"
+  - Se execute() falha: status="FAILED" ou "BLOCKED"
+
+Benefício:
+  - Garante auditabilidade mesmo se executor tem side effects
+  - Rastreabilidade completa (entry + exit)
+
+Implementação:
+  - Criar ActionResult schema com status="PENDING"
+  - Log ANTES de step 5 (execute)
+  - Update log DEPOIS de step 5
+
+Risco:
+  - Pode duplicar logs (entry + exit)
+  - Query correlate via trace_id
+
+---
+
+PRIORIDADE 1 — CRÍTICA: Fix versão string comparison
+
+Conceito:
+  - Usar semver library (e.g., packaging.version.Version)
+  - Comparação numérica ao invés de string
+
+Código (pseudocódigo):
+  ```python
+  from packaging import version
+  
+  executor_ver = version.parse(executor_version)
+  min_ver = version.parse(min_executor_version)
+  
+  if executor_ver < min_ver:
+    → EXECUTOR_VERSION_INCOMPATIBLE
+  ```
+
+Benefício:
+  - Versionamento correto (1.10.0 > 1.9.0)
+
+Cobertura de testes:
+  - test_executor_versioning_red.py deve incluir:
+    • 1.10.0 > 1.9.0
+    • 2.0.0 > 1.99.0
+
+---
+
+PRIORIDADE 2 — ALTA: Executor registry threading lock
+
+Conceito:
+  - Adicionar threading.Lock ao _EXECUTORS
+  - get_executor() adquire read lock
+  - set_executor() (future) adquire write lock
+
+Código (pseudocódigo):
+  ```python
+  import threading
+  _executors_lock = threading.RLock()
+  _EXECUTORS = {}
+  
+  def get_executor(executor_id):
+    with _executors_lock:
+      return _EXECUTORS[executor_id]
+  ```
+
+Benefício:
+  - Thread-safe executor lookup
+
+Custo:
+  - Pequeno overhead de lock contention
+
+---
+
+PRIORIDADE 2 — ALTA: Action registry fingerprint test
+
+Conceito:
+  - Criar tests/test_action_registry_lock.py
+  - Mesmo padrão de test_profiles_governance_lock.py
+  - Detecta mudanças em ActionRegistry
+
+Código:
+  ```python
+  def test_action_registry_fingerprint_lock_matches():
+    lock_path = Path("app") / "actions_fingerprint.lock"
+    assert lock_path.exists()
+    
+    locked = lock_path.read_text(encoding="utf-8").strip()
+    current = compute_registry_fingerprint()
+    
+    assert locked == current, (
+      "ACTION_REGISTRY changed without updating lock. "
+      "Update app/actions_fingerprint.lock and "
+      "add entry to GOVERNANCE_ACTIONS.md"
+    )
+  ```
+
+Benefício:
+  - Detecta mudanças silenciosas no registry
+  - Força documentação de mudanças
+
+---
+
+PRIORIDADE 2 — ALTA: ActionRegistry type enforcement
+
+Conceito:
+  - Force ActionRegistry.actions: Dict[str, ActionMeta]
+  - Remove Dict[str, Any] backward compat
+  - Validate em __init__
+
+Código (pseudocódigo):
+  ```python
+  class ActionRegistry(BaseModel):
+    actions: Dict[str, ActionMeta]
+    
+    @model_validator(mode='after')
+    def validate_all_actions_are_meta(self):
+      for action_id, meta in self.actions.items():
+        if not isinstance(meta, ActionMeta):
+          raise ValueError(f"Action {action_id} is not ActionMeta")
+      return self
+  ```
+
+Benefício:
+  - Type safety garantida
+  - KeyError impedido
+
+Custo:
+  - Backward compat quebrado (migrá-la em AG-04)
+
+---
+
+PRIORIDADE 3 — MODERADA: Payload size limit enforcement
+
+Conceito:
+  - Implementar check de max_payload_bytes em step 2
+  - Usar canonical JSON size (após json.dumps())
+  - Block se size > limit
+
+Código (pseudocódigo):
+  ```python
+  if len(input_canonical) > executor.limits.max_payload_bytes:
+    → BLOCKED with reason_code="PAYLOAD_TOO_LARGE"
+  ```
+
+Benefício:
+  - DoS prevention
+  - Resource limit enforcement
+
+Custo:
+  - Pequeno overhead (len() do canonical JSON)
+
+---
+
+PRIORIDADE 3 — MODERADA: Action metadata snapshot
+
+Conceito:
+  - Em step 3, snapshot action_meta inteiro
+  - Reutilizar em steps 4A, 4B
+  - Garante consistency entre steps
+
+Benefício:
+  - Elimina race condition (se registry fica mutable)
+  - Determinismo garantido
+
+Custo:
+  - Nenhum (é melhoria interna)
+
+---
+
+PRIORIDADE 3 — MODERADA: Executor capability fallback
+
+Conceito:
+  - Ao invés de BLOCKED em EXECUTOR_CAPABILITY_MISMATCH
+  - Implementar graceful degradation
+  - Log warning mas continue com subset capabilities
+
+Código (pseudocódigo):
+  ```python
+  missing_capabilities = set(required) - set(executor)
+  
+  if missing_capabilities:
+    log_warning(f"Missing: {missing_capabilities}, continuing...")
+    reason_codes = ["EXECUTOR_CAPABILITY_DEGRADED"]
+    # Execute anyway, but log degradation
+  ```
+
+Benefício:
+  - Agentic IA pode tentar com menos capacidades
+  - Graceful degradation, não hard fail
+
+Risco:
+  - Pode fazer action quebrado
+  - Decida per-action se permite degradation
+
+---
+
+PRIORIDADE 4 — LEVE: Audit query language
+
+Conceito:
+  - Criar endpoint /audit/query para search logs
+  - Query language: e.g., SELECT * FROM action_audit WHERE trace_id = "..."
+
+Benefício:
+  - Correlation fácil
+  - Compliance queries automatizadas
+
+Custo:
+  - Nova dependency (query engine)
+  - Storage mínima (JSON logs em arquivo/DB)
+
+---
+
+PRIORIDADE 4 — LEVE: Executor registry documentation
+
+Conceito:
+  - Criar docs/EXECUTOR_REGISTRY.md com:
+    - Lista de todos os executores
+    - Versão, capabilities, limits
+    - Changelog
+
+Benefício:
+  - Executores explicitamente documentados
+  - Facilita onboarding
+
+Custo:
+  - Manual update necessário
+
+---
+
+PRIORIDADE 4 — LEVE: Exception composition
+
+Conceito:
+  - Se múltiplas validações falham, retornar TODOS os reason_codes
+  - Atualmente retorna first failure
+
+Código (pseudocódigo):
+  ```python
+  failures = []
+  
+  if action_version_missing:
+    failures.append("ACTION_VERSION_MISSING")
+  if executor_version_missing:
+    failures.append("EXECUTOR_VERSION_MISSING")
+  if capabilities_missing:
+    failures.append("EXECUTOR_CAPABILITY_MISSING")
+  
+  if failures:
+    → ActionResult(reason_codes=failures)
+  ```
+
+Benefício:
+  - Completa auditabilidade (todas falhas visíveis)
+
+Risco:
+  - Pode parecer "tudo quebrado"
+  - Decida se reporta todas ou primeira
+
+================================================================================
+8️⃣  VEREDITO FINAL — MODO SAMURAI
+================================================================================
+
+PARECER TÉCNICO:
+
+🟡 ADEQUADO COM RESSALVAS ESTRUTURAIS
+
+O backend Techno OS AG-03 é:
+
+✅ BEM ARQUITETADO
+   - Separação clara entre Gate, Pipeline, Audit
+   - Contratos imutáveis (Pydantic frozen=True)
+   - Type hints coerentes
+   - Determinismo garantido nos testes
+
+✅ GOVERNADO EM AG-03
+   - Enforcement de action_version (semver)
+   - Enforcement de executor_version (compatibility)
+   - Enforcement de executor_capabilities (feature matrix)
+   - Pipeline ordenada (action before executor)
+   - Auditoria estruturada (action_audit JSON)
+
+✅ BEM TESTADO (EM ESCOPO LIMITADO)
+   - 108/108 testes passando (excluindo legacy)
+   - AG-03 enforcement testado (10 RED tests)
+   - Gate rules testadas (39 testes)
+   - Pipeline integration testada (8 testes)
+   - Determinism verificado
+
+❌ MAS: Pronto para "Agentic IA de Verdade"? NÃO.
+
+Fragilidades críticas:
+
+1. 🔴 Pre-audit não existe (side-effect safety quebrada)
+2. 🔴 Executor registry sem lock (race condition em workers)
+3. 🔴 Version string comparison (1.10.0 < 1.9.0 é BUG)
+4. 🟡 Payload size DoS (limits definidos mas não aplicados)
+5. 🟡 Action registry muta por convenção (sem enforcement)
+6. 🟡 Executor registry é hardcoded (não escalável)
+7. 🟡 Ações são estáticas (sem composição, parametrização)
+
+---
+
+RESPOSTA DIRETA À PERGUNTA:
+
+"Você SELARIA este estágio como base para evolução?"
+
+🚩 NÃO, não recomendo SEAL VERITTÀ estrutural ainda.
+
+Razão:
+
+O AG-03 está FUNCIONAL e TESTADO, mas a ARQUITETURA NÃO suporta:
+
+1. Múltiplos agentes (executor registry hardcoded)
+2. Ações dinâmicas (registry em .py)
+3. Versioning robusto (string comparison é BUG)
+4. Execução segura (side-effect free por convenção)
+5. Escala de produção (sem locks, sem pre-audit)
+
+O sistema QUEBRARÁ quando:
+
+- Dezenas de ações (registry gigante)
+- Múltiplos workers (race conditions)
+- Real external executors (side effects)
+- Versioning sem luck (1.10.0 vs 1.9.0)
+- Audit requerido para compliance (log write failures)
+
+---
+
+"O que falta para merecer o SEAL VERITTÀ estrutural?"
+
+Implementar (em ordem de prioridade):
+
+FASE 1 (Blocker):
+  1. ✅ Fix version string comparison (packaging.version)
+     Impacto: CRÍTICO (versionamento correto)
+  2. ✅ Add threading.Lock ao executor registry
+     Impacto: CRÍTICO (race condition fix)
+  3. ✅ Implement pre-audit log
+     Impacto: CRÍTICO (auditabilidade garantida)
+
+FASE 2 (Enabler):
+  4. ✅ Action registry fingerprint test (like profiles)
+     Impacto: ALTA (drift detection)
+  5. ✅ Payload size limit enforcement
+     Impacto: ALTA (DoS prevention)
+  6. ✅ Exception composition (all failures reported)
+     Impacto: MODERADA (complete audit)
+
+FASE 3 (Scaling):
+  7. Move executor_registry para config/database
+  8. Move action_registry para config/database
+  9. Implement action composition language
+  10. Implement capability negotiation
+
+Após implementar Fase 1 + 2: ✅ SEAL VERITTÀ SEGURO
+
+Após implementar Fase 1 + 2 + 3: ✅ SEAL VERITTÀ PARA ESCALA
+
+---
+
+SCORE TÉCNICO:
+
+┌────────────────────────┬────────┬─────────────────────┐
+│ Critério               │ Score  │ Veredito            │
+├────────────────────────┼────────┼─────────────────────┤
+│ Arquitetura            │ 8/10   │ Bem desenhada       │
+│ Governança (AG-03)     │ 8/10   │ Funcional           │
+│ Testabilidade          │ 8/10   │ Bem coberto         │
+│ Determinismo           │ 9/10   │ Garantido           │
+│ Auditabilidade         │ 6/10   │ Gaps (pre-audit)    │
+│ Thread-safety          │ 4/10   │ Não tested          │
+│ Versionamento          │ 5/10   │ String comparison   │
+│ Escalabilidade         │ 3/10   │ Hardcoded registry  │
+│ Production-readiness   │ 5/10   │ Risky para users    │
+├────────────────────────┼────────┼─────────────────────┤
+│ MÉDIA GERAL            │ 6.2/10 │ 🟡 ADEQUADO+RISCOS  │
+└────────────────────────┴────────┴─────────────────────┘
+
+---
+
+RECOMENDAÇÃO FINAL:
+
+🟡 SELARIA COMO "Development-Grade" (para R&D, testes)
+❌ NÃO SELARIA COMO "Production-Grade" (sem Fase 1)
+🟢 SELARIA COMO "Production-Grade" (após Fase 1 + 2)
+
+Status atual: READY FOR DEVELOPMENT, RISKY FOR PRODUCTION
+
+Próximo milestone: Implementar Fase 1 (3 fixos críticos)
+
+================================================================================
+FIM DA AUDITORIA
+================================================================================
+
+Auditor Técnico: GitHub Copilot (Samurai Mode)
+Data:           2025-12-21
+Confiabilidade: Alta (análise de código + testes + adversarial thinking)
+Disclaimer:     Esta auditoria é técnica pura. Decisões de negócio (quando
+                 entrar em produção) requerem aprovação de humanos.
+
+Contato:        Revisar com time V-COF governance
+Próximo:        Implementar Fase 1 (version fix + locks + pre-audit)
+
