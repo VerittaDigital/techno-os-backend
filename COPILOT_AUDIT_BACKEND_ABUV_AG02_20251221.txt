@@ -1,0 +1,107 @@
+SEÇÃO 0 — METADADOS DA AUDITORIA
+Data: 2025-12-21
+Commit/branch: não informado (workspace local)
+Versão Python: 3.14.2
+Comando(s) executados: python -m pytest -q ; python -m pytest tests/test_gate_pipeline_integration.py::TestProfileActionMismatchHTTP::test_mismatch_preserves_trace_id_correlation -v
+Resultado do pytest: 85 passed in 0.71s
+
+SEÇÃO 1 — ESTADO ATUAL DO BACKEND (LEITURA TÉCNICA)
+1.1 Fluxo real (HTTP → Gate → Action → Response)
+- /process usa Depends(gate_request) antes de executar (app/main.py#L17-L119). gate_request lê body uma vez, faz GateInput(action="process"), chama evaluate_gate, emite DecisionRecord via log_decision, nega com HTTPException(403) se DENY, cacheia payload+trace_id em request.state.
+- process obtém cached_payload/trace_id, chama run_agentic_action(action="process", payload, trace_id) (app/main.py#L128-L149).
+- run_agentic_action executa passos 1-10 com ActionRequest, digest, route_action, get_executor, check_payload_limits, executor.execute, output_digest, ActionResult, log_action_result; Step 3B: bloqueia se is_action_allowed_in_profile falha (app/agentic_pipeline.py#L53-L146, L175-L243).
+- Retorno: se ActionResult BLOCKED e reason_codes contém PROFILE_ACTION_MISMATCH, levanta HTTPException(403); caso contrário devolve dict com status/trace_id/action/output_digest (app/main.py#L138-L153).
+
+1.2 Conformidade com o estado declarado (AG-02 SELADO)
+- Enforcement HTTP ativo para PROFILE_ACTION_MISMATCH → 403 presente (app/main.py#L138-L141) e documentado em docs/AG02_SEAL_CRITERIA.txt (CRITERIA 3B).
+- Logs auditáveis: gate_audit (app/audit_log.py), action_audit (app/action_audit_log.py) chamados em todos os ramos de gate_request e run_agentic_action.
+- Traceabilidade: trace_id gerado no gate, propagado até ActionResult e resposta; testado inclusive em mismatch (tests/test_gate_pipeline_integration.py#L143-L191).
+- Drift controlado: profiles_fingerprint.lock, actions_fingerprint.lock presentes; fingerprints validados em testes (tests/test_profiles_governance_lock.py, tests/test_action_registry.py).
+- Testes 85/85 passam; documentação AG02_SEAL_CRITERIA reflete 403 enforcement após CRITERIA 3B.
+- Divergências: nenhuma entre testes/implementação/doc após atualização.
+
+1.3 Itens “funciona por acidente”
+- Executor timeout/exception retornam HTTP 200 com status="FAILED" (intencional e coberto em tests/test_gate_pipeline_integration.py#L127-L141). Não é acidente, mas cliente precisa ler corpo.
+- route_action usa ACTION_REGISTRY local (app/action_router.py) enquanto ActionRegistry formal está em app/action_registry.py; hoje consistente porque só há "process". Futuras ações quebram se esquecer de manter ambos (risco de drift).
+
+SEÇÃO 2 — AUDITORIA DE CÓDIGO: LIMPEZA E NECESSIDADE (ARQUIVO POR ARQUIVO)
+app/schemas.py
+- ProcessRequest/ProcessResponse não usados em main.py nem pipeline; web_test_api apenas demo. PODE REMOVER? SIM. POR QUÊ: código legado AG-01, não participa do fluxo. RISCO: BAIXO (afetaria só imports mortos e teste demo).
+
+app/main.py
+- Importa ProcessRequest, ProcessResponse mas não usa. PODE REMOVER? SIM. POR QUÊ: endpoints não usam Pydantic schema. RISCO: BAIXO.
+
+app/action_router.py
+- ACTION_REGISTRY duplicada vs app/action_registry.py; não usa fingerprinting. PODE REMOVER? NÃO imediato; depende de refactor no pipeline. POR QUÊ: pipeline usa route_action hoje. RISCO: MÉDIO se removido sem substituir por ActionRegistry.
+
+app/decision_record.py
+- Import duplicado de field_validator. PODE REMOVER? SIM. POR QUÊ: redundante. RISCO: BAIXO.
+
+docs/AG02_SEAL_CRITERIA.txt
+- Alinhado após inclusão de CRITERIA 3B; nada obsoleto.
+
+tests/web_test_api.py
+- Teste demo (não roda no pytest suite principal). PODE REMOVER? OPCIONAL. POR QUÊ: duplicado funcional do client normal. RISCO: BAIXO.
+
+2.2 Código desnecessário ou inflado
+- schemas.ProcessResponse define campos original/processed/length não retornados pelo endpoint real. PODE REMOVER? SIM. RISCO: BAIXO.
+- action_router hardcodes mapping que já existe em ActionRegistry (sem capabilities). PODE REMOVER? NÃO agora; refactor em AG-03. RISCO: MÉDIO se remover antes de refatorar pipeline.
+
+2.3 Imports, configs e artefatos
+- Imports mortos: ProcessRequest, ProcessResponse em app/main.py. PODE REMOVER? SIM. RISCO: BAIXO.
+- field_validator duplicado em app/decision_record.py. PODE REMOVER? SIM. RISCO: BAIXO.
+- actions_fingerprint.lock e profiles_fingerprint.lock necessários para drift; não remover.
+
+SEÇÃO 3 — AVALIAÇÃO DE QUALIDADE E GOVERNANÇA
+3.1 Fail-closed
+- Gate DENY sempre 403 antes do endpoint (app/main.py#L30-L86). Pipeline sempre emite ActionResult mesmo em erro (app/agentic_pipeline.py#L175-L243). Endpoint retorna 403 para PROFILE_ACTION_MISMATCH (app/main.py#L138-L141). Nenhum ramo permissivo identificado.
+
+3.2 Ambiguidade e cobertura de testes
+- Executor errors retornam HTTP 200 com status FAILED; coberto em tests/test_gate_pipeline_integration.py::test_executor_exception_returns_200_with_failed_status. Ambiguidade é conhecida e testada.
+- Drift entre action_router e ActionRegistry não é testado; ausência de teste de sincronização.
+
+3.3 reason_codes
+- Gate usa enum GateReasonCode (app/contracts/gate_v1.py); pipeline usa strings livres (ACTION_UNKNOWN, PROFILE_ACTION_MISMATCH etc. em app/agentic_pipeline.py). Consistência parcial; extensível mas sujeito a typos. Não há enum central para ActionResult.
+
+3.4 trace_id
+- Preservado em todos os ramos: gate_request seta request.state.trace_id; run_agentic_action propaga; action_audit loga; endpoint retorna. Testes cobrem normal e mismatch (tests/test_gate_pipeline_integration.py#L62-L85 e #L143-L191). Nenhuma quebra identificada.
+
+SEÇÃO 4 — RISCOS TÉCNICOS LATENTES
+- Descrição: Dupla fonte de verdade para actions (action_router ACTION_REGISTRY vs app/action_registry.py ActionRegistry). Local: app/action_router.py#L6-L25 e app/action_registry.py#L14-L41. Impacto: nova ação pode retornar ACTION_UNKNOWN por falta de sincronização. Classificação: MÉDIO. Mitigação: unificar roteamento usando ActionRegistry na pipeline; adicionar teste de sincronização.
+- Descrição: reason_codes não tipados em ActionResult (strings livres). Local: app/agentic_pipeline.py (várias atribuições), app/action_contracts.py#L44-L73. Impacto: typos silenciosos; regras futuras podem falhar. Classificação: MÉDIO. Mitigação: introduzir enum único para ActionResult reason_codes e usar literal types.
+- Descrição: HTTP 200 para executor failures pode ser interpretado como sucesso por clientes desatentos. Local: app/main.py#L138-L153 combinado com tests/test_gate_pipeline_integration.py#L127-L141. Impacto: cliente que ignora corpo não percebe falha. Classificação: BAIXO. Mitigação: documentar contrato ou futuramente mapear FAILED para 500/502 se desejado.
+- Descrição: Ausência de validator que exija reason_codes em DecisionRecord quando decision=DENY. Local: app/decision_record.py. Impacto: auditoria incompleta em caso de bug no gate. Classificação: BAIXO. Mitigação: adicionar validator.
+- Descrição: Simulated Timeout (no real timeout enforcement). Local: app/agentic_pipeline.py docstring e executor.execute. Impacto: executor pode travar indefinidamente. Classificação: MÉDIO. Mitigação: AG-03 implementar timeouts reais com asyncio/threading.
+
+SEÇÃO 5 — SUGESTÕES DE IMPLEMENTAÇÃO (PRÓXIMOS PASSOS)
+5.1 Sugestões imediatas (pré-AG-03)
+- MUDANÇA: Remover ProcessRequest/ProcessResponse e imports mortos. LOCAL: app/schemas.py; app/main.py. MOTIVO: código legado não usado. RISCO: BAIXO. TESTE(S): pytest -q (já cobre /process payload parsing manual).
+- MUDANÇA: Remover import duplicado de field_validator. LOCAL: app/decision_record.py. MOTIVO: limpeza. RISCO: BAIXO. TESTE(S): pytest -q.
+- MUDANÇA: Adicionar validator reason_codes non-empty quando DecisionRecord.decision == DENY. LOCAL: app/decision_record.py. MOTIVO: garantir auditoria completa. RISCO: BAIXO. TESTE(S): novo teste em tests/test_decision_record.py validando DENY sem reason_codes lança erro.
+- MUDANÇA: Adicionar teste de sincronização entre ActionRegistry e action_router. LOCAL: tests/new test file ou tests/test_action_registry.py. MOTIVO: prevenir drift. RISCO: BAIXO. TESTE(S): assegurar route_action(action) existe para cada registro em ActionRegistry.
+
+5.2 Sugestões alinhadas ao AG-03
+- MUDANÇA: Unificar roteamento usando ActionRegistry em vez de ACTION_REGISTRY estático. LOCAL: app/agentic_pipeline.py Step 3; app/action_router.py. MOTIVO: preparar versionamento de actions e capabilities. RISCO: MÉDIO. TESTE(S) RED: adicionar ação fictícia no registry e garantir route+executor resolve; drift test.
+- MUDANÇA: Introduzir enum de reason_codes para ActionResult. LOCAL: novo módulo app/reason_codes.py; usar em agentic_pipeline.py e action_contracts.py. MOTIVO: prevenir typos e facilitar extensões AG-03. RISCO: MÉDIO-BAIXO. TESTE(S) RED: reason_codes deve rejeitar valor não listado.
+- MUDANÇA: Capturar capabilities/versão no ActionRegistry e validar contra executor.version. LOCAL: app/action_registry.py; app/agentic_pipeline.py Step 4. MOTIVO: Action Versioning AG-03. RISCO: MÉDIO. TESTE(S) RED: se versão divergente -> FAILED/BLOCKED com reason_code específico.
+- MUDANÇA: Implementar timeout real (asyncio) ou mapear TimeoutError levantado por executor com limite configurável. LOCAL: app/agentic_pipeline.py; executors/base. MOTIVO: robustez operacional. RISCO: MÉDIO. TESTE(S) RED: executor que dorme > timeout gera FAILED + EXECUTOR_TIMEOUT.
+
+SEÇÃO 6 — VEREDITO FINAL
+- Veredito: Backend está limpo, governado e fail-closed. Pequenos smells (imports mortos, dupla registry) não comprometem segurança. Pronto para evoluir.
+- Recomendações: Fazer limpeza mínima (imports mortos, validator de DecisionRecord, teste de sincronização) antes de iniciar testes RED do AG-03. Não são bloqueadores, mas reduzem débito técnico.
+
+SEÇÃO 7 — ACTIONS RECOMMENDED (PRIORIDADE)
+P0
+1) Unificar e testar registry vs router (adicionar teste de sincronização). Comando sugerido após ajuste: python -m pytest tests/test_action_registry.py
+2) Adicionar validator de reason_codes em DecisionRecord para decision=DENY; remover import duplicado. Teste: python -m pytest tests/test_decision_record.py
+
+P1
+3) Remover ProcessRequest/ProcessResponse e imports mortos em main.py; ajustar se web_test_api precisar. Teste: python -m pytest -q
+4) Introduzir enum de reason_codes para ActionResult e atualizar pipeline. Teste: python -m pytest -q
+
+P2
+5) Adicionar header X-Trace-ID na resposta /process para facilitar correlação externa. Teste: python -m pytest tests/test_gate_pipeline_integration.py
+6) Implementar timeouts reais em executores (async) ou manter simulado documentado. Teste: python -m pytest tests/test_agentic_pipeline.py
+
+FIM DO ARQUIVO
+EOF
