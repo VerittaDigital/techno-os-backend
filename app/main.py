@@ -42,10 +42,46 @@ def health():
 async def gate_request(request: Request) -> Dict[str, Any]:
     """Dependency that validates via gate and emits gate_audit."""
     import hashlib
+    import os
     
     trace_id = str(uuid.uuid4())
 
-    # Read body
+    # Step 1: Auth check (before reading body)
+    expected_key = os.environ.get("VERITTA_BETA_API_KEY")
+    if expected_key:  # Auth is required only if env var is set
+        x_api_key = request.headers.get("X-API-Key")
+        
+        if x_api_key is None:
+            # Missing key: log DENY with AUTH_MISSING_KEY
+            from app.gate_artifacts import profiles_fingerprint_sha256
+            decision_record = DecisionRecord(
+                decision="DENY",
+                profile_id="default",
+                profile_hash=profiles_fingerprint_sha256(),
+                matched_rules=[],
+                reason_codes=["AUTH_MISSING_KEY"],
+                input_digest=None,  # Body not read yet
+                trace_id=trace_id,
+            )
+            log_decision(decision_record)  # Persist audit (fail-closed)
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        if x_api_key != expected_key:
+            # Invalid key: log DENY with AUTH_INVALID_KEY
+            from app.gate_artifacts import profiles_fingerprint_sha256
+            decision_record = DecisionRecord(
+                decision="DENY",
+                profile_id="default",
+                profile_hash=profiles_fingerprint_sha256(),
+                matched_rules=[],
+                reason_codes=["AUTH_INVALID_KEY"],
+                input_digest=None,  # Body not read yet
+                trace_id=trace_id,
+            )
+            log_decision(decision_record)  # Persist audit (fail-closed)
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Step 2: Read body (only after auth passes)
     try:
         body = await request.json()
     except (json.JSONDecodeError, ValueError):
@@ -126,7 +162,6 @@ async def gate_request(request: Request) -> Dict[str, Any]:
 @app.post("/process", tags=["processing"])
 async def process(
     gate_data: Dict[str, Any] = Depends(gate_request),
-    _auth: None = Depends(require_beta_api_key),
 ):
     """Process action with gate + pipeline."""
     payload = gate_data.get("payload", {})

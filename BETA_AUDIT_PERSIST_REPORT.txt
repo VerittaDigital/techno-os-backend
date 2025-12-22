@@ -1,0 +1,62 @@
+﻿BETA_AUDIT_PERSIST_REPORT
+==========================
+
+Data: 2025-12-22 04:00:43
+Branch: snapshot/real-backend-from-stash
+Commit: 110b7f9 feat(p1-audit-persist): add audit file sink (jsonl, fail-closed)
+
+IMPLEMENTACAO P1-AUDIT-PERSIST
+-------------------------------
+Persistencia minima de auditoria em arquivo (append-only, JSONL)
+Comportamento FAIL-CLOSED (falha de escrita = BLOCKED)
+
+ARQUIVOS MODIFICADOS/CRIADOS
+-----------------------------
+app/audit_sink.py (NEW)
+  - get_audit_log_path(): le VERITTA_AUDIT_LOG_PATH ou usa ./audit.log
+  - append_audit_record(record: Dict[str, Any]): append JSONL com flush imediato
+  - Formato: uma linha JSON por registro (separators=(',',':'))
+
+app/audit_log.py (MODIFIED)
+  - log_decision() agora chama append_audit_record(record.model_dump(mode='json'))
+  - Qualquer falha levanta AuditLogError (fail-closed na dependency)
+
+app/action_audit_log.py (MODIFIED)
+  - log_action_result() agora chama append_audit_record(result.model_dump(mode='json'))
+  - Qualquer falha levanta AuditLogError (capturada por _safe_log_action_result)
+
+tests/test_audit_persist.py (NEW)
+  - test_audit_persist_success_writes_jsonl: verifica criacao de arquivo, formato JSONL, trace_id
+  - Nota: fail-closed ja testado em test_audit_fail_closed.py e test_concurrency_request_flow_p1_6_aggressive.py
+
+VALIDACAO
+---------
+pytest -q tests/test_audit_persist.py
+1 passed in 0.25s
+
+pytest -q
+155 passed, 3 skipped in 5.35s
+
+git log -1 --oneline
+110b7f9 feat(p1-audit-persist): add audit file sink (jsonl, fail-closed)
+
+git status --short
+?? BETA_AUTH_MINIMAL_REPORT.txt ?? VERITTA_BACKEND_BETA_TECHNICAL_OPINION.txt ?? audit.log
+
+BASELINE
+--------
+Suite antes: 154 passed, 3 skipped
+Suite agora: 155 passed, 3 skipped (+1 test)
+Commits: f8641fe (P0-AUTH) -> 977a040 (backup) -> 110b7f9 (P1-AUDIT-PERSIST)
+
+COMPORTAMENTO FAIL-CLOSED
+--------------------------
+Gate audit (dependency): falha de escrita -> AuditLogError -> HTTP 500 (correto)
+Action audit (pipeline): falha de escrita -> AuditLogError -> capturada por _safe_log_action_result -> BLOCKED com AUDIT_LOG_FAILED
+
+RESUMO
+------
+P1-AUDIT-PERSIST implementado em commit unico
+Formato JSONL append-only
+Fail-closed verificado em testes existentes
+Suite green: 155 passed, 3 skipped
