@@ -169,7 +169,9 @@ class TestPipelineTimeout:
                     trace_id="trace-timeout",
                 )
 
-            assert result.status == "FAILED"
+            # P2-EXEC-TIMEOUT now catches FuturesTimeoutError and returns BLOCKED
+            # (TimeoutError from executor.execute itself also triggers timeout path)
+            assert result.status == "BLOCKED"
             assert "EXECUTOR_TIMEOUT" in result.reason_codes
             assert output is None
 
