@@ -5,6 +5,7 @@ All fields are auditable and non-repudiable. No raw payloads or outputs.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -26,6 +27,18 @@ class ActionRequest(BaseModel):
     payload: dict[str, Any]
     trace_id: str
     ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("trace_id")
+    @classmethod
+    def validate_trace_id_is_valid_uuid(cls, v: str) -> str:
+        """Validate trace_id is non-empty and a valid UUID."""
+        if not v or not v.strip():
+            raise ValueError("trace_id must not be empty")
+        try:
+            uuid.UUID(v)
+        except (ValueError, AttributeError):
+            raise ValueError("trace_id must be a valid UUID")
+        return v
 
     @field_validator("ts_utc")
     @classmethod
@@ -66,6 +79,18 @@ class ActionResult(BaseModel):
     output_digest: str | None
     trace_id: str
     ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("trace_id")
+    @classmethod
+    def validate_trace_id_is_valid_uuid(cls, v: str) -> str:
+        """Validate trace_id is non-empty and a valid UUID."""
+        if not v or not v.strip():
+            raise ValueError("trace_id must not be empty")
+        try:
+            uuid.UUID(v)
+        except (ValueError, AttributeError):
+            raise ValueError("trace_id must be a valid UUID")
+        return v
 
     @field_validator("ts_utc")
     @classmethod

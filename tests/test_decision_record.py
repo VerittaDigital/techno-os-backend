@@ -1,6 +1,7 @@
 """Tests for DecisionRecord and input digest."""
 from datetime import datetime, timezone
 import pytest
+import uuid
 
 from app.decision_record import DecisionRecord, make_input_digest
 
@@ -10,6 +11,7 @@ class TestDecisionRecord:
 
     def test_fields_exist(self):
         """DecisionRecord has all required fields."""
+        test_trace_id = str(uuid.uuid4())
         record = DecisionRecord(
             decision="ALLOW",
             profile_id="test_profile",
@@ -17,7 +19,7 @@ class TestDecisionRecord:
             matched_rules=["rule1"],
             reason_codes=["OK"],
             input_digest="deadbeef",
-            trace_id="trace-001",
+            trace_id=test_trace_id,
             ts_utc=datetime.now(timezone.utc),
         )
         assert record.decision == "ALLOW"
@@ -26,7 +28,7 @@ class TestDecisionRecord:
         assert record.matched_rules == ["rule1"]
         assert record.reason_codes == ["OK"]
         assert record.input_digest == "deadbeef"
-        assert record.trace_id == "trace-001"
+        assert record.trace_id == test_trace_id
 
     def test_ts_utc_must_be_timezone_aware(self):
         """ts_utc must be UTC-aware datetime."""
@@ -38,7 +40,7 @@ class TestDecisionRecord:
                 matched_rules=[],
                 reason_codes=["GATE_EXCEPTION"],
                 input_digest="x",
-                trace_id="trace-001",
+                trace_id=str(uuid.uuid4()),
                 ts_utc=datetime.now(),  # naive datetime
             )
 
@@ -63,7 +65,7 @@ class TestDecisionRecord:
                 matched_rules=[],
                 reason_codes=["GATE_EXCEPTION"],
                 input_digest="x",
-                trace_id="trace-001",
+                trace_id=str(uuid.uuid4()),
                 ts_utc=datetime.now(UTC_Plus_1()),
             )
 
@@ -77,7 +79,7 @@ class TestDecisionRecord:
             matched_rules=[],
             reason_codes=["OK"],
             input_digest="x",
-            trace_id="trace-001",
+            trace_id=str(uuid.uuid4()),
         )
         after = datetime.now(timezone.utc)
 
@@ -173,7 +175,7 @@ class TestDecisionRecordDenyValidator:
                 matched_rules=[],
                 reason_codes=[],  # Empty list should fail
                 input_digest="x",
-                trace_id="trace-001",
+                trace_id=str(uuid.uuid4()),
                 ts_utc=datetime.now(timezone.utc),
             )
 
@@ -186,7 +188,7 @@ class TestDecisionRecordDenyValidator:
             matched_rules=[],
             reason_codes=["GATE_EXCEPTION"],  # Non-empty list should pass
             input_digest="x",
-            trace_id="trace-001",
+            trace_id=str(uuid.uuid4()),
             ts_utc=datetime.now(timezone.utc),
         )
         assert record.decision == "DENY"
@@ -201,7 +203,7 @@ class TestDecisionRecordDenyValidator:
             matched_rules=[],
             reason_codes=[],  # Empty is OK for ALLOW
             input_digest="x",
-            trace_id="trace-001",
+            trace_id=str(uuid.uuid4()),
             ts_utc=datetime.now(timezone.utc),
         )
         assert record.decision == "ALLOW"

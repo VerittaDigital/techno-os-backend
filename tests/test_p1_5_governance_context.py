@@ -13,6 +13,7 @@ from app.decision_record import DecisionRecord
 from app.gate_artifacts import profiles_fingerprint_sha256
 from app.gate_engine import evaluate_gate
 from app.contracts.gate_v1 import GateInput
+import uuid
 
 
 class TestProfileHashCapture:
@@ -67,7 +68,7 @@ class TestProfileHashCapture:
             matched_rules=gate_result.matched_rules,  # ← From gate
             reason_codes=[],
             input_digest="test_digest",
-            trace_id="test_trace",
+            trace_id=str(uuid.uuid4()),
         )
         
         # Verify record has valid profile_hash (never empty)
@@ -109,7 +110,7 @@ class TestMatchedRulesCapture:
             matched_rules=gate_result.matched_rules,
             reason_codes=[],
             input_digest="test_digest",
-            trace_id="test_trace",
+            trace_id=str(uuid.uuid4()),
         )
         assert record.matched_rules == []
 
@@ -150,7 +151,7 @@ class TestMatchedRulesCapture:
             matched_rules=gate_result.matched_rules,  # ← Populated with rule name
             reason_codes=["UNKNOWN_FIELDS_PRESENT"],  # Example
             input_digest="test_digest",
-            trace_id="test_trace",
+            trace_id=str(uuid.uuid4()),
         )
         assert len(record.matched_rules) >= 1
         assert record.matched_rules[0] in [
@@ -198,7 +199,7 @@ class TestGovernanceContextConsistency:
             matched_rules=gate_result.matched_rules,
             reason_codes=[],
             input_digest="digest",
-            trace_id="trace",
+            trace_id=str(uuid.uuid4()),
         )
         
         # Both should have same profile_hash
@@ -224,7 +225,7 @@ class TestGovernanceContextConsistency:
             matched_rules=gate_result.matched_rules,  # ← Direct copy
             reason_codes=["UNKNOWN_FIELDS_PRESENT"],  # P1.5: Must provide reason_codes for DENY
             input_digest="digest",
-            trace_id="trace",
+            trace_id=str(uuid.uuid4()),
         )
         
         # Matched rules should be identical

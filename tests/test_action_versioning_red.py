@@ -7,6 +7,7 @@ THESE TESTS MUST FAIL (AG-03 logic not implemented yet).
 import pytest
 from unittest.mock import MagicMock
 from app.agentic_pipeline import run_agentic_action
+import uuid
 
 
 @pytest.fixture
@@ -87,7 +88,7 @@ class TestActionVersioningRed:
         result, _ = run_agentic_action(
             action="new_action",
             payload={"data": "test"},
-            trace_id="trace-version-001"
+            trace_id=str(uuid.uuid4())
         )
         
         # MUST fail on version check
@@ -111,7 +112,7 @@ class TestActionVersioningRed:
         result, _ = run_agentic_action(
             action="bad_version_action",
             payload={"data": "test"},
-            trace_id="trace-version-002"
+            trace_id=str(uuid.uuid4())
         )
         
         assert result.status == "BLOCKED"
@@ -144,7 +145,7 @@ class TestActionVersioningRed:
         result, _ = run_agentic_action(
             action="valid_version_action",
             payload={"data": "test"},
-            trace_id="trace-version-003"
+            trace_id=str(uuid.uuid4())
         )
         
         # Should NOT block for version reason

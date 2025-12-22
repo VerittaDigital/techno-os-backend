@@ -5,6 +5,7 @@ Tests pipeline WITHOUT FastAPI integration.
 """
 import json
 import logging
+import uuid
 
 import pytest
 
@@ -22,7 +23,7 @@ class TestPipelineUnknownAction:
             result, output = run_agentic_action(
                 action="nonexistent_action",
                 payload={"test": "data"},
-                trace_id="trace-unknown",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "BLOCKED"
@@ -50,7 +51,7 @@ class TestPipelineNonJSONPayload:
             result, output = run_agentic_action(
                 action="process",
                 payload={"obj": NonSerializable()},
-                trace_id="trace-nonjson",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "BLOCKED"
@@ -69,7 +70,7 @@ class TestPipelineLimits:
             result, output = run_agentic_action(
                 action="process",
                 payload=large_payload,
-                trace_id="trace-limit-bytes",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "BLOCKED"
@@ -87,7 +88,7 @@ class TestPipelineLimits:
             result, output = run_agentic_action(
                 action="process",
                 payload=nested,
-                trace_id="trace-limit-depth",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "BLOCKED"
@@ -101,7 +102,7 @@ class TestPipelineLimits:
             result, output = run_agentic_action(
                 action="process",
                 payload=payload,
-                trace_id="trace-limit-list",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "BLOCKED"
@@ -118,7 +119,7 @@ class TestPipelineExecutorException:
             result, output = run_agentic_action(
                 action="process",
                 payload={"wrong_field": "value"},
-                trace_id="trace-exception",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "FAILED"
@@ -166,7 +167,7 @@ class TestPipelineTimeout:
                 result, output = run_agentic_action(
                     action="timeout_action",
                     payload={"test": "data"},
-                    trace_id="trace-timeout",
+                    trace_id=str(uuid.uuid4()),
                 )
 
             # P2-EXEC-TIMEOUT now catches FuturesTimeoutError and returns BLOCKED
@@ -192,7 +193,7 @@ class TestPipelinePrivacy:
             result, output = run_agentic_action(
                 action="process",
                 payload=secret_payload,
-                trace_id="trace-privacy",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "SUCCESS"
@@ -221,12 +222,12 @@ class TestPipelineDeterminism:
         result_1, _ = run_agentic_action(
             action="process",
             payload=payload_1,
-            trace_id="trace-digest-1",
+            trace_id=str(uuid.uuid4()),
         )
         result_2, _ = run_agentic_action(
             action="process",
             payload=payload_2,
-            trace_id="trace-digest-2",
+            trace_id=str(uuid.uuid4()),
         )
 
         # Same semantic payload -> same input_digest
@@ -237,12 +238,12 @@ class TestPipelineDeterminism:
         result_1, _ = run_agentic_action(
             action="process",
             payload={"text": "test1"},
-            trace_id="trace-route-1",
+            trace_id=str(uuid.uuid4()),
         )
         result_2, _ = run_agentic_action(
             action="process",
             payload={"text": "test2"},
-            trace_id="trace-route-2",
+            trace_id=str(uuid.uuid4()),
         )
 
         assert result_1.executor_id == result_2.executor_id
@@ -258,7 +259,7 @@ class TestPipelineSuccess:
             result, output = run_agentic_action(
                 action="process",
                 payload={"text": "hello world"},
-                trace_id="trace-success",
+                trace_id=str(uuid.uuid4()),
             )
 
         assert result.status == "SUCCESS"
@@ -285,12 +286,12 @@ class TestPipelineSuccess:
         result_1, _ = run_agentic_action(
             action="process",
             payload={"text": "test"},
-            trace_id="trace-out-1",
+            trace_id=str(uuid.uuid4()),
         )
         result_2, _ = run_agentic_action(
             action="process",
             payload={"text": "test"},
-            trace_id="trace-out-2",
+            trace_id=str(uuid.uuid4()),
         )
 
         # Same input -> same output -> same output_digest

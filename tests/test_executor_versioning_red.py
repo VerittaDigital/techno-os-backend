@@ -7,6 +7,7 @@ THESE TESTS MUST FAIL (AG-03 logic not implemented yet).
 import pytest
 from unittest.mock import MagicMock
 from app.agentic_pipeline import run_agentic_action
+import uuid
 
 
 @pytest.fixture
@@ -115,7 +116,7 @@ class TestExecutorVersioningRed:
         result, _ = run_agentic_action(
             action="version_test_action",
             payload={"data": "test"},
-            trace_id="trace-execver-001"
+            trace_id=str(uuid.uuid4())
         )
         
         assert result.status == "BLOCKED"
@@ -149,7 +150,7 @@ class TestExecutorVersioningRed:
         result, _ = run_agentic_action(
             action="version_test_action",
             payload={"data": "test"},
-            trace_id="trace-execver-002"
+            trace_id=str(uuid.uuid4())
         )
         
         assert result.status == "BLOCKED"
@@ -183,7 +184,7 @@ class TestExecutorVersioningRed:
         result, _ = run_agentic_action(
             action="version_test_action",
             payload={"data": "test"},
-            trace_id="trace-execver-003"
+            trace_id=str(uuid.uuid4())
         )
         
         if result.status == "BLOCKED":
@@ -217,7 +218,7 @@ class TestExecutorVersioningRed:
         result, _ = run_agentic_action(
             action="version_test_action",
             payload={"data": "test"},
-            trace_id="trace-execver-004"
+            trace_id=str(uuid.uuid4())
         )
         
         if result.status == "BLOCKED":

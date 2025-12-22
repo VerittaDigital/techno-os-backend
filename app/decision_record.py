@@ -38,6 +38,18 @@ class DecisionRecord(BaseModel):
     trace_id: str
     ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    @field_validator("trace_id")
+    @classmethod
+    def validate_trace_id_is_valid_uuid(cls, v: str) -> str:
+        """Validate trace_id is non-empty and a valid UUID."""
+        if not v or not v.strip():
+            raise ValueError("trace_id must not be empty")
+        try:
+            uuid.UUID(v)
+        except (ValueError, AttributeError):
+            raise ValueError("trace_id must be a valid UUID")
+        return v
+
     @field_validator("ts_utc")
     @classmethod
     def validate_ts_utc_is_utc_aware(cls, v: datetime) -> datetime:
