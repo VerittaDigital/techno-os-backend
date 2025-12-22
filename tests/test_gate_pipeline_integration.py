@@ -32,6 +32,8 @@ class TestGateDenyPreventsExecution:
                 reasons=[],
                 action="process",
                 evaluated_keys=[],
+                profile_hash="test_hash_deny",  # P1.5: profile_hash now required
+                matched_rules=["test_rule_deny"],  # P1.5: matched_rules now present
             )
             mock_gate.return_value = mock_result
 

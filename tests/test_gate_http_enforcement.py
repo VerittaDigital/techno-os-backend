@@ -111,6 +111,8 @@ class TestGateEnforcementHTTP:
                 reasons=[],
                 action="process",
                 evaluated_keys=[],
+                profile_hash="test_hash_deny",  # P1.5: profile_hash now required
+                matched_rules=["test_rule"],  # P1.5: matched_rules now present
             )
             mock_gate.return_value = mock_result
 
@@ -241,6 +243,8 @@ class TestGateEnforcementHTTP:
                     reasons=[],
                     action="process",
                     evaluated_keys=[],
+                    profile_hash="test_hash_allow",  # P1.5: profile_hash now required
+                    matched_rules=[],  # P1.5: matched_rules (empty for ALLOW)
                 )
 
             mock_gate.side_effect = capture_call

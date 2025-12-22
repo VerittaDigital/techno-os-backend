@@ -83,11 +83,22 @@ async def gate_request(request: Request) -> Dict[str, Any]:
         if not reason_codes:
             reason_codes = ["UNKNOWN_DENIAL"]
     
+    # P1.5: Extract profile_hash and matched_rules from gate_result
+    # Fail-closed: if gate_result is None (exception), use placeholder profile_hash
+    if gate_result:
+        profile_hash = gate_result.profile_hash
+        matched_rules = gate_result.matched_rules
+    else:
+        # Gate exception case: compute default profile_hash
+        from app.gate_artifacts import profiles_fingerprint_sha256
+        profile_hash = profiles_fingerprint_sha256()
+        matched_rules = ["GATE_EXCEPTION"]
+    
     decision_record = DecisionRecord(
         decision=gate_decision,
         profile_id="default",
-        profile_hash="",
-        matched_rules=[],
+        profile_hash=profile_hash,  # ← P1.5: Now from gate_result (never empty)
+        matched_rules=matched_rules,  # ← P1.5: Now from gate_result
         reason_codes=reason_codes,
         input_digest=input_digest,
         trace_id=trace_id,
