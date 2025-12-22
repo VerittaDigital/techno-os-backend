@@ -1,0 +1,238 @@
+VERITTÀ BACKEND — TECHNICAL OPINION FOR BETA (CANONICAL)
+
+1) CONTEXTO DO ESTADO ATUAL — EVIDÊNCIA BRUTA
+
+Comandos e saídas literais:
+
+- git rev-parse --abbrev-ref HEAD
+snapshot/real-backend-from-stash
+
+- git log -8 --oneline
+473fbbd (HEAD -> snapshot/real-backend-from-stash) chore(docs): archive Phase 1 audits and snapshots
+18b77be test(p1.6): add aggressive deterministic concurrency + audit fail-closed stress tests
+77a45a2 feat(p1.5): capture profile_hash and matched_rules in DecisionRecord
+f0683b4 fix(p1.4): make payload digests privacy-first and consistent (None for non-JSON)
+acd9cc3 docs: P1.2 seal report — thread-safe ActionMatrix implementation complete
+cd9cccb chore(p1.2): implement thread-safe ActionMatrix with RLock
+48c0f5a chore(p1.1): implement fail-closed audit logging
+b36c052 feat(ag-03): enforce validation for all actions; remove legacy bypass
+
+- git status --short
+(vazio)
+
+- pytest -q
+........................................sss.......................... [ 45%]
+..................................................................... [ 90%]
+...............                                                       [100%]
+========================= short test summary info ==========================
+SKIPPED [3] tests\test_api.py: Legacy MVP contract; replaced by gate/pipeline tests
+150 passed, 3 skipped in 1.11s
+
+- python -c "import sys; print(sys.version)"
+3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]
+
+- python -c "import fastapi, pydantic; print('fastapi', fastapi.__version__); print('pydantic', pydantic.__version__)"
+fastapi 0.125.0
+pydantic 2.12.5
+
+2) PARECER TÉCNICO — OBJETIVO, SEM FLOREIO
+
+A) O que está BETA-READY agora
+
+- Fail-closed de auditoria (P1.1)
+  • Arquivos: app/audit_log.py; app/agentic_pipeline.py (função _safe_log_action_result)
+  • Testes: tests/test_audit_fail_closed.py
+  • Garantia: qualquer falha de audit logging converte resultado em BLOCKED com reason_code AUDIT_LOG_FAILED.
+
+- ActionMatrix thread-safe (P1.2)
+  • Arquivos: app/action_matrix.py (RLock em get/set/reset)
+  • Testes: tests/test_concurrency_matrix_lock.py
+  • Garantia: acesso concorrente ao estado global do matrix sem race conditions.
+
+- Consistência de digests, privacy-first (P1.4)
+  • Arquivos: app/digests.py; app/main.py; app/agentic_pipeline.py; app/decision_record.py
+  • Testes: tests/test_digest_consistency_p1_4.py
+  • Garantia: SHA256 canônico para JSON e None para não-JSON; gate e pipeline alinhados.
+
+- Contexto de governança na auditoria (P1.5)
+  • Arquivos: app/contracts/gate_v1.py; app/gate_engine.py; app/main.py
+  • Testes: tests/test_p1_5_governance_context.py
+  • Garantia: profile_hash sempre preenchido; matched_rules registrado determinísticamente.
+
+- Segurança concorrente E2E (Gate→Pipeline→Audit) (P1.6)
+  • Arquivos: app/main.py; app/agentic_pipeline.py; app/action_audit_log.py
+  • Testes: tests/test_concurrency_request_flow_p1_6_aggressive.py
+  • Garantia: N=30 requests concorrentes com trace_id único, digest determinístico, sem flake; falha de auditoria sob concorrência resulta em BLOCKED com AUDIT_LOG_FAILED.
+
+- AG-03 enforcement (sem legacy bypass)
+  • Arquivos: histórico de commits (b36c052), app/agentic_pipeline.py, app/action_registry.py
+  • Testes: tests/test_action_versioning_red.py; tests/test_executor_versioning_red.py; tests/test_ag03_retrocompat_red.py; tests/test_ag03_audit_integrity_red.py
+  • Garantia: validação aplicada a todas as actions; sem LEGACY_ACTIONS bypass.
+
+- Endpoints existentes
+  • Arquivos: app/main.py (FastAPI)
+  • Rotas: GET /health; POST /process
+  • Testes: tests/test_gate_pipeline_integration.py (uso de TestClient para /process e /health)
+
+B) TOP 10 Riscos / Brechas para o BETA
+
+1) [CRÍTICO] Ausência de autenticação (User/Auth/Identity)
+   • Evidência: grep no repo não encontra User/Tenant/Auth; rotas em app/main.py sem deps de auth.
+   • Impacto: não há forma de “cadastrar primeiro usuário” ou controlar acesso.
+   • Mitigação mínima (1–3h): header X-API-Key validado por dependency em app/main.py.
+   • Mitigação ideal (Phase 2): provider de identidade com rotação de chaves, armazenamento seguro.
+
+2) [ALTO] Sem persistência de auditoria
+   • Evidência: logs via logging ("gate_audit", "action_audit"), sem sink persistente.
+   • Impacto: perda de evidência pós-processo; auditoria não reconstituível fora de logs efêmeros.
+   • Mitigação mínima (1–3h): configurar FileHandler dedicado e retenção em disco.
+   • Mitigação ideal: persistência estruturada (DB) com indexação por trace_id.
+
+3) [ALTO] Timeouts não definidos na pipeline
+   • Evidência: app/agentic_pipeline.py sem controle de timeout de executor.
+   • Impacto: requisições podem pendurar sob falhas de executor.
+   • Mitigação mínima (1–3h): timeout simples no executor/process executor.
+   • Mitigação ideal: cancelamento cooperativo + limites por ação.
+
+4) [MÉDIO] Resposta HTTP 200 em falhas do executor
+   • Evidência: tests/test_gate_pipeline_integration.py demonstra status=FAILED com HTTP 200.
+   • Impacto: cliente pode interpretar incorretamente falhas como sucesso em nível de transporte.
+   • Mitigação mínima (1–3h): documentação clara de contrato; (opcional) header explicativo.
+   • Mitigação ideal: envelopes padronizados com códigos HTTP contextuais.
+
+5) [MÉDIO] Perfil único hard-coded ("default")
+   • Evidência: app/main.py usa profile_id="default".
+   • Impacto: sem isolamento por perfil/usuário; governança única.
+   • Mitigação mínima (1–3h): injetar profile via header, validado por dependency.
+   • Mitigação ideal: perfis por usuário/tenant com fingerprints versionadas.
+
+6) [MÉDIO] CORS e exposição pública [UNKNOWN]
+   • Evidência: não há config CORS em app/main.py.
+   • Impacto: riscos de consumo indevido via browsers.
+   • Confirmação: revisar middleware/config ASGI/uvicorn.
+   • Mitigação mínima (1–3h): CORS restritivo apenas para clientes internos.
+
+7) [MÉDIO] Observabilidade limitada
+   • Evidência: somente logging padrão; sem correlação externa além de trace_id.
+   • Impacto: diagnóstico operacional restrito.
+   • Mitigação mínima (1–3h): formato JSON estruturado + file sink por ambiente.
+   • Mitigação ideal: integração com sistema de logs/metrics (Phase 2).
+
+8) [BAIXO] matched_rules não retornado no HTTP response
+   • Evidência: app/main.py resposta não inclui matched_rules; somente auditoria registra.
+   • Impacto: cliente não vê regras; menor transparência.
+   • Mitigação mínima (1–3h): campo opcional no response.
+   • Mitigação ideal: detalhamento controlado por escopo de cliente.
+
+9) [BAIXO] Sem rate limiting/anti-abuso [UNKNOWN]
+   • Evidência: não encontrado middleware ou limiter.
+   • Impacto: risco de saturação em beta.
+   • Confirmação: revisão de stack de execução/deploy.
+   • Mitigação mínima (1–3h): limiter simples por IP/Key.
+
+10) [BAIXO] Idempotência de requests [UNKNOWN]
+    • Evidência: não há idempotency-key nas rotas.
+    • Impacto: reenvios simultâneos podem duplicar processamento lógico (ainda que seguro).
+    • Confirmação: inspeção de app/agentic_pipeline.py e consumers.
+    • Mitigação mínima (1–3h): aceitar header idempotency-key e deduplicar em memória (beta).
+
+C) Definição de “Primeiro Usuário” no estado atual
+
+- User: [NÃO EXISTE]
+- Tenant: [NÃO EXISTE]
+- Auth: [NÃO EXISTE]
+- Identity: [NÃO EXISTE]
+
+Confirmação: busca no repositório sem ocorrência funcional de User/Tenant/Auth; rotas em app/main.py sem dependencies de autenticação/autorização.
+
+Proposta mínima para BETA (sem OAuth/SSO):
+- Autenticação por API Key via header X-API-Key (fail-closed).
+- Arquivos:
+  • app/auth.py (dependency FastAPI que valida X-API-Key contra lista em memória ou env)
+  • app/main.py (adicionar Depends(auth) em /process e /health opcional)
+- Estruturas mínimas:
+  • Estrutura em memória: {"first_user_key": "<SECRET>"}
+- Conexão com fluxo existente:
+  • Dependency executa antes de gate_request; se ausente/ inválida → HTTP 401.
+
+3) PLANO DE BETA — MVP OPERACIONAL (48–72H)
+
+Bloco 1 — Rodar local e testar manualmente
+- Subir backend (exemplos):
+  • uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+- Endpoints utilizáveis:
+  • GET /health (app/main.py)
+  • POST /process (app/main.py)
+
+- 5 testes manuais (PowerShell):
+  1) Health
+     curl -s http://localhost:8000/health
+  2) Process OK
+     curl -s -X POST http://localhost:8000/process -H "Content-Type: application/json" -d '{"text":"hello"}'
+  3) Process FAILED (executor)
+     curl -s -X POST http://localhost:8000/process -H "Content-Type: application/json" -d '{"text":123}'
+  4) Process JSON digest determinístico (mandar mesmo payload duas vezes e comparar input_digest)
+     curl -s -X POST http://localhost:8000/process -H "Content-Type: application/json" -d '{"text":"digest"}'
+  5) Gate deny (simular se aplicável) [UNKNOWN]
+     • Confirmar cenário de negação via payload conforme regras atuais (tests/test_gate_adversarial.py pode indicar padrões).
+
+- Observar no output (quando aplicável):
+  • trace_id, status, action, reason_codes, input_digest, output_digest, ts_utc (app/main.py)
+  • decision, profile_hash, matched_rules: presentes na auditoria (logs gate_audit/action_audit); não retornados integralmente no HTTP [fato]
+
+Bloco 2 — Cadastrar o primeiro usuário (BETA MINIMAL)
+- Estado atual: não existe auth.
+- Definição de Auth mínima (API Key por header):
+  • Header: X-API-Key: <SECRET>
+  • Falha de validação → 401 (fail-closed)
+- Arquivos a criar/alterar:
+  • app/auth.py (dependency)
+  • app/main.py (Depends(auth) em /process; /health opcional)
+- Testes pytest obrigatórios:
+  • tests/test_beta_auth_minimal.py::test_missing_api_key_returns_401
+  • tests/test_beta_auth_minimal.py::test_invalid_api_key_returns_401
+  • tests/test_beta_auth_minimal.py::test_valid_api_key_allows_process
+- Critérios de SEAL (Beta Auth Minimal):
+  • 3 testes acima em GREEN
+  • Rotas protegidas por default (fail-closed)
+
+Bloco 3 — Telemetria e Evidência
+- Evidência atual:
+  • logging INFO em loggers "gate_audit" e "action_audit" (app/main.py, app/agentic_pipeline.py)
+- Checklist por execução:
+  • trace_id correlacionado entre gate_audit e action_audit
+  • decision (ALLOW/DENY), reason_codes
+  • input_digest/output_digest (conforme P1.4)
+  • profile_hash e matched_rules (P1.5)
+- Audit Entry persistente: [UNKNOWN]
+  • Confirmação: configuração de handlers/arquivos de log no runtime/deploy
+  • Mínimo viável: FileHandler dedicado por ambiente (ex.: logs/gate_audit.jsonl, logs/action_audit.jsonl)
+
+4) CHECKLIST FINAL — PRONTO PARA INICIAR BETA
+
+[ ] Repo limpo (git status vazio)
+[ ] Suite green (pytest OK)
+[ ] Runbook básico (comandos uvicorn + curl)
+[ ] Auth mínimo ativo (API Key)
+[ ] Primeiro usuário cadastrado (chave emitida e validada)
+[ ] 5 execuções end-to-end com evidência (logs + respostas)
+[ ] Estratégia de rollback clara (reversão de chave, desligar endpoint)
+
+5) RESTRIÇÕES
+
+- Não refatorar arquitetura.
+- Não integrar Notion.
+- Cada sugestão com custo/impacto:
+  • API Key (Auth mínima): Custo S, Impacto: habilita controle de acesso para BETA.
+  • FileHandler para auditoria: Custo S, Impacto: garante evidência persistente.
+  • Timeout executor simples: Custo S, Impacto: evita penduradas em BETA.
+
+VEREDITO FINAL
+
+BETA APPROVED WITH CONDITIONS
+
+Condições (máximo 3):
+1) Implementar Auth mínima via X-API-Key (fail-closed) e ativar em /process.
+2) Configurar persistência de logs gate_audit/action_audit (file sink com retenção).
+3) Definir timeout simples de execução por ação no executor/pipeline.

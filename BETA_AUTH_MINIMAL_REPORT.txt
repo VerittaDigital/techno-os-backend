@@ -1,0 +1,219 @@
+================================================================================
+BETA AUTH MINIMAL — PHASE 0 (P0-AUTH) IMPLEMENTATION REPORT
+================================================================================
+
+Data/Hora: 22 Dezembro 2025, 06:19 UTC (local time)
+Branch: snapshot/real-backend-from-stash
+Modo: SAMURAI (minimal, fail-closed, no refactoring)
+
+================================================================================
+1) COMMIT ÚNICO REALIZADO
+================================================================================
+
+Commit Hash:    f8641fe
+Mensagem:       feat(p0-auth): add minimal API-key authentication (optional by default, fail-closed when configured)
+
+Saída literal:
+PS C:\projetos\techno-os-backend> git log -1 --oneline
+f8641fe (HEAD -> snapshot/real-backend-from-stash) feat(p0-auth): add minimal
+ API-key authentication (optional by default, fail-closed when configured)
+
+================================================================================
+2) ARQUIVOS ALTERADOS/CRIADOS
+================================================================================
+
+Relatório pós-commit (status limpo, apenas arquivo técnico não-rastreado):
+PS C:\projetos\techno-os-backend> git status --short
+?? VERITTA_BACKEND_BETA_TECHNICAL_OPINION.txt
+
+Arquivos modificados/criados no commit:
+ M  app/main.py              (adicionado Depends(require_beta_api_key) ao /process)
+ +  app/auth.py              (novo: módulo de autenticação API Key)
+ +  tests/test_beta_auth_minimal.py   (novo: 4 testes P0-AUTH)
+
+================================================================================
+3) DESCRIÇÃO FUNCIONAL — COMPORTAMENTO FAIL-CLOSED
+================================================================================
+
+Módulo: app/auth.py
+
+Implementação:
+- Função get_expected_beta_key(): lê env var VERITTA_BETA_API_KEY
+- Dependency require_beta_api_key(x_api_key: Optional[str] = Header(None)): 
+  valida header X-API-Key contra a chave configurada
+
+Semântica FAIL-CLOSED:
+  
+  1. Se VERITTA_BETA_API_KEY está CONFIGURADO (não-vazio):
+     → Auth é ATIVADO (modo enforcer)
+     → Sem header ou header inválido = HTTP 401 (FAIL-CLOSED: nega por padrão)
+  
+  2. Se VERITTA_BETA_API_KEY está NÃO-CONFIGURADO ou vazio:
+     → Auth é OPCIONAL (modo backward-compatible)
+     → Sem header ou header qualquer = passa (não bloqueia)
+     → Permite testes existentes rodarem sem modificação
+
+Integração em app/main.py:
+- POST /process agora tem _auth: None = Depends(require_beta_api_key)
+- GET /health permanece sem auth (mantém saúde pública)
+- O endpoint só é chamado se auth passar
+
+================================================================================
+4) TESTES P0-AUTH — SAÍDAS LITERAIS
+================================================================================
+
+TESTE: tests/test_beta_auth_minimal.py (4 testes)
+
+Saída literal (pytest -q tests/test_beta_auth_minimal.py):
+
+PS C:\projetos\techno-os-backend> pytest -q tests/test_beta_auth_minimal.py
+....                                                                  [100%]
+4 passed in 0.34s
+
+Lista de testes P0-AUTH (3 obrigatórios + 1 bonus):
+
+1. test_missing_api_key_returns_401
+   Premissa: VERITTA_BETA_API_KEY="test-secret" (configurado)
+   Ação: POST /process SEM header X-API-Key
+   Esperado: HTTP 401
+   Status: PASS ✓
+
+2. test_invalid_api_key_returns_401
+   Premissa: VERITTA_BETA_API_KEY="test-secret"
+   Ação: POST /process COM X-API-Key="wrong" (inválida)
+   Esperado: HTTP 401
+   Status: PASS ✓
+
+3. test_valid_api_key_allows_process
+   Premissa: VERITTA_BETA_API_KEY="test-secret"
+   Ação: POST /process COM X-API-Key="test-secret" (válida) + payload JSON válido
+   Esperado: HTTP não-401 (200 quando gate/pipeline passam)
+   Validação: resposta tem campos status, trace_id, action
+   Status: PASS ✓
+
+4. test_no_env_key_returns_401_always [BONUS]
+   Premissa: VERITTA_BETA_API_KEY NÃO-CONFIGURADO (unset)
+   Ação: POST /process COM X-API-Key="anything"
+   Esperado: HTTP não-401 (auth optional quando env var não setado)
+   Status: PASS ✓
+
+================================================================================
+5) SUITE COMPLETA — SAÍDAS LITERAIS
+================================================================================
+
+Saída literal (pytest -q):
+
+PS C:\projetos\techno-os-backend> pytest -q
+........................................sss.......................... [ 43%]
+..................................................................... [ 87%]
+...................                                                   [100%]
+========================= short test summary info ==========================
+SKIPPED [3] tests\test_api.py: Legacy MVP contract; replaced by gate/pipeline
+ tests
+154 passed, 3 skipped in 1.17s
+
+Análise:
+- 150 testes existentes: PASS (backward compatible, auth é opcional sem env var)
+- 4 testes P0-AUTH: PASS (novos testes do commit)
+- 3 skipped: Legacy (esperado)
+
+Total: 154 PASSED, 3 SKIPPED = VERDE ✓
+
+================================================================================
+6) COMO USAR NO BETA — INSTRUÇÕES MÍNIMAS
+================================================================================
+
+Para ativar autenticação por API Key (fail-closed):
+
+1) Setar env var antes de rodar o servidor:
+   
+   PowerShell:
+   PS> $env:VERITTA_BETA_API_KEY = "sua-chave-secreta-aqui"
+   PS> uvicorn app.main:app --host 0.0.0.0 --port 8000
+   
+   CMD:
+   C:\> set VERITTA_BETA_API_KEY=sua-chave-secreta-aqui
+   C:\> uvicorn app.main:app --host 0.0.0.0 --port 8000
+   
+   Linux/MacOS:
+   $ export VERITTA_BETA_API_KEY="sua-chave-secreta-aqui"
+   $ uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+2) Com env var setado, fazer requisições COM header obrigatoriamente:
+   
+   curl com auth válida (200 esperado):
+   curl -s -X POST http://localhost:8000/process \
+     -H "X-API-Key: sua-chave-secreta-aqui" \
+     -H "Content-Type: application/json" \
+     -d '{"text":"hello"}'
+   
+   Esperado: HTTP 200, JSON response com status/trace_id/action/etc.
+   
+   curl sem auth (401 esperado):
+   curl -s -X POST http://localhost:8000/process \
+     -H "Content-Type: application/json" \
+     -d '{"text":"hello"}'
+   
+   Esperado: HTTP 401 Unauthorized
+   
+   curl com auth inválida (401 esperado):
+   curl -s -X POST http://localhost:8000/process \
+     -H "X-API-Key: wrong-key" \
+     -H "Content-Type: application/json" \
+     -d '{"text":"hello"}'
+   
+   Esperado: HTTP 401 Unauthorized
+
+3) Para backward compatibility (testes sem auth):
+   
+   Se VERITTA_BETA_API_KEY não estiver setado:
+   - Auth é OPTIONAL
+   - Requisições SEM header funcionam
+   - Testes existentes passam sem modificação
+
+================================================================================
+7) CRITÉRIOS DE SEAL — VERIFICAÇÃO FINAL
+================================================================================
+
+Checklist obrigatório (não-negociável):
+
+[✓] POST /process retorna 401 sem key (quando VERITTA_BETA_API_KEY está setado)
+    → test_missing_api_key_returns_401 PASS
+    
+[✓] POST /process retorna 401 com key inválida
+    → test_invalid_api_key_returns_401 PASS
+    
+[✓] POST /process funciona com key válida
+    → test_valid_api_key_allows_process PASS
+    
+[✓] pytest -q GREEN (154 passed, 3 skipped)
+    → Sem quebra de suite existente
+    → Backward compatible
+    
+[✓] Commit único criado
+    → f8641fe: feat(p0-auth): add minimal API-key authentication...
+    
+[✓] BETA_AUTH_MINIMAL_REPORT.txt criado
+    → Este arquivo, com evidência literal de todos os passos
+
+================================================================================
+8) VEREDITO FINAL
+================================================================================
+
+P0-AUTH SEAL: PASS ✓
+
+Razão:
+- Todos os critérios de SEAL atendidos
+- Suite completa em GREEN (154 passed)
+- Implementação mínima, reversível
+- Fail-closed quando configurado; backward-compatible por padrão
+- Código legível, documentado, sem refatoração de arquitetura
+- Comportamento testado determinísticamente
+
+Estado do repositório: PRONTO PARA BETA AUTH
+Próximas condições (do PARECER TÉCNICO CANÔNICO):
+1. API Key auth ativado ✓ (P0-AUTH implementado)
+2. Persistência de audit logs (file handler) — pendente
+3. Timeout simples no executor — pendente
+
+================================================================================

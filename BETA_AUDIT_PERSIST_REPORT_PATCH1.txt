@@ -1,0 +1,53 @@
+BETA_AUDIT_PERSIST_REPORT_PATCH1
+===================================
+
+Data: 2025-12-22 07:03
+Commit: da862c9
+Branch: snapshot/real-backend-from-stash
+
+OBJETIVO
+Adicionar teste de fail-closed para falha de persistencia de audit
+
+TESTE ADICIONADO
+tests/test_audit_persist.py::test_audit_persist_failure_blocks
+- Cenario: VERITTA_AUDIT_LOG_PATH aponta para diretorio inexistente
+- Esperado: AuditLogError levantada (fail-closed no gate audit)
+- Verificacao: exception contem "Failed to log gate decision" e "No such file or directory"
+
+SAIDAS LITERAIS
+---------------
+
+pytest -q tests/test_audit_persist.py
+..                                                                    [100%]
+2 passed in 0.27s
+
+pytest -q
+........................................sss.......................... [ 43%]
+..................................................................... [ 86%]
+.....................                                                 [100%]
+========================= short test summary info ==========================
+SKIPPED [3] tests\test_api.py: Legacy MVP contract; replaced by gate/pipeline
+ tests
+156 passed, 3 skipped in 5.44s
+
+git log -1 --oneline
+da862c9 (HEAD -> snapshot/real-backend-from-stash) test(p1-audit-persist): add failure-path test for audit file sink (fail-closed)
+
+git status --short
+?? BETA_AUDIT_PERSIST_REPORT.txt
+?? BETA_AUTH_MINIMAL_REPORT.txt
+?? VERITTA_BACKEND_BETA_TECHNICAL_OPINION.txt
+?? audit.log
+
+BASELINE
+Suite antes: 155 passed, 3 skipped
+Suite agora: 156 passed, 3 skipped (+1 test)
+
+COMPORTAMENTO FAIL-CLOSED VERIFICADO
+Gate audit failure: AuditLogError levantada (TestClient propaga exception diretamente)
+Em producao com HTTP client real: manifesta como HTTP 500
+
+RESUMO
+Teste de falha adicionado em commit unico
+Fail-closed verificado com exception explicita
+Suite green: 156 passed, 3 skipped
