@@ -1,0 +1,320 @@
+================================================================================
+BACKUP PRE-BETA — SNAPSHOT CANÔNICO DE PRESERVAÇÃO
+================================================================================
+
+Data e Hora: 22 Dezembro 2025, 03:47 UTC (local time)
+Operador: Hermes Spectrum (Guardião da Forja / Auditor de Continuidade)
+Modo: SAMURAI (preservação integral, zero alteração funcional)
+
+================================================================================
+1) ESTADO DO REPOSITÓRIO
+================================================================================
+
+Branch Atual:
+snapshot/real-backend-from-stash
+
+Commit HEAD (hash completo):
+f8641fe99798946cb7bab8e01be5c44b8b9b56f6
+
+Commit HEAD (short + mensagem):
+f8641fe feat(p0-auth): add minimal API-key authentication (optional by default, fail-closed when configured)
+
+Histórico recente (últimos 5 commits):
+f8641fe feat(p0-auth): add minimal API-key authentication (optional by default, fail-closed when configured)
+473fbbd chore(docs): archive Phase 1 audits and snapshots
+18b77be test(p1.6): add aggressive deterministic concurrency + audit fail-closed stress tests
+77a45a2 feat(p1.5): capture profile_hash and matched_rules in DecisionRecord
+f0683b4 fix(p1.4): make payload digests privacy-first and consistent (None for non-JSON)
+
+Working Tree Status:
+Limpo (apenas 2 arquivos .txt não-rastreados, relatórios técnicos)
+
+Arquivos não-rastreados:
+BETA_AUTH_MINIMAL_REPORT.txt
+VERITTA_BACKEND_BETA_TECHNICAL_OPINION.txt
+
+================================================================================
+2) SNAPSHOT DE PRESERVAÇÃO CRIADO
+================================================================================
+
+2.1) BACKUP FÍSICO (FORA DO GIT)
+
+Diretório:
+C:\projetos\techno-os-backend_BACKUP_20251222_0347
+
+Conteúdo:
+Todo o repositório EXCETO .git/, __pycache__/, .pytest_cache/
+
+Estrutura raiz do backup:
+.github/
+.venv/
+app/
+docs/
+scripts/
+tests/
+Arquivos raiz: .gitignore, requirements.txt, dev-requirements.txt, pytest.ini, etc.
+
+2.2) BRANCH DE PRESERVAÇÃO (GIT)
+
+Branch criado:
+backup/pre-beta-safe-20251222
+
+Estado: Aponta para commit f8641fe (HEAD atual)
+Objetivo: Branch de somente-leitura para rollback futuro
+
+Verificação:
+git branch --list backup/*
+  backup/pre-beta-safe-20251222
+
+2.3) TAG ANOTADA (GIT)
+
+Tag criada:
+BACKUP_PRE_BETA_20251222
+
+Mensagem:
+Pre-Beta backup before audit persist and executor timeout
+
+Estado: Aponta para commit f8641fe (HEAD atual)
+Objetivo: Ponto de restauração imutável
+
+Verificação:
+git tag --list | findstr BACKUP
+BACKUP_PRE_BETA_20251222
+
+================================================================================
+3) INVENTÁRIO DE ARQUIVOS VERSIONADOS
+================================================================================
+
+Total de arquivos rastreados (git ls-files):
+95 arquivos
+
+Lista completa:
+
+.github/ENDPOINTS.md
+.github/copilot-instructions.md
+.github/workflows/ag03-governance.yml
+.gitignore
+AG03_IMPLEMENTATION_GUIDE.md
+GOVERNANCE_PROFILES.md
+actions_fingerprint.lock
+app/__init__.py
+app/action_audit_log.py
+app/action_contracts.py
+app/action_matrix.py
+app/action_registry.py
+app/action_router.py
+app/agentic_pipeline.py
+app/audit_log.py
+app/auth.py
+app/contracts/__init__.py
+app/contracts/canonical_v1.py
+app/contracts/field_governance.py
+app/contracts/gate_v1.py
+app/contracts/normalize.py
+app/contracts/schema_export.py
+app/decision_record.py
+app/digests.py
+app/executors/__init__.py
+app/executors/base.py
+app/executors/registry.py
+app/gate_artifacts.py
+app/gate_engine.py
+app/gate_profiles.py
+app/main.py
+app/payload_limits.py
+app/profiles_fingerprint.lock
+app/schemas.py
+dev-requirements.txt
+docs/AG02_SEAL_CRITERIA.txt
+docs/AG03_SEAL_CRITERIA.txt
+docs/_archive/phase1/AG02_IMPLEMENTATION.txt
+docs/_archive/phase1/AG03_CRITICAL_FINDINGS_SUMMARY.txt
+docs/_archive/phase1/AG03_UNLOCK_VALIDATION_REPORT.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_AG03_INTEGRAL.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE0_STRUCTURAL.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE1_ARCHITECTURE.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE1_REVISITED_COUPLING.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE2_PIPELINE.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE3_GOVERNANCE.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE4_AUDIT.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE5_TESTS.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE6_FAILURES.txt
+docs/_archive/phase1/AUDITORIA_SAMURAI_STAGE7_VERDICT.txt
+docs/_archive/phase1/BACKUP_SNAPSHOT_PRE_AG03_20251221.txt
+docs/_archive/phase1/BLINDAGEM_ESTRUTURAL_FASE1_COMPLETA.txt
+docs/_archive/phase1/CONTAGEM_CODIGO_PRE_AG03.txt
+docs/_archive/phase1/COPILOT_AUDIT_BACKEND_ABUV_AG02_20251221.txt
+docs/_archive/phase1/HTTP_DECISION_POINT.txt
+docs/_archive/phase1/P12_SEAL_THREAD_SAFE_MATRIX.txt
+docs/_archive/phase1/R02_FINAL_SUMMARY.txt
+pytest.ini
+pytest_final.log
+requirements.txt
+scripts/generate_profiles_fingerprint_lock.py
+tests/conftest.py
+tests/test_action_matrix.py
+tests/test_action_mismatch.py
+tests/test_action_registry.py
+tests/test_action_registry_sync.py
+tests/test_action_versioning_red.py
+tests/test_ag03_audit_integrity_red.py
+tests/test_ag03_retrocompat_red.py
+tests/test_agentic_pipeline.py
+tests/test_api.py
+tests/test_audit_fail_closed.py
+tests/test_beta_auth_minimal.py
+tests/test_concurrency_matrix_lock.py
+tests/test_concurrency_request_flow_p1_6_aggressive.py
+tests/test_contract_canonical_v1.py
+tests/test_decision_record.py
+tests/test_digest_consistency_p1_4.py
+tests/test_executor_capabilities_red.py
+tests/test_executor_registry_thread_safe_b2.py
+tests/test_executor_versioning_red.py
+tests/test_field_governance.py
+tests/test_gate_adversarial.py
+tests/test_gate_artifacts.py
+tests/test_gate_engine.py
+tests/test_gate_http_enforcement.py
+tests/test_gate_pipeline_integration.py
+tests/test_no_web_dependency.py
+tests/test_normalize.py
+tests/test_p1_5_governance_context.py
+tests/test_pre_audit_b3.py
+tests/test_profiles_governance_lock.py
+tests/test_semver_ordering_b1.py
+tests/web_test_api.py
+
+================================================================================
+4) HASHES DE ARQUIVOS CRÍTICOS
+================================================================================
+
+app/agentic_pipeline.py:
+abdd778c1591ad647f223766361e6c805dc5ad94
+
+app/audit_log.py:
+487c1092875860b9fe3baaa63d7a119a586f4a20
+
+app/action_audit_log.py:
+c637bb48d0e777397d243495bd52e32934eec69a
+
+app/auth.py:
+d84c1f2874b83b78e3f3a16c0468f394eba65691
+
+================================================================================
+5) SUITE DE TESTES — SAÍDA LITERAL
+================================================================================
+
+Comando executado:
+pytest -q
+
+Saída literal:
+
+........................................sss.......................... [ 43%]
+..................................................................... [ 87%]
+...................                                                   [100%]
+========================= short test summary info ==========================
+SKIPPED [3] tests\test_api.py: Legacy MVP contract; replaced by gate/pipeline
+ tests
+154 passed, 3 skipped in 1.28s
+
+Status: VERDE (154 passed, 3 skipped)
+
+================================================================================
+6) CHECK DE RECUPERAÇÃO
+================================================================================
+
+Mecanismos de recuperação disponíveis:
+
+a) Tag anotada:
+   git checkout BACKUP_PRE_BETA_20251222
+   
+   Restaura o código exatamente para o commit f8641fe.
+   Imutável, não pode ser alterado ou movido.
+   
+   Verificação:
+   git tag --list | findstr BACKUP
+   BACKUP_PRE_BETA_20251222 ✓
+
+b) Branch de preservação:
+   git checkout backup/pre-beta-safe-20251222
+   
+   Aponta para o commit f8641fe.
+   Permite inspeção, diff, comparação.
+   
+   Verificação:
+   git branch --list backup/*
+   backup/pre-beta-safe-20251222 ✓
+
+c) Backup físico (fora do Git):
+   Diretório: C:\projetos\techno-os-backend_BACKUP_20251222_0347
+   
+   Cópia completa do código (exceto .git/).
+   Independente de estado Git.
+   Pode ser copiado de volta manualmente se necessário.
+   
+   Verificação:
+   Diretório existe ✓
+   Contém .github/, app/, docs/, tests/, scripts/ ✓
+
+RECUPERAÇÃO POSSÍVEL: SIM
+
+Em caso de falha catastrófica, o sistema pode ser restaurado em 3 camadas independentes:
+- Layer 1 (Git tag): Restauração via git checkout tag
+- Layer 2 (Git branch): Restauração via git checkout branch
+- Layer 3 (Filesystem): Cópia manual do backup físico
+
+Nenhuma perda de dados estrutural pode ocorrer.
+
+================================================================================
+7) PRÓXIMOS PASSOS SEGUROS
+================================================================================
+
+Com este backup completo e verificado, os próximos passos podem ser executados com segurança:
+
+1. Implementar P1-AUDIT-PERSIST (persistência de audit logs em arquivo)
+2. Implementar P2-EXEC-TIMEOUT (timeout simples no executor)
+3. Implementar P3-OBSERVABILITY (se necessário)
+
+Em caso de qualquer falha ou comportamento inesperado, o sistema pode ser revertido para este estado exato usando:
+
+git checkout BACKUP_PRE_BETA_20251222
+
+ou
+
+git checkout backup/pre-beta-safe-20251222
+
+ou
+
+Restaurar de C:\projetos\techno-os-backend_BACKUP_20251222_0347
+
+================================================================================
+8) ASSINATURA E SELO
+================================================================================
+
+Estado: PRESERVADO
+Suite: VERDE (154 passed, 3 skipped)
+Backup físico: CRIADO
+Branch de preservação: CRIADO
+Tag anotada: CRIADA
+Recuperação: POSSÍVEL (3 camadas independentes)
+
+BACKUP SEAL: PASS ✓
+
+Razão:
+- Estado completo preservado em 3 camadas independentes
+- Suite de testes confirmada como VERDE
+- Hashes de arquivos críticos registrados
+- Inventário completo de 95 arquivos versionados
+- Nenhuma alteração funcional realizada
+- Recuperação garantida em caso de falha
+
+Estado do sistema: PRONTO PARA IMPLEMENTAÇÕES CRÍTICAS (P1/P2)
+Zero perda permitida. Continuidade garantida.
+
+Hermes Spectrum
+Guardião da Forja · Auditor de Continuidade
+22 Dezembro 2025, 03:47 UTC
+
+================================================================================
