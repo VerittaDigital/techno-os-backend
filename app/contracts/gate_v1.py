@@ -50,5 +50,8 @@ class GateResult(BaseModel):
 
     action: str
     evaluated_keys: List[str] = Field(default_factory=list)
+    
+    profile_hash: str  # ← P1.5: Profile fingerprint (never empty)
+    matched_rules: List[str] = Field(default_factory=list)  # ← P1.5: Rules that matched (may be empty)
 
     at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

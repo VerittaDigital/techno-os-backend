@@ -10,6 +10,7 @@ from app.contracts.gate_v1 import (
     GateReasonCode,
     GateResult,
 )
+from app.gate_artifacts import profiles_fingerprint_sha256
 from app.gate_profiles import PolicyProfile, get_profile
 
 FORBIDDEN_ADMIN_KEYS_BASELINE: Set[str] = {
@@ -118,9 +119,14 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
     - Resolve profile por action (se não existir => DENY)
     - Avalia regras em ordem com short-circuit
     - Qualquer exceção => DENY (com evidência do exception type)
+    - P1.5: Retorna profile_hash e matched_rules (regras que casaram)
     """
     evaluated_keys: List[str] = []
     reasons: List[GateReason] = []
+    matched_rules: List[str] = []  # ← P1.5: Track which rules matched
+    
+    # P1.5: Always compute profile_hash (never empty)
+    profile_hash = profiles_fingerprint_sha256()
 
     profile = get_profile(inp.action)
     if profile is None:
@@ -131,7 +137,15 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
                 {"action": inp.action},
             )
         )
-        return GateResult(decision=GateDecision.DENY, reasons=reasons, action=inp.action, evaluated_keys=evaluated_keys)
+        matched_rules.append("UNKNOWN_ACTION")  # ← P1.5: Mark which rule triggered denial
+        return GateResult(
+            decision=GateDecision.DENY,
+            reasons=reasons,
+            action=inp.action,
+            evaluated_keys=evaluated_keys,
+            profile_hash=profile_hash,
+            matched_rules=matched_rules,
+        )
 
     try:
         for rule in rules:
@@ -142,11 +156,27 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
                     evaluated_keys.append(k)
 
             if not ok:
+                # P1.5: Track which rule caused denial
+                matched_rules.append(rule.name)
                 reasons.extend(r_reasons)
-                return GateResult(decision=GateDecision.DENY, reasons=reasons, action=inp.action, evaluated_keys=evaluated_keys)
+                return GateResult(
+                    decision=GateDecision.DENY,
+                    reasons=reasons,
+                    action=inp.action,
+                    evaluated_keys=evaluated_keys,
+                    profile_hash=profile_hash,
+                    matched_rules=matched_rules,
+                )
 
         reasons.append(GateReason(code=GateReasonCode.OK, message="Gate passed.", evidence={"action": inp.action, "profile": profile.name}))
-        return GateResult(decision=GateDecision.ALLOW, reasons=reasons, action=inp.action, evaluated_keys=evaluated_keys)
+        return GateResult(
+            decision=GateDecision.ALLOW,
+            reasons=reasons,
+            action=inp.action,
+            evaluated_keys=evaluated_keys,
+            profile_hash=profile_hash,
+            matched_rules=matched_rules,  # ← Empty for ALLOW (no rules blocked)
+        )
 
     except Exception as exc:
         reasons.extend(
@@ -156,4 +186,13 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
                 {"exception": exc.__class__.__name__, "profile": profile.name},
             )
         )
-        return GateResult(decision=GateDecision.DENY, reasons=reasons, action=inp.action, evaluated_keys=evaluated_keys)
+        matched_rules.append("RULE_EXCEPTION")  # ← P1.5: Mark exception as matched reason
+        return GateResult(
+            decision=GateDecision.DENY,
+            reasons=reasons,
+            action=inp.action,
+            evaluated_keys=evaluated_keys,
+            profile_hash=profile_hash,
+            matched_rules=matched_rules,
+        )
+
