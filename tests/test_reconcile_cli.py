@@ -7,6 +7,7 @@ Testa:
 - Output com INCONSISTENT
 - Exit codes (0 para clean, 1 para problemas)
 - File not found
+- --plain mode (text-only, sem emojis)
 """
 
 import json
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app.tools.reconcile_cli import main
+from app.tools.reconcile_cli import main, _format_report
 
 
 def ts_utc(delta_s: int = 0) -> str:
@@ -50,6 +51,7 @@ class TestReconcileCliOutput:
         
         # Set env var and run main
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -83,6 +85,7 @@ class TestReconcileCliOutput:
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
         monkeypatch.setenv("VERITTA_ORPHAN_SLA_S", "30")
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -108,6 +111,7 @@ class TestReconcileCliOutput:
             }) + "\n")
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -162,6 +166,7 @@ class TestReconcileCliOutput:
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
         monkeypatch.setenv("VERITTA_ORPHAN_SLA_S", "30")
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -185,6 +190,7 @@ class TestReconcileCliOutput:
         missing_log = tmp_path / "missing.log"
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(missing_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -199,6 +205,7 @@ class TestReconcileCliOutput:
         audit_log.write_text("")
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -226,6 +233,7 @@ class TestReconcileCliOutput:
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
         monkeypatch.setenv("VERITTA_ORPHAN_SLA_S", "10")  # Tight SLA
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -248,6 +256,7 @@ class TestReconcileCliIntegration:
             pytest.skip("audit.log exists in working directory (integration test skipped)")
         
         # Just verify it loads without crashing
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
@@ -266,6 +275,7 @@ class TestReconcileCliIntegration:
             }) + "\n")
         
         monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         main()
         
         captured = capsys.readouterr()
@@ -274,3 +284,205 @@ class TestReconcileCliIntegration:
         assert "📋" in captured.out or "REPORT" in captured.out
         assert "📊" in captured.out or "SUMMARY" in captured.out
         assert "━━" in captured.out or "Total" in captured.out
+
+
+class TestReconcileCliPlainMode:
+    """Tests for --plain text-only output mode."""
+    
+    def test_plain_mode_no_emojis(self, tmp_path, monkeypatch, capsys):
+        """--plain mode removes all emojis."""
+        audit_log = tmp_path / "audit.log"
+        
+        with open(audit_log, 'w') as f:
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-001",
+                "decision": "ALLOW",
+                "ts_utc": ts_utc(0),
+            }) + "\n")
+            f.write(json.dumps({
+                "event_type": "action_audit",
+                "trace_id": "trace-001",
+                "status": "SUCCESS",
+                "ts_utc": ts_utc(5),
+            }) + "\n")
+        
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py", "--plain"])
+        main()
+        
+        captured = capsys.readouterr()
+        
+        # Check for emojis NOT present
+        assert "📋" not in captured.out
+        assert "📂" not in captured.out
+        assert "⏱️" not in captured.out
+        assert "📊" not in captured.out
+        assert "✅" not in captured.out
+        assert "⚠️" not in captured.out
+        assert "🚨" not in captured.out
+        assert "🔴" not in captured.out
+        assert "🔶" not in captured.out
+        
+        # Check for text present
+        assert "ORPHAN RECONCILER REPORT" in captured.out
+        assert "SUMMARY" in captured.out
+        assert "Total traces:" in captured.out
+        assert "OK:" in captured.out
+    
+    def test_plain_mode_uses_dashes(self, tmp_path, monkeypatch, capsys):
+        """--plain mode uses dashes instead of box drawing."""
+        audit_log = tmp_path / "audit.log"
+        
+        with open(audit_log, 'w') as f:
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-001",
+                "decision": "ALLOW",
+                "ts_utc": ts_utc(0),
+            }) + "\n")
+        
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py", "--plain"])
+        main()
+        
+        captured = capsys.readouterr()
+        
+        # Check dashes instead of box drawing
+        assert "--------" in captured.out
+        # Should NOT have box drawing chars
+        assert "━" not in captured.out
+    
+    def test_plain_mode_with_orphan(self, tmp_path, monkeypatch, capsys):
+        """--plain mode with ORPHAN_ALLOW."""
+        audit_log = tmp_path / "audit.log"
+        
+        with open(audit_log, 'w') as f:
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-orphan-001",
+                "decision": "ALLOW",
+                "ts_utc": ts_utc(0),
+            }) + "\n")
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-orphan-001",
+                "ts_utc": ts_utc(50),
+            }) + "\n")
+        
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setenv("VERITTA_ORPHAN_SLA_S", "30")
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py", "--plain"])
+        exit_code = main()
+        
+        captured = capsys.readouterr()
+        
+        assert exit_code == 1
+        # Check no emojis
+        assert "🔴" not in captured.out
+        assert "🔶" not in captured.out
+        # Check content still present
+        assert "ORPHAN_ALLOW" in captured.out
+        assert "trace-orphan-001" in captured.out
+        assert "age:" in captured.out
+    
+    def test_plain_mode_all_ok(self, tmp_path, monkeypatch, capsys):
+        """--plain mode with all OK."""
+        audit_log = tmp_path / "audit.log"
+        
+        with open(audit_log, 'w') as f:
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-001",
+                "decision": "ALLOW",
+                "ts_utc": ts_utc(0),
+            }) + "\n")
+            f.write(json.dumps({
+                "event_type": "action_audit",
+                "trace_id": "trace-001",
+                "status": "SUCCESS",
+                "ts_utc": ts_utc(5),
+            }) + "\n")
+        
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
+        monkeypatch.setattr("sys.argv", ["reconcile_cli.py", "--plain"])
+        exit_code = main()
+        
+        captured = capsys.readouterr()
+        
+        assert exit_code == 0
+        assert "All traces healthy!" in captured.out
+        # Should NOT contain emoji checkmark
+        assert "✅ All" not in captured.out
+        # Should contain plain text
+        assert "All traces healthy!" in captured.out
+
+
+class TestFormatReportFunction:
+    """Unit tests for _format_report function."""
+    
+    def test_format_report_with_emoji(self):
+        """_format_report with emoji mode."""
+        results = [
+            {
+                "trace_id": "trace-001",
+                "opened_ts_utc": "2025-12-22T12:00:00Z",
+                "last_ts_utc": "2025-12-22T12:00:05Z",
+                "age_s": 5.0,
+                "status": "OK",
+            }
+        ]
+        
+        output, exit_1 = _format_report(results, 30, "audit.log", plain=False)
+        
+        assert "📋" in output
+        assert "📊" in output
+        assert "✅ OK" in output
+        assert exit_1 is False
+    
+    def test_format_report_plain_text(self):
+        """_format_report with plain text mode."""
+        results = [
+            {
+                "trace_id": "trace-001",
+                "opened_ts_utc": "2025-12-22T12:00:00Z",
+                "last_ts_utc": "2025-12-22T12:00:05Z",
+                "age_s": 5.0,
+                "status": "OK",
+            }
+        ]
+        
+        output, exit_1 = _format_report(results, 30, "audit.log", plain=True)
+        
+        # Check no emojis
+        assert "📋" not in output
+        assert "📊" not in output
+        assert "✅" not in output
+        # Check dashes
+        assert "--------" in output
+        # Check content
+        assert "ORPHAN RECONCILER REPORT" in output
+        assert "OK:" in output
+        assert exit_1 is False
+    
+    def test_format_report_orphan_in_plain(self):
+        """_format_report with orphan in plain mode."""
+        results = [
+            {
+                "trace_id": "trace-orphan",
+                "opened_ts_utc": "2025-12-22T12:00:00Z",
+                "last_ts_utc": "2025-12-22T12:01:00Z",
+                "age_s": 60.0,
+                "status": "ORPHAN_ALLOW",
+            }
+        ]
+        
+        output, exit_1 = _format_report(results, 30, "audit.log", plain=True)
+        
+        # Check no emojis
+        assert "🔴" not in output
+        # Check content
+        assert "ORPHAN_ALLOW" in output
+        assert "trace-orphan" in output
+        assert "age: 60.0s" in output
+        assert exit_1 is True
