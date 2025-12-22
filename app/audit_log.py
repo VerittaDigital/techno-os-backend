@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 
+from app.audit_sink import append_audit_record
 from app.decision_record import DecisionRecord
 
 
@@ -29,6 +30,11 @@ def log_decision(record: DecisionRecord) -> None:
     Raises AuditLogError if logging fails (fail-closed).
     """
     try:
+        # Persist to file first (fail-closed)
+        record_dict = record.model_dump(mode="json")
+        append_audit_record(record_dict)
+        
+        # Then emit to logger
         logger.info(record.model_dump_json())
     except Exception as e:
         raise AuditLogError(f"Failed to log gate decision (trace_id={getattr(record, 'trace_id', 'unknown')}): {e}") from e

@@ -9,6 +9,7 @@ import logging
 
 from app.action_contracts import ActionResult
 from app.audit_log import AuditLogError
+from app.audit_sink import append_audit_record
 
 # Named logger for action execution audit trail
 logger = logging.getLogger("action_audit")
@@ -25,6 +26,11 @@ def log_action_result(result: ActionResult) -> None:
     Raises AuditLogError if logging fails (fail-closed).
     """
     try:
+        # Persist to file first (fail-closed)
+        result_dict = result.model_dump(mode="json")
+        append_audit_record(result_dict)
+        
+        # Then emit to logger
         logger.info(result.model_dump_json())
     except Exception as e:
         raise AuditLogError(f"Failed to log action result (trace_id={result.trace_id}, action={result.action}): {e}") from e
