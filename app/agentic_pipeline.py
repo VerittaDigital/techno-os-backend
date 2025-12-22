@@ -15,7 +15,9 @@ Supports legacy actions for retrocompatibility while enforcing AG-03 for new act
 
 import hashlib
 import json
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -34,6 +36,25 @@ from app.executors.registry import UnknownExecutorError
 
 # Semver pattern: X.Y.Z
 SEMVER_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+
+
+def _get_executor_timeout() -> float:
+    """Get executor timeout from env var VERITTA_EXECUTOR_TIMEOUT_S.
+    
+    Returns:
+        Timeout in seconds (default: 10.0)
+        If invalid value, returns default (fail-safe).
+    """
+    default_timeout = 10.0
+    timeout_str = os.environ.get("VERITTA_EXECUTOR_TIMEOUT_S", str(default_timeout))
+    
+    try:
+        timeout = float(timeout_str)
+        if timeout <= 0:
+            return default_timeout
+        return timeout
+    except (ValueError, TypeError):
+        return default_timeout
 
 
 def route_action(action: str) -> str:
@@ -441,6 +462,13 @@ def run_agentic_action(
     )
     pre_audit_result = _safe_log_action_result(pre_audit_result)
     
+    # Get executor timeout
+    timeout_seconds = _get_executor_timeout()
+    
+    # Create ThreadPoolExecutor explicitly (not with context manager)
+    # to avoid blocking on thread cleanup after timeout
+    pool = ThreadPoolExecutor(max_workers=1)
+    
     try:
         # Create ActionRequest
         action_req = ActionRequest(
@@ -448,10 +476,20 @@ def run_agentic_action(
             payload=payload,
             trace_id=trace_id,
         )
-        output = executor.execute(action_req)
-    except TimeoutError:
-        # Simulated timeout (for tests; real timeout requires async)
-        status = "FAILED"
+        
+        # Execute with timeout
+        future = pool.submit(executor.execute, action_req)
+        output = future.result(timeout=timeout_seconds)
+        
+        # Success: clean shutdown (wait for thread to complete)
+        pool.shutdown(wait=True)
+            
+    except FuturesTimeoutError:
+        # Executor exceeded timeout (fail-safe)
+        # Shutdown immediately without waiting (don't block on orphan thread)
+        pool.shutdown(wait=False)
+        
+        status = "BLOCKED"
         reason_codes = ["EXECUTOR_TIMEOUT"]
         result = ActionResult(
             action=action,
@@ -468,6 +506,9 @@ def run_agentic_action(
         return (result, None)
     except Exception as e:
         # Any other exception during execution
+        # Shutdown pool without waiting
+        pool.shutdown(wait=False)
+        
         status = "FAILED"
         reason_codes = ["EXECUTOR_EXCEPTION"]
         result = ActionResult(
