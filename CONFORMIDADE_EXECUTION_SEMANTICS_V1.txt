@@ -1,0 +1,460 @@
+RELATORIO DE AUDITORIA DE CONFORMIDADE — TECHNO OS BACKEND
+Execution Semantics v1 — Notion ⇄ Backend
+
+Data: 2025-12-22
+Auditor: Sistema de Verificacao de Conformidade
+Escopo: Backend FastAPI (app/) vs Documento EXECUTION_SEMANTICS_V1_NOTION_BACKEND.txt
+
+================================================================================
+
+1. VERIFICACAO: BACKEND E UNICO RESPONSAVEL POR GERAR Event Type
+
+OBJETIVO: Confirmar que backend gera exclusivamente Event Types:
+  - executed (status SUCCESS)
+  - error (status FAILED)
+  - artifact_generated (nao implementado)
+  - replay (nao implementado)
+
+ACHADOS:
+
+1.1 Event Type: executed (status SUCCESS)
+    Arquivo: app/agentic_pipeline.py linha 530
+    Codigo: status = "SUCCESS"
+    Criacao: ActionResult com status SUCCESS gerado em linha 531-541
+    Auditado: Via _safe_log_action_result (linha 543)
+    CONFORME: Backend gera SUCCESS apos executor.execute completar sem excecao
+    Ponto de criacao: run_agentic_action retorna (result, None)
+    Fonte: Unica (backend, sem inputs externos)
+
+1.2 Event Type: error (status FAILED)
+    Arquivo: app/agentic_pipeline.py linha 512
+    Codigo: status = "FAILED"
+    Criacao: ActionResult com status FAILED gerado em linha 513-524
+    Auditado: Via _safe_log_action_result (linha 525)
+    CONFORME: Backend gera FAILED quando Exception capturada em executor.execute (linha 503)
+    Ponto de criacao: run_agentic_action retorna (result, None)
+    Fonte: Unica (backend, sem inputs externos)
+
+1.3 Event Type: artifact_generated
+    Busca: grep "artifact_generated" em app/*.py
+    Resultado: NAO ENCONTRADO
+    CONFORME: Backend nao implementa artifact_generated (feature futura)
+    Status: Nao aplicavel para auditoria
+
+1.4 Event Type: replay
+    Busca: grep "replay" em app/*.py
+    Resultado: NAO ENCONTRADO
+    CONFORME: Backend nao implementa replay (feature futura)
+    Status: Nao aplicavel para auditoria
+
+1.5 Event Type adicional: execution_blocked (status BLOCKED)
+    Arquivo: app/agentic_pipeline.py linha 492
+    Codigo: status = "BLOCKED"
+    Criacao: ActionResult com status BLOCKED gerado quando:
+      - FuturesTimeoutError (linha 488, reason_codes=["EXECUTOR_TIMEOUT"])
+      - Audit log failure (linha 138, reason_codes=["AUDIT_LOG_FAILED"])
+      - Multiple pontos de governanca (linhas 192, 220, 240, 256, 283, 304, 323, 340, 367, 389)
+    Auditado: Via _safe_log_action_result
+    CONFORME: Backend gera BLOCKED exclusivamente
+    Fonte: Unica (backend, sem inputs externos)
+
+1.6 Event Type adicional: authorized (decision ALLOW)
+    Arquivo: app/main.py linha 133
+    Codigo: decision_record com decision="ALLOW" implicitamente criado em gate_result
+    Criacao: DecisionRecord gerado em gate_request (linha 133-141)
+    Auditado: Via log_decision (linha 142)
+    CONFORME: Backend gera ALLOW apos evaluate_gate retornar GateDecision.ALLOW
+    Fonte: Unica (backend, sem inputs externos)
+
+1.7 Event Type adicional: denied (decision DENY)
+    Arquivo: app/main.py linhas 58, 73, 108, 114
+    Codigo: decision="DENY"
+    Criacao: DecisionRecord gerado quando:
+      - X-API-Key ausente (linha 58, reason_codes=["AUTH_MISSING_KEY"])
+      - X-API-Key invalida (linha 73, reason_codes=["AUTH_INVALID_KEY"])
+      - Gate exception (linha 108, reason_codes=["GATE_EXCEPTION"])
+      - Gate nega payload (linha 114, reason_codes extraidos de gate_result.reasons)
+    Auditado: Via log_decision antes de HTTPException
+    CONFORME: Backend gera DENY exclusivamente
+    Fonte: Unica (backend, sem inputs externos)
+
+CONCLUSAO SECAO 1: CONFORME
+Backend e unico responsavel por gerar todos Event Types implementados:
+  - SUCCESS (executed)
+  - FAILED (error)
+  - BLOCKED (execution_blocked)
+  - ALLOW (authorized)
+  - DENY (denied)
+Nenhum desses pode ser gerado por inputs externos.
+
+================================================================================
+
+2. VERIFICACAO: NENHUMA CATEGORIA PRODUZIDA POR INPUTS EXTERNOS
+
+OBJETIVO: Confirmar que nenhum endpoint aceita status/decision vindo de cliente
+
+ACHADOS:
+
+2.1 Endpoint POST /process
+    Arquivo: app/main.py linha 162-206
+    Parametros aceitos: gate_data (interno de gate_request)
+    Payload usuario: Lido em gate_request linha 86 via request.json()
+    Campos aceitos: {"text": string} (ProcessRequest schema nao usado em /process)
+    VERIFICACAO: Payload usuario NAO contem campos status, decision, trace_id, executor_id
+    CONFORME: Usuario nao pode enviar status ou decision
+    Ponto de criacao status: Linha 530 (SUCCESS), 512 (FAILED), 492 (BLOCKED) — todos internos
+
+2.2 Endpoint GET /health
+    Arquivo: app/main.py linha 37-39
+    Payload: Nenhum
+    Retorno: {"status": "ok"} fixo
+    CONFORME: Status hardcoded, nao vem de input
+
+2.3 Verificacao de schemas de entrada
+    Arquivo: app/schemas.py linha 8-21
+    ProcessRequest campos: text (string)
+    Validacao: not_empty_after_trim
+    CONFORME: Nenhum campo relacionado a status ou decision
+
+2.4 Verificacao de contratos de entrada
+    Arquivo: app/action_contracts.py linha 14-36
+    ActionRequest campos: action, payload, trace_id, ts_utc
+    Origem: Criado internamente em agentic_pipeline.py linha 474
+    trace_id: Propagado de gate_request linha 47 (gerado pelo backend)
+    CONFORME: ActionRequest nao e criado por input externo, trace_id gerado internamente
+
+2.5 Verificacao de trace_id origem
+    Arquivo: app/main.py linha 47
+    Codigo: trace_id = str(uuid.uuid4())
+    Origem: Backend gera UUID
+    CONFORME: trace_id nunca vem de input externo
+
+CONCLUSAO SECAO 2: CONFORME
+Nenhum Event Type (SUCCESS, FAILED, BLOCKED, ALLOW, DENY) pode ser produzido por inputs externos.
+Todos originam de decisoes internas do backend.
+
+================================================================================
+
+3. VERIFICACAO: USO DE TRACE ID
+
+OBJETIVO: Confirmar trace_id sempre presente em decisoes, erros, execucoes e auditoria
+
+ACHADOS:
+
+3.1 trace_id em DecisionRecord (gate audit)
+    Arquivo: app/decision_record.py linha 37
+    Campo: trace_id: str (obrigatorio)
+    Validacao: Nenhuma validacao de formato UUID (permite string vazia)
+    Uso: app/main.py linhas 64, 79 (auth failures), linha 141 (gate decision)
+    CONFORME: trace_id sempre presente em DecisionRecord
+    POTENCIAL VIOLACAO: Nao valida se trace_id e UUID valido ou nao-vazio
+
+3.2 trace_id em ActionRequest
+    Arquivo: app/action_contracts.py linha 26
+    Campo: trace_id: str (obrigatorio)
+    Propagacao: De gate_request para run_agentic_action (main.py linha 190)
+    CONFORME: trace_id propagado de gate para execucao
+
+3.3 trace_id em ActionResult
+    Arquivo: app/action_contracts.py linha 55
+    Campo: trace_id: str (obrigatorio)
+    Uso: Todas criações de ActionResult incluem trace_id
+      - SUCCESS: agentic_pipeline.py linha 539
+      - FAILED: agentic_pipeline.py linha 521
+      - BLOCKED: agentic_pipeline.py linha 500 (timeout), 141 (audit fail), e multiplos pontos
+    CONFORME: trace_id sempre presente em ActionResult
+
+3.4 trace_id em audit persistence
+    Arquivo: app/audit_log.py linha 23-38
+    Funcao: log_decision(record: DecisionRecord)
+    Uso: record.trace_id incluido em JSON audit (linha 37)
+    CONFORME: trace_id persistido em audit.log
+
+    Arquivo: app/action_audit_log.py linha 24-36
+    Funcao: log_action_result(result: ActionResult)
+    Uso: result.trace_id incluido em JSON audit
+    CONFORME: trace_id persistido em audit.log
+
+3.5 trace_id em retorno HTTP
+    Arquivo: app/main.py linha 203
+    Retorno: "trace_id": result.trace_id
+    CONFORME: trace_id retornado ao cliente para correlacao
+
+CONCLUSAO SECAO 3: CONFORME COM RESSALVA
+trace_id sempre presente em decisoes, erros, execucoes e auditoria.
+RESSALVA: Nenhuma validacao garante que trace_id e UUID valido ou nao-vazio.
+  Arquivo: app/decision_record.py linha 37 (campo trace_id: str sem validador)
+  Arquivo: app/action_contracts.py linha 55 (campo trace_id: str sem validador)
+  Impacto: Possivel criar trace_id vazio ou invalido (nao detectado em runtime)
+  Status: POTENCIAL VIOLACAO (nao bloqueia conformidade mas fragiliza auditoria)
+
+================================================================================
+
+4. VERIFICACAO: EVIDENCE
+
+OBJETIVO: Confirmar que Evidence sempre referencia eventos backend reais
+
+ACHADOS:
+
+4.1 Conceito de Evidence no backend
+    Busca: grep "Evidence" em app/*.py
+    Resultado: NAO ENCONTRADO
+    INTERPRETACAO: Backend nao implementa estrutura "Evidence" explicita
+    Evidence e conceito do Notion control-plane, nao do backend
+
+4.2 Mapeamento implicito: ActionResult como Evidence
+    Arquivo: app/action_contracts.py linha 40-89
+    Estrutura: ActionResult contem campos que correspondem a Evidence:
+      - status (SUCCESS/FAILED/BLOCKED)
+      - reason_codes
+      - executor_id, executor_version
+      - input_digest, output_digest
+      - trace_id
+      - ts_utc
+    CONFORME: ActionResult e proof object auditavel (linha 42 "ONLY artifact returned")
+
+4.3 Mapeamento implicito: DecisionRecord como Evidence
+    Arquivo: app/decision_record.py linha 17-57
+    Estrutura: DecisionRecord contem campos que correspondem a Evidence:
+      - decision (ALLOW/DENY)
+      - reason_codes
+      - profile_hash
+      - matched_rules
+      - input_digest
+      - trace_id
+      - ts_utc
+    CONFORME: DecisionRecord e proof object auditavel (linha 3 "Immutable, deterministic record")
+
+4.4 Verificacao: artifact_generated nao implementado
+    Busca: grep "artifact" em app/*.py
+    Resultado: NAO ENCONTRADO (exceto comentarios genericos)
+    CONFORME: Backend nao cria artifacts alem de ActionResult/DecisionRecord
+    Status: Feature nao implementada, nao aplicavel para auditoria
+
+4.5 Verificacao: Nao ha criacao de Evidence sem evento backend
+    Analise: Backend nao tem endpoints que aceitam Evidence externo
+    Analise: Todas criações de ActionResult/DecisionRecord sao internas
+    CONFORME: Impossivel criar Evidence sem evento backend real
+
+CONCLUSAO SECAO 4: CONFORME
+Backend nao implementa estrutura "Evidence" explicita.
+ActionResult e DecisionRecord funcionam como proof objects auditaveis.
+Nenhum endpoint permite criar Evidence externo.
+Todos ActionResult/DecisionRecord originam de eventos backend reais.
+
+================================================================================
+
+5. VERIFICACAO: DECISION
+
+OBJETIVO: Confirmar que nao existe ALLOW final sem executed/error/BLOCKED posterior
+
+ACHADOS:
+
+5.1 Fluxo apos ALLOW (decision="ALLOW")
+    Arquivo: app/main.py linha 156-159
+    Codigo: if gate_decision == "DENY": raise HTTPException(403)
+    Semantica: Se nao raise, continua para linha 159 (retorna gate_data)
+    Proximo passo: Endpoint /process linha 164 recebe gate_data via Depends(gate_request)
+
+5.2 Garantia de execucao apos ALLOW
+    Arquivo: app/main.py linha 187-191
+    Codigo: result, output = run_agentic_action(...)
+    Semantica: run_agentic_action sempre retorna ActionResult
+    CONFORME: Apos ALLOW, run_agentic_action sempre executado
+
+5.3 run_agentic_action sempre retorna status
+    Arquivo: app/agentic_pipeline.py linha 153-545
+    Retornos possiveis:
+      - Linha 207: BLOCKED (payload nao JSON-serializable)
+      - Linha 233: BLOCKED (action desconhecido)
+      - Linha 253: BLOCKED (action_version ausente)
+      - Linha 270: BLOCKED (action_version invalido)
+      - Linha 297: BLOCKED (executor nao encontrado)
+      - Linha 317: BLOCKED (executor_version incompativel - maior que action requer)
+      - Linha 336: BLOCKED (executor_version incompativel - capabilities faltando)
+      - Linha 354: BLOCKED (capability ausente)
+      - Linha 381: BLOCKED (executor_version incompativel - menor que minimo)
+      - Linha 403: BLOCKED (payload excede limites)
+      - Linha 450: PENDING (pre-audit)
+      - Linha 502: BLOCKED (timeout)
+      - Linha 526: FAILED (exception)
+      - Linha 545: SUCCESS (executor completou)
+    CONFORME: run_agentic_action sempre retorna ActionResult com status final
+
+5.4 Impossibilidade de ALLOW sem conclusao
+    Analise: Fluxo gate_request -> process -> run_agentic_action e sincrono
+    Analise: Nenhum ponto permite retornar HTTP 200 sem ActionResult final
+    CONFORME: Cliente nunca recebe ALLOW sem status de execucao
+
+5.5 Caso especial: Exception nao capturada
+    Analise: Se exception escapa de run_agentic_action, FastAPI retorna HTTP 500
+    Analise: Nesse caso, cliente nao recebe ActionResult
+    Impacto: ALLOW registrado em audit.log mas nenhum executed/failed/blocked
+    Status: POTENCIAL VIOLACAO se backend crashar entre ALLOW e execucao
+    Mitigacao: fail-closed via _safe_log_action_result (linha 125-150)
+    Mitigacao: Exception capturada em linha 503 (except Exception)
+
+5.6 Caso especial: Crash de processo
+    Cenario: Backend gera ALLOW, processo morre antes de run_agentic_action
+    Estado: audit.log tem ALLOW, nenhum executed/failed/blocked
+    Status: VIOLACAO OPERACIONAL (nao semantica)
+    Deteccao: Fora do escopo do codigo (requer monitoramento externo)
+
+CONCLUSAO SECAO 5: CONFORME COM RESSALVA
+Backend garante que ALLOW sempre seguido de run_agentic_action.
+run_agentic_action sempre retorna ActionResult com status final.
+RESSALVA: Em caso de crash de processo, ALLOW pode ficar sem conclusao.
+  Impacto: Inconsistencia I1 do documento (executed sem authorized previo nao ocorre, mas authorized sem executed pode ocorrer por crash)
+  Status: VIOLACAO OPERACIONAL (nao defeito de codigo, requer observabilidade)
+
+================================================================================
+
+6. VERIFICACAO: ESTADO DO NOTION INTERPRETADO COMO EXECUCAO REAL
+
+OBJETIVO: Listar pontos onde estado vindo do Notion poderia ser interpretado como execucao real
+
+ACHADOS:
+
+6.1 Backend nao consome estado do Notion
+    Analise: grep "notion" em app/*.py
+    Resultado: NAO ENCONTRADO
+    Analise: Nenhum import de bibliotecas Notion API
+    CONFORME: Backend nao le estado do Notion
+
+6.2 Backend nao aceita status externo
+    Analise: Secao 2 confirma que status vem exclusivamente de backend
+    CONFORME: Usuario nao pode enviar status via API
+
+6.3 Backend nao aceita trace_id externo
+    Analise: app/main.py linha 47 gera trace_id (uuid.uuid4())
+    Analise: Nenhum endpoint aceita trace_id como parametro
+    CONFORME: trace_id sempre gerado pelo backend
+
+6.4 Backend nao aceita decision externo
+    Analise: decision criado internamente em gate_request
+    CONFORME: Usuario nao pode enviar decision via API
+
+6.5 Endpoints expostos
+    Arquivo: app/main.py
+    Endpoints:
+      - GET /health (linha 37): Sem estado, retorna {"status": "ok"}
+      - POST /process (linha 162): Aceita payload, nao aceita status/decision/trace_id
+    CONFORME: Nenhum endpoint permite injetar estado de execucao
+
+6.6 Potencial ponto futuro: Webhook de Notion
+    Analise: Nao implementado no codigo atual
+    Status: NAO APLICAVEL
+    Alerta: Se webhook implementado no futuro, deve validar que eventos do Notion sao de intencao (request_created, authorization_requested) e nao de confirmacao (executed, authorized)
+
+CONCLUSAO SECAO 6: CONFORME
+Backend nao consome estado do Notion.
+Nenhum endpoint permite que estado vindo do Notion seja interpretado como execucao real.
+Todos estados de execucao (SUCCESS, FAILED, BLOCKED, ALLOW, DENY) gerados internamente.
+
+================================================================================
+
+7. VERIFICACAO: EVENTOS REGISTRADOS FORA DE ORDEM TEMPORAL
+
+OBJETIVO: Listar pontos onde evento poderia ser registrado fora de ordem temporal
+
+ACHADOS:
+
+7.1 Ordem temporal garantida por ts_utc
+    Arquivo: app/decision_record.py linha 38
+    Campo: ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    Semantica: ts_utc gerado no momento da criacao do objeto
+    CONFORME: timestamp reflete momento de criacao
+
+    Arquivo: app/action_contracts.py linha 68
+    Campo: ts_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    Semantica: ts_utc gerado no momento da criacao do objeto
+    CONFORME: timestamp reflete momento de criacao
+
+7.2 Ordem de auditoria: gate antes de action
+    Arquivo: app/main.py linha 142 (log_decision) ocorre antes de linha 159 (retorno gate_data)
+    Arquivo: app/main.py linha 187-191 (run_agentic_action) ocorre depois de gate_request
+    CONFORME: Ordem temporal preservada (gate audit antes de action audit)
+
+7.3 Ordem de auditoria: pre-audit antes de executor
+    Arquivo: app/agentic_pipeline.py linha 463 (pre-audit com status PENDING)
+    Arquivo: app/agentic_pipeline.py linha 481 (executor.execute chamado depois)
+    CONFORME: Ordem temporal preservada (pre-audit antes de execucao)
+
+7.4 Ordem de auditoria: action result apos executor
+    Arquivo: app/agentic_pipeline.py linha 482 (future.result espera executor completar)
+    Arquivo: app/agentic_pipeline.py linha 543 (_safe_log_action_result depois de executor)
+    CONFORME: Ordem temporal preservada (action result apos execucao)
+
+7.5 Potencial violacao: ts_utc gerado antes de append_audit_record
+    Arquivo: app/audit_sink.py linha 34 (append_audit_record abre arquivo e escreve)
+    Analise: ts_utc gerado em DecisionRecord/ActionResult (momento de criacao)
+    Analise: append_audit_record pode ocorrer milissegundos depois (I/O)
+    Impacto: ts_utc reflete momento de criacao do objeto, nao momento de escrita no arquivo
+    Status: CONFORMIDADE QUESTIONAVEL
+    Argumento pro-conformidade: ts_utc e timestamp do evento (criacao do objeto), nao timestamp de persistencia
+    Argumento contra-conformidade: Se append_audit_record falhar e retry com novo objeto, ts_utc sera diferente
+
+7.6 Potencial violacao: Concorrencia em requests paralelos
+    Cenario: Dois requests A e B chegam simultaneamente
+    Cenario: Request A gera trace_id 1 em t=100ms, request B gera trace_id 2 em t=101ms
+    Cenario: Request B completa primeiro (t=200ms), request A completa depois (t=300ms)
+    Arquivo audit.log: Linha 1 tem trace_id 1 (gate A), linha 2 tem trace_id 2 (gate B), linha 3 tem trace_id 2 (action B), linha 4 tem trace_id 1 (action A)
+    Analise: Ordem no arquivo nao reflete ordem temporal de trace_id 1 vs trace_id 2
+    Status: CONFORME (ts_utc preserva ordem temporal, ordem de linhas no arquivo e irrelevante)
+    Mitigacao: Consumidor de audit.log deve ordernar por ts_utc, nao por ordem de linhas
+
+7.7 Potencial violacao: Clock skew
+    Cenario: Sistema muda relogio (NTP sync, daylight saving, manual)
+    Impacto: ts_utc pode ter salto temporal (evento posterior com ts_utc anterior)
+    Status: VIOLACAO OPERACIONAL (nao defeito de codigo)
+    Mitigacao: Garantir NTP sincronizado e monotonic clock (fora do escopo do backend)
+
+CONCLUSAO SECAO 7: CONFORME COM RESSALVAS
+Ordem temporal preservada via ts_utc em todos eventos.
+Ordem de auditoria (gate -> pre-audit -> executor -> action result) garantida pelo fluxo sincrono.
+RESSALVAS:
+  - ts_utc reflete momento de criacao do objeto, nao momento de escrita em arquivo (conformidade aceitavel)
+  - Concorrencia: ordem de linhas em audit.log pode diferir de ordem temporal (consumidor deve ordernar por ts_utc)
+  - Clock skew: violacao operacional fora do escopo do codigo
+
+================================================================================
+
+RESUMO EXECUTIVO
+
+CONFORMIDADE GERAL: CONFORME COM 3 RESSALVAS
+
+PONTOS CONFORMES (7):
+1. Backend e unico responsavel por gerar Event Types (SUCCESS, FAILED, BLOCKED, ALLOW, DENY)
+2. Nenhum Event Type pode ser produzido por inputs externos
+3. trace_id sempre presente em decisoes, erros, execucoes e auditoria
+4. Evidence (ActionResult/DecisionRecord) sempre referencia eventos backend reais
+5. ALLOW sempre seguido de run_agentic_action que retorna status final
+6. Backend nao consome estado do Notion nem permite injecao de estado de execucao
+7. Ordem temporal preservada via ts_utc
+
+RESSALVAS (3):
+
+RESSALVA 1 (SECAO 3): trace_id sem validacao de formato UUID
+  Arquivo: app/decision_record.py linha 37
+  Arquivo: app/action_contracts.py linha 55
+  Impacto: Possivel criar trace_id vazio ou invalido
+  Severidade: BAIXA (nao bloqueia conformidade, fragiliza auditoria)
+  Recomendacao: Adicionar field_validator para trace_id (validar UUID format e nao-vazio)
+
+RESSALVA 2 (SECAO 5): ALLOW sem conclusao por crash de processo
+  Impacto: audit.log pode ter ALLOW sem executed/failed/blocked correspondente
+  Severidade: MEDIA (violacao operacional, nao semantica)
+  Mitigacao: Observabilidade externa (monitoramento de processos, restart automatico)
+
+RESSALVA 3 (SECAO 7): ts_utc reflete criacao do objeto, nao escrita no arquivo
+  Impacto: Pequena diferenca temporal entre ts_utc e timestamp de persistencia
+  Severidade: BAIXA (conformidade aceitavel, consumidor deve usar ts_utc)
+
+VIOLACOES: NENHUMA
+
+RECOMENDACOES (NAO OBRIGATORIAS):
+1. Adicionar field_validator para trace_id (UUID format)
+2. Adicionar observabilidade para detectar ALLOW sem conclusao
+3. Documentar que consumidor de audit.log deve ordernar por ts_utc
+
+FIM DO RELATORIO DE AUDITORIA

@@ -1,5 +1,6 @@
 """Tests for profile-action mismatch in pipeline."""
 import json
+import uuid
 import pytest
 from app.action_contracts import ActionResult
 
@@ -19,7 +20,7 @@ class TestProfileActionMismatchReason:
             reason_codes=["PROFILE_ACTION_MISMATCH"],
             input_digest="abc",
             output_digest=None,
-            trace_id="trace-001",
+            trace_id=str(uuid.uuid4()),
             ts_utc=datetime.now(timezone.utc),
         )
         
@@ -40,7 +41,7 @@ class TestProfileActionMismatchReason:
                 reason_codes=["PROFILE_ACTION_MISMATCH"],
                 input_digest="abc",
                 output_digest=None,
-                trace_id="trace-001",
+                trace_id=str(uuid.uuid4()),
                 ts_utc=datetime.now(timezone.utc),
             )
             

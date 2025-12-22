@@ -7,6 +7,7 @@ THESE TESTS MUST FAIL (AG-03 logic not implemented yet).
 import pytest
 from unittest.mock import MagicMock
 from app.agentic_pipeline import run_agentic_action
+import uuid
 
 
 @pytest.fixture
@@ -113,7 +114,7 @@ class TestExecutorCapabilitiesRed:
         result, _ = run_agentic_action(
             action="capability_test_action",
             payload={"data": "test"},
-            trace_id="trace-cap-001"
+            trace_id=str(uuid.uuid4())
         )
         
         assert result.status == "BLOCKED"
@@ -148,7 +149,7 @@ class TestExecutorCapabilitiesRed:
         result, _ = run_agentic_action(
             action="multi_capability_action",
             payload={"data": "test"},
-            trace_id="trace-cap-002"
+            trace_id=str(uuid.uuid4())
         )
         
         assert result.status == "BLOCKED"
@@ -183,7 +184,7 @@ class TestExecutorCapabilitiesRed:
         result, _ = run_agentic_action(
             action="multi_capability_action",
             payload={"data": "test"},
-            trace_id="trace-cap-003"
+            trace_id=str(uuid.uuid4())
         )
         
         # Should NOT block for capability reason

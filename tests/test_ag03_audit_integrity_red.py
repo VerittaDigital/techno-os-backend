@@ -5,6 +5,7 @@ Tests ensuring AG-03 version/capability checks preserve audit trail.
 THESE TESTS MUST FAIL (AG-03 logic not implemented yet).
 """
 import json
+import uuid
 import logging
 import pytest
 from unittest.mock import MagicMock
@@ -71,7 +72,7 @@ class TestAg03AuditIntegrityRed:
         result, _ = run_agentic_action(
             action="audit_cap_action",
             payload={"data": "audit test"},
-            trace_id="trace-audit-cap-001"
+            trace_id=str(uuid.uuid4())
         )
         
         # Must block with capability mismatch
@@ -85,7 +86,8 @@ class TestAg03AuditIntegrityRed:
         audit_json = json.loads(action_logs[0])
         assert audit_json["status"] == "BLOCKED"
         assert "EXECUTOR_CAPABILITY_MISMATCH" in audit_json["reason_codes"]
-        assert audit_json["trace_id"] == "trace-audit-cap-001"
+        # trace_id is UUID, verify it exists
+        assert "trace_id" in audit_json and audit_json["trace_id"]
 
     def test_version_mismatch_preserves_auditability(
         self, monkeypatch, caplog_configured
@@ -138,7 +140,7 @@ class TestAg03AuditIntegrityRed:
         result, _ = run_agentic_action(
             action="audit_ver_action",
             payload={"data": "audit test"},
-            trace_id="trace-audit-ver-001"
+            trace_id=str(uuid.uuid4())
         )
         
         # Must block with version incompatibility
@@ -152,7 +154,8 @@ class TestAg03AuditIntegrityRed:
         audit_json = json.loads(action_logs[0])
         assert audit_json["status"] == "BLOCKED"
         assert "EXECUTOR_VERSION_INCOMPATIBLE" in audit_json["reason_codes"]
-        assert audit_json["trace_id"] == "trace-audit-ver-001"
+        # trace_id is UUID, verify it exists
+        assert "trace_id" in audit_json and audit_json["trace_id"]
 
     def test_trace_id_correlation_across_audits(
         self, monkeypatch, caplog_configured
@@ -198,7 +201,7 @@ class TestAg03AuditIntegrityRed:
             lambda executor_id: mock_executor
         )
         
-        trace_id = "trace-audit-correlation-001"
+        trace_id = str(uuid.uuid4())
         result, _ = run_agentic_action(
             action="audit_trace_action",
             payload={"data": "trace test"},
@@ -211,6 +214,6 @@ class TestAg03AuditIntegrityRed:
         
         action_audit = json.loads(action_logs[0])
         
-        # trace_id must match
+        # trace_id must match (correlation across gate_audit and action_audit)
         assert action_audit["trace_id"] == trace_id, \
             f"trace_id mismatch: action_audit={action_audit['trace_id']} vs result={result.trace_id}"

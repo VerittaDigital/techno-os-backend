@@ -7,6 +7,7 @@ never silent SUCCESS.
 
 import pytest
 from unittest.mock import patch, MagicMock
+import uuid
 
 from app.agentic_pipeline import run_agentic_action
 from app.audit_log import AuditLogError
@@ -35,7 +36,7 @@ def test_pre_audit_failure_blocks_execution(monkeypatch):
     result, output = run_agentic_action(
         action="process",
         payload={"text": "test input"},
-        trace_id="test-trace-001",
+        trace_id=str(uuid.uuid4()),
     )
     
     # Verify result is BLOCKED with AUDIT_LOG_FAILED reason
@@ -81,7 +82,7 @@ def test_post_audit_failure_blocks_even_after_execution(monkeypatch):
     result, output = run_agentic_action(
         action="process",
         payload={"text": "test input"},
-        trace_id="test-trace-002",
+        trace_id=str(uuid.uuid4()),
     )
     
     # Verify result is BLOCKED (not SUCCESS)
@@ -122,7 +123,7 @@ def test_successful_logging_returns_original_result(monkeypatch):
     result, output = run_agentic_action(
         action="process",
         payload={"text": "test input"},
-        trace_id="test-trace-003",
+        trace_id=str(uuid.uuid4()),
     )
     
     # Verify result is SUCCESS (not BLOCKED)

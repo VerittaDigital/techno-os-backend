@@ -10,6 +10,7 @@ Verify:
 import time
 import pytest
 from unittest.mock import Mock, patch, MagicMock
+import uuid
 
 from app.action_contracts import ActionRequest, ActionResult
 from app.agentic_pipeline import run_agentic_action
@@ -93,7 +94,7 @@ class TestExecutorTimeout:
                 result, output = run_agentic_action(
                     action="test_action",
                     payload={"test": "timeout"},
-                    trace_id="timeout-test"
+                    trace_id=str(uuid.uuid4())
                 )
                 elapsed = time.time() - start_time
                 
@@ -148,7 +149,7 @@ class TestExecutorTimeout:
                 result, output = run_agentic_action(
                     action="test_action",
                     payload={"test": "fast"},
-                    trace_id="fast-test"
+                    trace_id=str(uuid.uuid4())
                 )
                 
                 # Verify result is SUCCESS
