@@ -88,3 +88,40 @@ class TestAuditPersist:
                     f"Line {i+1} is not a JSON object: {line}"
             except json.JSONDecodeError as e:
                 pytest.fail(f"Line {i+1} is not valid JSON: {line}. Error: {e}")
+
+    def test_audit_persist_failure_blocks(self, monkeypatch, tmp_path):
+        """
+        Audit write failure results in fail-closed behavior.
+        
+        Scenario:
+        - VERITTA_AUDIT_LOG_PATH set to invalid path (non-existent directory)
+        - POST /process with valid payload and auth
+        - Expected: Gate audit fails -> exception raised by TestClient
+        
+        This test verifies that audit persistence failures trigger fail-closed behavior
+        at the gate level (FastAPI dependency), preventing silent failures.
+        
+        Note: TestClient raises the exception directly since it's an unhandled dependency error.
+        In production with a real HTTP client, this would manifest as HTTP 500.
+        """
+        # Set invalid audit path (directory doesn't exist, cannot be created)
+        invalid_path = tmp_path / "no_such_dir" / "audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_path))
+        monkeypatch.setenv("VERITTA_BETA_API_KEY", "test-key")
+        
+        from app.main import app
+        from app.audit_log import AuditLogError
+        client = TestClient(app)
+        
+        # Make request (gate audit write will fail)
+        # TestClient raises the exception directly (fail-closed verified)
+        with pytest.raises(AuditLogError) as exc_info:
+            response = client.post(
+                "/process",
+                json={"text": "audit fail test"},
+                headers={"X-API-Key": "test-key"}
+            )
+        
+        # Verify exception message contains trace_id and file error
+        assert "Failed to log gate decision" in str(exc_info.value)
+        assert "No such file or directory" in str(exc_info.value)
