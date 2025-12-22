@@ -3,10 +3,9 @@ RECONCILE CLI — Simple entrypoint for offline audit analysis.
 
 Usage:
     python -m app.tools.reconcile_cli
-    
-or:
     python app/tools/reconcile_cli.py
-
+    python app/tools/reconcile_cli.py --plain
+    
 Environment variables:
     VERITTA_AUDIT_LOG_PATH: Path to audit.log (default: audit.log)
     VERITTA_ORPHAN_SLA_S: SLA in seconds (default: 30)
@@ -14,8 +13,11 @@ Environment variables:
 Output:
     Summary of trace statuses (OK, ORPHAN_ALLOW, INCONSISTENT)
     List of problematic trace_ids
+    
+    --plain: Text-only output (no emojis or decorative chars)
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -26,31 +28,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.tools.orphan_reconciler import analyze_audit_log
 
 
-def main():
+def _format_report(results, sla_s, audit_log_path, plain=False):
     """
-    Run reconciliation and print summary report.
+    Format reconciliation report.
+    
+    Args:
+        results: List of trace status dicts from reconcile()
+        sla_s: SLA threshold in seconds
+        audit_log_path: Path to audit log
+        plain: If True, use text-only format (no emojis)
+    
+    Returns:
+        Tuple of (formatted_output, should_exit_1)
     """
-    # Read environment variables
-    audit_log_path = os.getenv("VERITTA_AUDIT_LOG_PATH", "audit.log")
-    sla_s = int(os.getenv("VERITTA_ORPHAN_SLA_S", "30"))
+    lines = []
     
-    # Analyze
-    print(f"📋 ORPHAN RECONCILER REPORT")
-    print(f"📂 Audit log: {audit_log_path}")
-    print(f"⏱️  SLA threshold: {sla_s}s")
-    print()
+    # Header
+    if plain:
+        lines.append("ORPHAN RECONCILER REPORT")
+        lines.append(f"Audit log: {audit_log_path}")
+        lines.append(f"SLA threshold: {sla_s}s")
+    else:
+        lines.append("📋 ORPHAN RECONCILER REPORT")
+        lines.append(f"📂 Audit log: {audit_log_path}")
+        lines.append(f"⏱️  SLA threshold: {sla_s}s")
     
-    # Check if file exists
-    if not Path(audit_log_path).exists():
-        print(f"⚠️  File not found: {audit_log_path}")
-        print(f"Status: NO DATA")
-        return 1
-    
-    results = analyze_audit_log(audit_log_path=audit_log_path, sla_s=sla_s)
+    lines.append("")
     
     if not results:
-        print(f"No traces found in audit.log")
-        return 0
+        lines.append("No traces found in audit.log")
+        return "\n".join(lines), False
     
     # Count by status
     status_counts = {}
@@ -62,43 +69,114 @@ def main():
         status_counts[status] = status_counts.get(status, 0) + 1
         
         if status == "ORPHAN_ALLOW":
-            orphans.append(result["trace_id"])
+            orphans.append(result)
         elif status == "INCONSISTENT":
-            inconsistent.append(result["trace_id"])
+            inconsistent.append(result)
     
-    # Print summary
-    print(f"📊 SUMMARY")
-    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print(f"Total traces:      {len(results)}")
-    print(f"✅ OK:              {status_counts.get('OK', 0)}")
-    print(f"⚠️  ORPHAN_ALLOW:    {status_counts.get('ORPHAN_ALLOW', 0)}")
-    print(f"🚨 INCONSISTENT:    {status_counts.get('INCONSISTENT', 0)}")
-    print()
+    # Summary section
+    if plain:
+        lines.append("SUMMARY")
+        lines.append("-" * 40)
+    else:
+        lines.append("📊 SUMMARY")
+        lines.append("━" * 40)
     
-    # Print details of non-OK traces
+    lines.append(f"Total traces:      {len(results)}")
+    
+    if plain:
+        lines.append(f"OK:                {status_counts.get('OK', 0)}")
+        lines.append(f"ORPHAN_ALLOW:      {status_counts.get('ORPHAN_ALLOW', 0)}")
+        lines.append(f"INCONSISTENT:      {status_counts.get('INCONSISTENT', 0)}")
+    else:
+        lines.append(f"✅ OK:              {status_counts.get('OK', 0)}")
+        lines.append(f"⚠️  ORPHAN_ALLOW:    {status_counts.get('ORPHAN_ALLOW', 0)}")
+        lines.append(f"🚨 INCONSISTENT:    {status_counts.get('INCONSISTENT', 0)}")
+    
+    lines.append("")
+    
+    # Non-OK traces section (only if there are issues)
     if orphans or inconsistent:
-        print(f"⚠️  NON-OK TRACES")
-        print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        if plain:
+            lines.append("NON-OK TRACES")
+            lines.append("-" * 40)
+        else:
+            lines.append("⚠️  NON-OK TRACES")
+            lines.append("━" * 40)
         
         if orphans:
-            print(f"\n🔴 ORPHAN_ALLOW (ALLOW without final ActionResult):")
-            for trace_id in orphans:
-                matching = next((r for r in results if r["trace_id"] == trace_id), None)
-                if matching:
-                    age = matching.get("age_s")
-                    age_str = f"{age:.1f}s" if age is not None else "unknown"
-                    print(f"   • {trace_id} (age: {age_str})")
+            if plain:
+                lines.append("")
+                lines.append("ORPHAN_ALLOW (ALLOW without final ActionResult):")
+            else:
+                lines.append("")
+                lines.append("🔴 ORPHAN_ALLOW (ALLOW without final ActionResult):")
+            
+            for result in orphans:
+                trace_id = result["trace_id"]
+                age = result.get("age_s")
+                age_str = f"{age:.1f}s" if age is not None else "unknown"
+                lines.append(f"   • {trace_id} (age: {age_str})")
         
         if inconsistent:
-            print(f"\n🔶 INCONSISTENT (ActionResult without decision):")
-            for trace_id in inconsistent:
-                print(f"   • {trace_id}")
+            if plain:
+                lines.append("")
+                lines.append("INCONSISTENT (ActionResult without decision):")
+            else:
+                lines.append("")
+                lines.append("🔶 INCONSISTENT (ActionResult without decision):")
+            
+            for result in inconsistent:
+                trace_id = result["trace_id"]
+                lines.append(f"   • {trace_id}")
         
-        print()
-        return 1  # Non-zero exit code if problems found
+        lines.append("")
+        return "\n".join(lines), True  # Exit code 1 for problems
     
-    print(f"✅ All traces healthy!")
-    return 0
+    # All healthy
+    if plain:
+        lines.append("All traces healthy!")
+    else:
+        lines.append("✅ All traces healthy!")
+    
+    return "\n".join(lines), False  # Exit code 0
+
+
+def main():
+    """
+    Run reconciliation and print summary report.
+    """
+    parser = argparse.ArgumentParser(
+        description="Analyze audit.log for orphaned ALLOW decisions"
+    )
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="Text-only output (no emojis or decorative characters)"
+    )
+    args = parser.parse_args()
+    
+    # Read environment variables
+    audit_log_path = os.getenv("VERITTA_AUDIT_LOG_PATH", "audit.log")
+    sla_s = int(os.getenv("VERITTA_ORPHAN_SLA_S", "30"))
+    
+    # Check if file exists
+    if not Path(audit_log_path).exists():
+        if args.plain:
+            print(f"File not found: {audit_log_path}")
+            print(f"Status: NO DATA")
+        else:
+            print(f"⚠️  File not found: {audit_log_path}")
+            print(f"Status: NO DATA")
+        return 1
+    
+    # Analyze
+    results = analyze_audit_log(audit_log_path=audit_log_path, sla_s=sla_s)
+    
+    # Format and print
+    output, should_exit_1 = _format_report(results, sla_s, audit_log_path, plain=args.plain)
+    print(output)
+    
+    return 1 if should_exit_1 else 0
 
 
 if __name__ == "__main__":
