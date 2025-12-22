@@ -20,6 +20,7 @@ from typing import Any, Dict
 from fastapi import Depends, FastAPI, HTTPException, Request
 
 from app.agentic_pipeline import run_agentic_action
+from app.auth import require_beta_api_key
 from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
@@ -123,7 +124,10 @@ async def gate_request(request: Request) -> Dict[str, Any]:
 
 
 @app.post("/process", tags=["processing"])
-async def process(gate_data: Dict[str, Any] = Depends(gate_request)):
+async def process(
+    gate_data: Dict[str, Any] = Depends(gate_request),
+    _auth: None = Depends(require_beta_api_key),
+):
     """Process action with gate + pipeline."""
     payload = gate_data.get("payload", {})
     action = gate_data.get("action", "process")
