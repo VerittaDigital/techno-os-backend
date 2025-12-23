@@ -36,8 +36,12 @@ from app.middleware_trace import TraceCorrelationMiddleware
 from app.schemas import ProcessRequest, ProcessResponse
 from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
+from app.api.admin import router as admin_router
 
 app = FastAPI(title="Techno OS API", version="0.1.0")
+
+# Register admin API router
+app.include_router(admin_router)
 
 # Register middleware (T1: G6 trace correlation)
 app.add_middleware(TraceCorrelationMiddleware)
@@ -100,7 +104,7 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             profile_id="G0",
             profile_hash=profiles_fingerprint_sha256(),
             matched_rules=["Authorization header required"],
-            reason_codes=["AUTH_MISSING_AUTHORIZATION"],
+            reason_codes=["AUTH_MISSING_KEY"],
             input_digest=None,  # Body not read yet
             trace_id=trace_id,
         )
@@ -109,7 +113,7 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             error="unauthorized",
             message="missing_authorization",
             trace_id=trace_id,
-            reason_codes=["AUTH_MISSING_AUTHORIZATION"],
+            reason_codes=["AUTH_MISSING_KEY"],
         ))
     
     # Store auth_mode in request state (for audit/logging downstream)

@@ -88,10 +88,8 @@ class TestEventTypeInActionAudit:
 class TestProfileActionMismatchPersisted:
     """Test P2.2-C: PROFILE_ACTION_MISMATCH generates BLOCKED ActionResult."""
     
-    def test_mismatch_blocked_in_audit_log(self, tmp_path, monkeypatch):
+    def test_mismatch_blocked_in_audit_log(self, client, tmp_path, monkeypatch):
         """HTTP 403 mismatch generates ActionResult BLOCKED in audit.log."""
-        from fastapi.testclient import TestClient
-        from app.main import app
         from app.action_matrix import set_action_matrix, reset_action_matrix, ActionMatrix
         
         audit_log = tmp_path / "audit.log"
@@ -102,14 +100,16 @@ class TestProfileActionMismatchPersisted:
         set_action_matrix(restricted_matrix)
         
         try:
-            client = TestClient(app)
-            response = client.post(
+            # Use client fixture from conftest (has authenticated_request with valid auth)
+            response = client.authenticated_request(
+                "POST",
                 "/process",
                 json={"text": "test"},
             )
             
-            # Assert 403
-            assert response.status_code == 403
+            # Assert 403: policy mismatch (auth is guaranteed valid by fixture)
+            assert response.status_code == 403, \
+                f"Expected 403 (policy mismatch), got {response.status_code}: {response.json()}"
             
             # Read audit.log for ActionResult with PROFILE_ACTION_MISMATCH
             with open(audit_log, 'r') as f:

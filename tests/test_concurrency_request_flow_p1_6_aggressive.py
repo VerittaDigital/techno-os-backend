@@ -58,10 +58,10 @@ class TestP16ConcurrentE2EProcessFlow:
         def worker():
             try:
                 # Synchronize all threads to fire simultaneously
-                barrier.wait()
+                barrier.wait(timeout=30)
                 
                 payload = {"text": "concurrent test payload"}
-                response = client.post("/process", json=payload)
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
                 
                 result_data = {
                     "status_code": response.status_code,
@@ -140,8 +140,8 @@ class TestP16ConcurrentE2EProcessFlow:
         
         def worker():
             try:
-                barrier.wait()
-                response = client.post("/process", json=identical_payload)
+                barrier.wait(timeout=30)
+                response = client.post("/process", json=identical_payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
                 body = response.json()
                 input_digest = body.get("input_digest")
                 results_queue.put(input_digest)
@@ -209,7 +209,7 @@ class TestP16ConcurrentE2EProcessFlow:
         
         def writer_toggle():
             try:
-                barrier.wait()  # Synchronize start
+                barrier.wait(timeout=30)  # Synchronize start
                 for iteration in range(500):
                     matrix = matrix_a if iteration % 2 == 0 else matrix_b
                     set_action_matrix(matrix)
@@ -219,9 +219,9 @@ class TestP16ConcurrentE2EProcessFlow:
         
         def reader_request():
             try:
-                barrier.wait()
+                barrier.wait(timeout=30)
                 payload = {"text": "toggle test"}
-                response = client.post("/process", json=payload)
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
                 result_data = {
                     "status_code": response.status_code,
                     "body": response.json(),
@@ -289,9 +289,9 @@ class TestP16ConcurrentE2EProcessFlow:
         
         def worker():
             try:
-                barrier.wait()
+                barrier.wait(timeout=30)
                 payload = {"text": "audit fail test"}
-                response = client.post("/process", json=payload)
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
                 result_data = {
                     "status_code": response.status_code,
                     "body": response.json(),
@@ -369,9 +369,9 @@ class TestP16ConcurrentE2EProcessFlow:
         
         def reader_request():
             try:
-                barrier.wait()
+                barrier.wait(timeout=30)
                 payload = {"text": "combined stress test"}
-                response = client.post("/process", json=payload)
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
                 result_data = {
                     "status_code": response.status_code,
                     "body": response.json(),

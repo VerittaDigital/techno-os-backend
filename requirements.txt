@@ -2,4 +2,6 @@ fastapi
 uvicorn
 pydantic
 pytest
-httpxpackaging
+httpx
+packaging
+sqlalchemy
