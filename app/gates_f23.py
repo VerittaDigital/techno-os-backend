@@ -21,6 +21,8 @@ from app.session_store import get_session_store, sha256_str
 from app.f23_bindings import get_bindings
 from app.decision_record import DecisionRecord
 from app.contracts.gate_v1 import GateInput, GateDecision
+from app.error_envelope import http_error_detail
+from app.gate_artifacts import profiles_fingerprint_sha256
 import uuid
 
 
@@ -62,7 +64,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G1",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -70,12 +72,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "Invalid Bearer token format",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="Invalid Bearer token format",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     api_key = auth_header[7:]  # Extract token after "Bearer "
     
@@ -89,7 +91,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G2",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -97,12 +99,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "API key invalid",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="API key invalid",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G3: User ID validation and binding check
     user_id_header = request.headers.get("X-VERITTA-USER-ID", "").strip()
@@ -114,7 +116,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G3",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -122,12 +124,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=400, detail={
-            "error": "bad_request",
-            "message": "Invalid user ID format",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=400, detail=http_error_detail(
+            error="bad_request",
+            message="Invalid user ID format",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # Check user ID binding
     api_key_sha256 = sha256_str(api_key)
@@ -141,7 +143,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G3",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -149,12 +151,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "User ID not authorized for this API key",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="User ID not authorized for this API key",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G4: Session ID format validation
     session_id_header = request.headers.get("X-VERITTA-SESSION-ID", "").strip()
@@ -166,7 +168,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G4",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -174,12 +176,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=400, detail={
-            "error": "bad_request",
-            "message": "Invalid session ID format",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=400, detail=http_error_detail(
+            error="bad_request",
+            message="Invalid session ID format",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G5: Session TTL and correlation check
     session_store = get_session_store()
@@ -192,7 +194,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G5",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -200,12 +202,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "Session not found",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Session not found",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     if not session_record.is_valid():
         decision = "DENY"
@@ -215,7 +217,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G5",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -223,12 +225,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "Session expired",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="Session expired",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # Verify session user_id and api_key match
     if session_record.user_id != user_id_header:
@@ -239,7 +241,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G5",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -247,12 +249,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "Session user ID mismatch",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Session user ID mismatch",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     if session_record.api_key_sha256 != api_key_sha256:
         decision = "DENY"
@@ -262,7 +264,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G5",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -270,12 +272,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "Session API key mismatch",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Session API key mismatch",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G7-G8: Payload validation and action matrix (shared with F2.1)
     # (Omitted for brevity; reuse from F2.1)
@@ -298,12 +300,12 @@ async def run_f23_chain(
             )
         )
         status_code = 413 if "bytes" in str(e) else 400
-        raise HTTPException(status_code=status_code, detail={
-            "error": "bad_request",
-            "message": "Payload limit exceeded",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=status_code, detail=http_error_detail(
+            error="bad_request",
+            message="Payload limit exceeded",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # Gate evaluation for action matrix
     gate_input = GateInput(
@@ -319,7 +321,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision=gate_result.decision.value,
                 profile_id="G8",
-                profile_hash=getattr(gate_result, 'profile_hash', "") or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=getattr(gate_result, 'matched_rules', []),
                 reason_codes=reason_codes,
                 input_digest="",
@@ -327,12 +329,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "Action not allowed in profile",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Action not allowed in profile",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G9: B1-aware backend contract handling (simplified: always WAIT for now)
     # In full T4, this would check action_contracts for B1 status
@@ -349,7 +351,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision="DENY",
                 profile_id="G10",
-                profile_hash="",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=["Rate limit exceeded for API key"],
                 reason_codes=reason_codes,
                 input_digest="",
@@ -357,12 +359,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=429, detail={
-            "error": "too_many_requests",
-            "message": "Rate limit exceeded",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=429, detail=http_error_detail(
+            error="too_many_requests",
+            message="Rate limit exceeded",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     if not limiter.check(session_id_header, limit=100, window_seconds=60):
         reason_codes = ["G10_rate_limit_exceeded_session"]
@@ -370,7 +372,7 @@ async def run_f23_chain(
             DecisionRecord(
                 decision="DENY",
                 profile_id="G10",
-                profile_hash="",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=["Rate limit exceeded for session"],
                 reason_codes=reason_codes,
                 input_digest="",
@@ -378,12 +380,12 @@ async def run_f23_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=429, detail={
-            "error": "too_many_requests",
-            "message": "Rate limit exceeded",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=429, detail=http_error_detail(
+            error="too_many_requests",
+            message="Rate limit exceeded",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # All gates passed
     decision = "ALLOW"
@@ -391,7 +393,7 @@ async def run_f23_chain(
         DecisionRecord(
             decision=decision,
             profile_id="F2.3",
-            profile_hash=getattr(gate_result, 'profile_hash', "") or "",
+            profile_hash=profiles_fingerprint_sha256(),
             matched_rules=getattr(gate_result, 'matched_rules', []),
             reason_codes=[],
             input_digest="",

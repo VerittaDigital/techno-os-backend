@@ -16,7 +16,8 @@ from app.schemas import ProcessRequest
 from app.decision_record import DecisionRecord
 from app.contracts.gate_v1 import GateInput, GateDecision
 from datetime import datetime, timezone
-import uuid
+from app.error_envelope import http_error_detail
+from app.gate_artifacts import profiles_fingerprint_sha256
 
 
 # Forbidden fields that must not appear in request payload
@@ -81,7 +82,7 @@ async def run_f21_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G0_F21",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -89,12 +90,12 @@ async def run_f21_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "X-API-Key header missing",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="X-API-Key header missing",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G2: API key validation (fail-closed)
     expected_key = os.getenv("VERITTA_BETA_API_KEY")
@@ -106,7 +107,7 @@ async def run_f21_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G2",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -114,12 +115,12 @@ async def run_f21_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "API key invalid",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="API key invalid",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G7: Payload validation (limits + forbidden fields)
     # Check forbidden fields first (fail-closed)
@@ -133,7 +134,7 @@ async def run_f21_chain(
             DecisionRecord(
                 decision=decision,
                 profile_id="G7",
-                profile_hash=profile_hash or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
                 input_digest="",
@@ -141,12 +142,12 @@ async def run_f21_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=400, detail={
-            "error": "bad_request",
-            "message": f"Forbidden field in payload",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=400, detail=http_error_detail(
+            error="bad_request",
+            message="Forbidden field in payload",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # Check payload size and depth
     try:
@@ -169,12 +170,12 @@ async def run_f21_chain(
         )
         # 413 for size, 400 for depth/items
         status_code = 413 if "bytes" in str(e) else 400
-        raise HTTPException(status_code=status_code, detail={
-            "error": "bad_request",
-            "message": "Payload limit exceeded",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=status_code, detail=http_error_detail(
+            error="bad_request",
+            message="Payload limit exceeded",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G8: Action/profile matrix check
     # Uses evaluate_gate to check if action matches profile
@@ -191,7 +192,7 @@ async def run_f21_chain(
             DecisionRecord(
                 decision=gate_result.decision.value,
                 profile_id="G8",
-                profile_hash=getattr(gate_result, 'profile_hash', "") or "",
+                profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=getattr(gate_result, 'matched_rules', []),
                 reason_codes=reason_codes,
                 input_digest="",
@@ -199,12 +200,12 @@ async def run_f21_chain(
                 ts_utc=ts,
             )
         )
-        raise HTTPException(status_code=403, detail={
-            "error": "forbidden",
-            "message": "Action not allowed in profile",
-            "trace_id": trace_id,
-            "reason_codes": reason_codes,
-        })
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Action not allowed in profile",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     # G10: Rate limiting (per api_key, 1000 req/min)
     # Only if api_key is present
@@ -216,7 +217,7 @@ async def run_f21_chain(
                 DecisionRecord(
                     decision="DENY",
                     profile_id="G10",
-                    profile_hash="",
+                    profile_hash=profiles_fingerprint_sha256(),
                     matched_rules=["Rate limit exceeded for API key"],
                     reason_codes=reason_codes,
                     input_digest="",
@@ -224,12 +225,12 @@ async def run_f21_chain(
                     ts_utc=ts,
                 )
             )
-            raise HTTPException(status_code=429, detail={
-                "error": "too_many_requests",
-                "message": "Rate limit exceeded",
-                "trace_id": trace_id,
-                "reason_codes": reason_codes,
-            })
+            raise HTTPException(status_code=429, detail=http_error_detail(
+                error="too_many_requests",
+                message="Rate limit exceeded",
+                trace_id=trace_id,
+                reason_codes=reason_codes,
+            ))
     
     # All gates passed, log success and schedule G12 async audit
     decision = "ALLOW"
@@ -237,7 +238,7 @@ async def run_f21_chain(
         DecisionRecord(
             decision=decision,
             profile_id="F2.1",
-            profile_hash=getattr(gate_result, 'profile_hash', "") or "",
+            profile_hash=profiles_fingerprint_sha256(),
             matched_rules=getattr(gate_result, 'matched_rules', []),
             reason_codes=[],
             input_digest="",

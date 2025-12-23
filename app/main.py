@@ -29,6 +29,7 @@ from app.contracts.gate_v1 import GateDecision, GateInput
 from app.decision_record import DecisionRecord, make_input_digest
 from app.digests import sha256_json_or_none
 from app.error_handler import register_error_handlers
+from app.error_envelope import http_error_detail
 from app.gate_engine import evaluate_gate as evaluate_gate
 from app.middleware_trace import TraceCorrelationMiddleware
 from app.schemas import ProcessRequest, ProcessResponse
@@ -81,12 +82,12 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             trace_id=trace_id,
         )
         log_decision(decision_record)
-        raise HTTPException(status_code=500, detail={
-            "error": "internal_error",
-            "message": "Authentication not configured",
-            "trace_id": trace_id,
-            "reason_codes": ["G0_auth_not_configured"],
-        })
+        raise HTTPException(status_code=500, detail=http_error_detail(
+            error="internal_error",
+            message="Authentication not configured",
+            trace_id=trace_id,
+            reason_codes=["G0_auth_not_configured"],
+        ))
     
     # T2: G0 Feature flag routing — detect auth mode
     auth_mode = detect_auth_mode(request)
@@ -103,12 +104,12 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             trace_id=trace_id,
         )
         log_decision(decision_record)  # Persist audit (fail-closed)
-        raise HTTPException(status_code=401, detail={
-            "error": "unauthorized",
-            "message": "missing_authorization",
-            "trace_id": trace_id,
-            "reason_codes": ["AUTH_MISSING_AUTHORIZATION"],
-        })
+        raise HTTPException(status_code=401, detail=http_error_detail(
+            error="unauthorized",
+            message="missing_authorization",
+            trace_id=trace_id,
+            reason_codes=["AUTH_MISSING_AUTHORIZATION"],
+        ))
     
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
