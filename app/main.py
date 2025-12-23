@@ -33,6 +33,7 @@ from app.gate_engine import evaluate_gate as evaluate_gate
 from app.middleware_trace import TraceCorrelationMiddleware
 from app.schemas import ProcessRequest, ProcessResponse
 from app.gates_f21 import run_f21_chain
+from app.gates_f23 import run_f23_chain
 
 app = FastAPI(title="Techno OS API", version="0.1.0")
 
@@ -87,22 +88,6 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # T4: G0 Temporary block on F2.3 (Bearer tokens) until gates land (will be removed in T4)
-    if auth_mode == "F2.3":
-        from app.gate_artifacts import profiles_fingerprint_sha256
-        decision_record = DecisionRecord(
-            decision="DENY",
-            profile_id="default",
-            profile_hash=profiles_fingerprint_sha256(),
-            matched_rules=[],
-            reason_codes=["F23_NOT_IMPLEMENTED"],
-            input_digest=None,
-            trace_id=trace_id,
-        )
-        log_decision(decision_record)
-        raise HTTPException(status_code=501, detail="f23_not_implemented")
-    
-    # T3: F2.1 chain execution for X-API-Key
     # Step 1: Read body
     try:
         body = await request.json()
@@ -114,25 +99,43 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Compute input digest using canonical rule (None for non-JSON, privacy-first)
     input_digest = sha256_json_or_none(body)
     
-    # Step 2: Run F2.1 chain (gates G0_F21, G2, G7, G8, G10, G12)
-    # This will raise HTTPException (with audit-before-raise) if any gate fails
-    payload, decision = await run_f21_chain(
-        request=request,
-        body=body,
-        action=action,
-        trace_id=trace_id,
-        background_tasks=background_tasks,
-    )
+    # T3: F2.1 chain execution for X-API-Key
+    if auth_mode == "F2.1":
+        # This will raise HTTPException (with audit-before-raise) if any gate fails
+        payload, decision = await run_f21_chain(
+            request=request,
+            body=body,
+            action=action,
+            trace_id=trace_id,
+            background_tasks=background_tasks,
+        )
+        return {"payload": payload, "action": action, "trace_id": trace_id}
     
-    return {"payload": payload, "action": action, "trace_id": trace_id}
+    # T4: F2.3 chain execution for Bearer token auth with sessions
+    elif auth_mode == "F2.3":
+        response, decision = await run_f23_chain(
+            request=request,
+            body=body,
+            action=action,
+            trace_id=trace_id,
+            background_tasks=background_tasks,
+        )
+        # Store response in request.state for endpoint to use
+        request.state.f23_response = response
+        return {"payload": body, "action": action, "trace_id": trace_id}
 
 
 @app.post("/process", tags=["processing"])
 async def process(
+    request: Request,
     gate_data: Dict[str, Any] = Depends(gate_request),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """Process action with gate + pipeline."""
+    # Check if F2.3 response already prepared (with echo-back headers)
+    if hasattr(request.state, "f23_response") and request.state.f23_response:
+        return request.state.f23_response
+    
     payload = gate_data.get("payload", {})
     action = gate_data.get("action", "process")
     trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
