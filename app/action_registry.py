@@ -109,6 +109,13 @@ def get_action_registry() -> ActionRegistry:
                 "required_capabilities": [],
                 "min_executor_version": "1.0.0",
             },
+            "composite_run": {
+                "description": "Sequential composite executor",
+                "executor": "composite_executor_v1",
+                "action_version": "1.0.0",
+                "required_capabilities": [],
+                "min_executor_version": "1.0.0",
+            },
         }
     )
 

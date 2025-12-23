@@ -86,6 +86,16 @@ def get_executor(executor_id: str) -> Executor:
         UnknownExecutorError: if executor_id not in registry
     """
     with _EXECUTORS_LOCK:
+        # Lazy-register composite executor to avoid circular import
+        if executor_id == "composite_executor_v1" and executor_id not in _EXECUTORS:
+            try:
+                from app.executors.composite_executor_v1 import CompositeExecutorV1
+
+                _EXECUTORS[executor_id] = CompositeExecutorV1()
+            except Exception:
+                # Fall through to not-found handling
+                pass
+
         if executor_id not in _EXECUTORS:
             raise UnknownExecutorError(f"Executor '{executor_id}' not found in registry")
         return _EXECUTORS[executor_id]
