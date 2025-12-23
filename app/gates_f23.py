@@ -81,7 +81,7 @@ async def run_f23_chain(
     
     # G2: API key validation (shared with F2.1)
     expected_key = os.getenv("VERITTA_BETA_API_KEY")
-    if not expected_key or api_key != expected_key:
+    if api_key != expected_key:
         decision = "DENY"
         reason_codes = ["G2_invalid_api_key"]
         matched_rules = ["API key mismatch"]

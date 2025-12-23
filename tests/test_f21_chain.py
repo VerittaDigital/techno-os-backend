@@ -56,24 +56,27 @@ class TestF21ChainG0Missing:
 class TestF21ChainG2FailClosed:
     """Test G2: Fail-closed when env var missing (MANDATORY correction)."""
     
-    def test_missing_env_var_allows_access(self, monkeypatch):
-        """Missing VERITTA_BETA_API_KEY env var should allow access (backward compat)."""
+    def test_missing_env_var_returns_500(self, monkeypatch):
+        """Missing VERITTA_BETA_API_KEY env var should return 500 (fail-closed)."""
         # Explicitly unset env var
         monkeypatch.delenv("VERITTA_BETA_API_KEY", raising=False)
         get_rate_limiter().reset_all()
         
-        # Even with X-API-Key header, if env var not set, allow access
+        # When env var is not set, system must fail-closed (500 internal_error)
         response = client.post(
             "/process",
             json={"text": "hello"},
             headers={"X-API-Key": "sk_test_abc123"},
         )
-        # Should succeed because env var not set means no auth required
-        assert response.status_code != 401
-        assert response.status_code != 403
+        # Should fail because auth is not configured
+        assert response.status_code == 500
+        data = response.json()
+        assert data["error"] == "internal_error"
+        assert data["reason_codes"] == ["G0_auth_not_configured"]
+        assert "trace_id" in data
     
-    def test_invalid_api_key_returns_403(self, monkeypatch):
-        """Invalid X-API-Key should return 403."""
+    def test_invalid_api_key_returns_401(self, monkeypatch):
+        """Invalid X-API-Key should return 401 (unauthorized)."""
         monkeypatch.setenv("VERITTA_BETA_API_KEY", "sk_test_correct")
         get_rate_limiter().reset_all()
         
@@ -82,8 +85,10 @@ class TestF21ChainG2FailClosed:
             json={"text": "hello"},
             headers={"X-API-Key": "sk_test_wrong"},
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
         data = response.json()
+        assert data["error"] == "unauthorized"
+        assert "G2_invalid_api_key" in data["reason_codes"]
         assert "trace_id" in data
 
 
