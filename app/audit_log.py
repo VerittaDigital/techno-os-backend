@@ -26,12 +26,14 @@ def log_decision(record: DecisionRecord) -> None:
     - Serializes DecisionRecord to JSON
     - Contains only structured metadata (no raw payload)
     - One line per decision for parsing and audit analysis
+    - event_type: "decision_audit" for offline reconciliation
     
     Raises AuditLogError if logging fails (fail-closed).
     """
     try:
         # Persist to file first (fail-closed)
         record_dict = record.model_dump(mode="json")
+        record_dict["event_type"] = "decision_audit"
         append_audit_record(record_dict)
         
         # Then emit to logger

@@ -63,6 +63,7 @@ def _format_report(results, sla_s, audit_log_path, plain=False):
     status_counts = {}
     orphans = []
     inconsistent = []
+    inconclusive = []
     
     for result in results:
         status = result["status"]
@@ -72,6 +73,8 @@ def _format_report(results, sla_s, audit_log_path, plain=False):
             orphans.append(result)
         elif status == "INCONSISTENT":
             inconsistent.append(result)
+        elif status == "INCONCLUSIVE":
+            inconclusive.append(result)
     
     # Summary section
     if plain:
@@ -87,10 +90,12 @@ def _format_report(results, sla_s, audit_log_path, plain=False):
         lines.append(f"OK:                {status_counts.get('OK', 0)}")
         lines.append(f"ORPHAN_ALLOW:      {status_counts.get('ORPHAN_ALLOW', 0)}")
         lines.append(f"INCONSISTENT:      {status_counts.get('INCONSISTENT', 0)}")
+        lines.append(f"INCONCLUSIVE:      {status_counts.get('INCONCLUSIVE', 0)}")
     else:
         lines.append(f"✅ OK:              {status_counts.get('OK', 0)}")
         lines.append(f"⚠️  ORPHAN_ALLOW:    {status_counts.get('ORPHAN_ALLOW', 0)}")
         lines.append(f"🚨 INCONSISTENT:    {status_counts.get('INCONSISTENT', 0)}")
+        lines.append(f"❔ INCONCLUSIVE:    {status_counts.get('INCONCLUSIVE', 0)}")
     
     lines.append("")
     
@@ -128,6 +133,16 @@ def _format_report(results, sla_s, audit_log_path, plain=False):
             for result in inconsistent:
                 trace_id = result["trace_id"]
                 lines.append(f"   • {trace_id}")
+        
+        # Optional: list inconclusive in plain mode (operational visibility only)
+        if plain and inconclusive:
+            lines.append("")
+            lines.append("INCONCLUSIVE (age unknown or unparsable):")
+            for result in inconclusive:
+                trace_id = result["trace_id"]
+                age = result.get("age_s")
+                age_str = "unknown" if age is None else f"{age:.1f}s"
+                lines.append(f"   • {trace_id} (age: {age_str})")
         
         lines.append("")
         return "\n".join(lines), True  # Exit code 1 for problems

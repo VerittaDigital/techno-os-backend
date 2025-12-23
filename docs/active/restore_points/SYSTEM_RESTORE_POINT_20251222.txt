@@ -1,0 +1,167 @@
+================================================================================
+SYSTEM RESTORE POINT — SNAPSHOT CANÔNICO [22 DEZEMBRO 2025]
+================================================================================
+
+Data e Hora: 22 Dezembro 2025, 14:30 UTC (criação)
+Operador: Copilot Auditor (V-COF Governance)
+Modo: ARQUIVO + PONTO DE RESTAURAÇÃO (backup anterior apagado/archivado)
+
+================================================================================
+1) ESTADO DO REPOSITÓRIO
+================================================================================
+
+Branch Atual:
+snapshot/real-backend-from-stash
+
+Commit HEAD (hash completo):
+394fd5756c9593defcf7d02545e9e5999c24793d
+
+Commit HEAD (mensagem):
+RECONCILE-CLI: Add --plain mode for text-only output (no emojis)
+
+Tag Associada (descrita):
+BACKUP_PRE_BETA_20251222-11-g394fd57
+
+Working Tree Status:
+Modificado: audit.log (não-critical, local test artifacts)
+Demais arquivos: clean
+
+================================================================================
+2) INTEGRIDADE E AUDITORIA
+================================================================================
+
+Suíte de Testes (pytest):
+✅ 203 PASSED
+⏭️  3 SKIPPED (legacy MVP contract tests — esperado)
+⏱️  Runtime: 5.36s
+Status: GREEN (CI-passing)
+
+Fingerprint Registry Esperado:
+- ActionRegistry com action "process" versão 1.0.0
+- TextProcessExecutor v1.0.0 com capability TEXT_PROCESSING
+- Drift-lock via sha256_registry validado
+
+Profiles Gate:
+- DEFAULT_PROFILES com ações: AGENT.RUN, ARCONTE.SIGNAL, process
+- Fingerprinter: profiles_fingerprint_sha256() operacional
+- Matched-rules tracking: P1.5 ativado
+
+Audit Logging:
+- DecisionRecord: validação UUID + trace_id obrigatório + reason_codes
+- ActionResult: status=SUCCESS/FAILED/BLOCKED/PENDING com reason_codes
+- AuditLogError fail-closed: AUDIT_LOG_FAILED converte resultado para BLOCKED
+- Sink: append_audit_record via VERITTA_AUDIT_LOG_PATH
+
+================================================================================
+3) PROBLEMAS CONHECIDOS (sem blocking)
+================================================================================
+
+🔴 CRÍTICO (requer correção):
+  1. Event type discriminator ausente no audit.log
+     - DecisionRecord e ActionResult serializam SEM "event_type"
+     - Reconciliador offline espera "event_type": "decision_audit" ou "action_audit"
+     - RESULTADO: orphan_reconciler ignora linhas reais, ORPHAN_ALLOW não detectado
+     - LOCALIZAÇÃO: app/audit_log.py L23-36, app/action_audit_log.py L18-31
+     - TESTES AFETADOS: tests/test_reconcile_cli.py (constroem linhas COM event_type)
+
+  2. PROFILE_ACTION_MISMATCH não persiste em audit log
+     - Fluxo HTTP /process só faz logger.info() antes de HTTPException(403)
+     - Nenhum append_audit_record() ou log_action_result() emitido
+     - RESULTADO: tentativas bloqueadas não geram prova durável
+     - LOCALIZAÇÃO: app/main.py L171-189
+     - TESTE RELACIONADO: tests/test_action_mismatch.py (testa ActionResult, não fluxo HTTP)
+
+🟡 ALTO (timeout safety):
+  3. ThreadPoolExecutor orphan após timeout
+     - shutdown(wait=False) deixa thread executar em background
+     - Executor pode continuar side-effects após BLOCKED retornado
+     - LOCALIZAÇÃO: app/agentic_pipeline.py L490, L510
+
+🟠 MÉDIO (reconciliador):
+  4. Timestamp parsing não suporta RFC3339 com +HH:MM
+     - _parse_ts() aceita "Z" ou sem offset; Pydantic emite "+00:00"
+     - age_s fica None, impossibilita SLA check para ORPHAN_ALLOW
+     - LOCALIZAÇÃO: app/tools/orphan_reconciler.py L197-214
+     - TESTE RELACIONADO: tests/test_reconcile_cli.py (usa ts_utc() com "Z")
+
+================================================================================
+4) ASSETS CRÍTICOS
+================================================================================
+
+Governança:
+  ✅ Gate determinístico: app/gate_engine.py evaluate_gate() + 4 rules base
+  ✅ Router ação: app/action_router.py ACTION_REGISTRY (apenas "process" atualmente)
+  ✅ AG-03 compliance: executor versioning + capabilities em app/agentic_pipeline.py
+  ✅ Profile fingerprinting: app/gate_artifacts.py profiles_fingerprint_sha256()
+
+Segurança:
+  ✅ Auth BETA: app/auth.py require_beta_api_key() fail-closed quando VERITTA_BETA_API_KEY set
+  ✅ Payload limits: app/payload_limits.py bounded iterative checks (no unbounded recursion)
+  ✅ Privacy-first digests: app/digests.py sha256_json_or_none() (None para non-JSON)
+
+Auditoria:
+  ✅ Audit sink: app/audit_sink.py append_audit_record() JSONL fail-closed
+  ✅ Decision log: app/audit_log.py log_decision() + DecisionRecord
+  ✅ Action log: app/action_audit_log.py log_action_result() + ActionResult
+  ✅ Orphan reconciler: app/tools/orphan_reconciler.py (com desvio de formato)
+
+Pipeline:
+  ✅ Agentic pipeline: app/agentic_pipeline.py run_agentic_action() 10 etapas com fail-closed
+  ✅ Pre-audit marker: PENDING status com EXECUTION_ATTEMPT reason antes de executor rodar
+  ✅ Timeout: VERITTA_EXECUTOR_TIMEOUT_S configurável, default 10.0s
+
+API:
+  ✅ FastAPI main: app/main.py gate_request + /process endpoint
+  ✅ Health check: GET /health (ok)
+  ✅ Contracts: app/contracts/gate_v1.py GateInput/GateResult + canonical_v1.py Agent/Arconte
+
+================================================================================
+5) PRÓXIMAS AÇÕES (pós-restore)
+================================================================================
+
+FIXME (CRÍTICO):
+  → Adicionar "event_type" a DecisionRecord e ActionResult serialization
+  → Persistir ActionResult BLOCKED com PROFILE_ACTION_MISMATCH antes de 403
+  → Testar reconciliador com linhas reais (sem event_type)
+  → Normalizar timestamp parsing para RFC3339 completo
+
+NICE-TO-HAVE (MED):
+  → Cancelamento cooperativo de executores (Future.cancel())
+  → Suporte a múltiplas ações em ACTION_REGISTRY (roadmap)
+  → Métricas de latência por etapa do pipeline
+
+================================================================================
+6) CHECKSUM DE INTEGRIDADE
+================================================================================
+
+Commit hash (verificação):
+  394fd5756c9593defcf7d02545e9e5999c24793d
+
+Test count (linha de fé):
+  203 passed, 3 skipped
+
+Arquivos-chave presentes:
+  ✅ app/agentic_pipeline.py (545 líneas)
+  ✅ app/gate_engine.py (182 líneas)
+  ✅ app/main.py (189 líneas)
+  ✅ app/tools/orphan_reconciler.py (227 líneas)
+  ✅ tests/test_reconcile_cli.py (489 líneas)
+
+================================================================================
+7) INSTRUÇÕES DE RESTAURAÇÃO
+================================================================================
+
+Para restaurar para este ponto:
+  1. git checkout 394fd5756c9593defcf7d02545e9e5999c24793d
+  2. rm -f audit.log (limpar artifacts locais)
+  3. pytest tests/ -q (validar)
+
+Para preservar este backup:
+  - Este arquivo (SYSTEM_RESTORE_POINT_20251222.txt) serve como ponto de referência
+  - Commit anterior (BACKUP_PRE_BETA_REPORT.txt) foi archivado, não apagado
+  - Tag BACKUP_PRE_BETA_20251222-11-g394fd57 aponta ao commit anterior
+
+================================================================================
+ASSINADO EM: 2025-12-22T14:30:00Z
+STATUS: ✅ VÁLIDO E AUDITÁVEL
+================================================================================

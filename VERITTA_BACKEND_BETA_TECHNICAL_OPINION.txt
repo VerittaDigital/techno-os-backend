@@ -209,6 +209,23 @@ Bloco 3 — Telemetria e Evidência
   • Confirmação: configuração de handlers/arquivos de log no runtime/deploy
   • Mínimo viável: FileHandler dedicado por ambiente (ex.: logs/gate_audit.jsonl, logs/action_audit.jsonl)
 
+Reconciliação Offline — reconcile_cli
+---------------------------------------
+Definição (INCONCLUSIVE): eventos em audit.log que não permitem calcular idade (ex.: campo ts_utc ausente ou inválido). Como não há idade, não é possível aplicar SLA; portanto, INCONCLUSIVE NÃO é falha confirmada — é um alerta de confiabilidade do log.
+
+Como usar: execute o reconciliador offline para obter o resumo. Se INCONCLUSIVE > 0, rode novamente com --plain para listar trace_ids e investigar linhas problemáticas no audit.log. A semântica de exit code permanece inalterada: saída diferente de 0 ocorre apenas quando há ORPHAN_ALLOW ou INCONSISTENT.
+
+Exemplo (resumo simplificado):
+  Total traces:      3
+  OK:                2
+  ORPHAN_ALLOW:      0
+  INCONSISTENT:      0
+  INCONCLUSIVE:      1
+
+Execução (local):
+  python -m app.tools.reconcile_cli
+  python -m app.tools.reconcile_cli --plain
+
 4) CHECKLIST FINAL — PRONTO PARA INICIAR BETA
 
 [ ] Repo limpo (git status vazio)

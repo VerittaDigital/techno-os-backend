@@ -10,7 +10,7 @@ Não importa Notion. Não faz chamadas externas. Funciona 100% offline.
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -178,7 +178,10 @@ class OrphanReconciler:
                 else:
                     # ALLOW without ActionResult → potential orphan
                     age_s = result.get("age_s")
-                    if age_s is not None and age_s > self.sla_s:
+                    if age_s is None:
+                        # Inconclusive timestamp parsing → mark as INCONCLUSIVE
+                        result["status"] = "INCONCLUSIVE"
+                    elif age_s > self.sla_s:
                         result["status"] = "ORPHAN_ALLOW"
                     else:
                         # Still within SLA, mark as OK (may complete later)
@@ -196,29 +199,31 @@ class OrphanReconciler:
     @staticmethod
     def _parse_ts(ts_str: str) -> datetime:
         """
-        Parse ISO 8601 timestamp to datetime.
-        
-        Args:
-            ts_str: ISO 8601 timestamp string (e.g., "2025-12-22T15:30:45.123456Z")
-        
-        Returns:
-            datetime object in UTC
+        Parse ISO 8601 / RFC 3339 timestamp to datetime (UTC) using stdlib.
+
+        Rules:
+        - Accepts Z suffix and +/-HH:MM offsets
+        - On failure, returns None (caller treats as INCONCLUSIVE)
         """
         if not ts_str:
             return None
-        
-        # Handle both with and without Z suffix
-        ts_str = ts_str.rstrip('Z')
-        
-        # Try full datetime format first
-        for fmt in ["%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"]:
-            try:
-                dt = datetime.strptime(ts_str, fmt)
-                return dt.replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-        
-        raise ValueError(f"Cannot parse timestamp: {ts_str}")
+
+        s = ts_str.strip()
+        # Normalize Z to +00:00 for fromisoformat
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+
+        try:
+            dt = datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+        # Ensure timezone-aware; if naive, assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        # Return in UTC
+        return dt.astimezone(timezone.utc)
 
 
 def analyze_audit_log(

@@ -24,13 +24,22 @@ from app.auth import require_beta_api_key
 from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
+from app.audit_log import AuditLogError
 from app.contracts.gate_v1 import GateDecision, GateInput
 from app.decision_record import DecisionRecord, make_input_digest
 from app.digests import sha256_json_or_none
+from app.error_handler import register_error_handlers
 from app.gate_engine import evaluate_gate as evaluate_gate
+from app.middleware_trace import TraceCorrelationMiddleware
 from app.schemas import ProcessRequest, ProcessResponse
 
 app = FastAPI(title="Techno OS API", version="0.1.0")
+
+# Register middleware (T1: G6 trace correlation)
+app.add_middleware(TraceCorrelationMiddleware)
+
+# Register exception handlers (T1: G11 error normalization)
+register_error_handlers(app)
 
 
 @app.get("/health", tags=["health"])
@@ -171,16 +180,41 @@ async def process(
     # Check if action is allowed in action matrix (PROFILE_ACTION_MISMATCH)
     matrix = get_action_matrix()
     if action not in matrix.allowed_actions:
-        # Emit action_audit with BLOCKED status
-        action_audit_log = logging.getLogger("action_audit")
-        action_audit_log.info(
-            json.dumps({
-                "status": "BLOCKED",
-                "action": action,
-                "reason_codes": ["PROFILE_ACTION_MISMATCH"],
-                "trace_id": trace_id,
-            })
+        # Persist PROFILE_ACTION_MISMATCH ActionResult BLOCKED before returning 403
+        from datetime import datetime, timezone
+        from app.action_contracts import ActionResult
+        
+        mismatch_result = ActionResult(
+            action=action,
+            executor_id="unknown",
+            executor_version="unknown",
+            status="BLOCKED",
+            reason_codes=["PROFILE_ACTION_MISMATCH"],
+            input_digest="",
+            output_digest=None,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
         )
+        try:
+            log_action_result(mismatch_result)
+        except AuditLogError:
+            # Audit logging failed — emit BLOCKED with AUDIT_LOG_FAILED marker (best effort)
+            fallback_result = ActionResult(
+                action=action,
+                executor_id="unknown",
+                executor_version="unknown",
+                status="BLOCKED",
+                reason_codes=["PROFILE_ACTION_MISMATCH", "AUDIT_LOG_FAILED"],
+                input_digest="",
+                output_digest=None,
+                trace_id=trace_id,
+                ts_utc=datetime.now(timezone.utc),
+            )
+            try:
+                log_action_result(fallback_result)
+            except AuditLogError:
+                pass  # Last resort: logging is completely down
+        
         raise HTTPException(status_code=403, detail="Action not allowed in profile")
 
     # Run pipeline
