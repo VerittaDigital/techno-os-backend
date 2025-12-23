@@ -63,71 +63,107 @@ class CompositeExecutorV1(Executor):
         self.version = "1.0.0"
         self.capabilities: list[str] = []
         # conservative limits; not used by pipeline but for local checks
-        self.limits = ExecutorLimits(timeout_ms=5000, max_payload_bytes=32768, max_depth=20, max_list_items=1000)
+        # Ensure pipeline does not pre-block composite runs; composite enforces global limits itself
+        self.limits = ExecutorLimits(timeout_ms=5000, max_payload_bytes=10_000_000, max_depth=20, max_list_items=1000)
 
     def execute(self, req: ActionRequest) -> Any:
         try:
             payload = CompositePayload.model_validate(req.payload)
         except ValidationError:
-            raise ValueError("COMPOSITE_VALIDATION")
+            raise ValueError("PLAN_VALIDATION")
 
-        # Load limits and privacy
+        # Pre-run: compute plan digest and enforce global plan limits
+        try:
+            plan_obj = req.payload.get("plan")
+            plan_digest = sha256_json_or_none(plan_obj) or ""
+            declared_plan_canonical = _canonical_json(plan_obj)
+            declared_input_canonical = _canonical_json(req.payload.get("input"))
+        except Exception:
+            raise ValueError("PLAN_VALIDATION")
+
+        # Defaults
         max_steps = 8
-        max_payload_bytes = 32768
+        max_total_payload_bytes = 65536
+        max_llm_calls = None
         if payload.limits:
             max_steps = int(payload.limits.get("max_steps", max_steps))
-            max_payload_bytes = int(payload.limits.get("max_payload_bytes", max_payload_bytes))
+            max_total_payload_bytes = int(payload.limits.get("max_total_payload_bytes", max_total_payload_bytes))
+            max_llm_calls = payload.limits.get("max_llm_calls")
 
+        # Validate declared sizes
+        declared_bytes = len((declared_plan_canonical + declared_input_canonical).encode("utf-8"))
+        if declared_bytes > max_total_payload_bytes:
+            raise ValueError("PLAN_VALIDATION")
+
+        # Count declared LLM calls by resolving executors (capabilities or id)
+        declared_llm_calls = 0
+        for s in payload.plan.steps:
+            try:
+                exe = get_executor(s.executor_id)
+                caps = getattr(exe, "capabilities", []) or []
+                # case-insensitive match for LLM capability
+                if any(str(c).upper() == "LLM" for c in caps) or str(s.executor_id).startswith("llm_executor"):
+                    declared_llm_calls += 1
+            except Exception:
+                # If executor can't be resolved, treat as validation failure
+                raise ValueError("PLAN_VALIDATION")
+
+        if max_llm_calls is not None and declared_llm_calls > int(max_llm_calls):
+            raise ValueError("PLAN_VALIDATION")
+
+        # Validate steps count
+        steps = payload.plan.steps
+        if not steps or len(steps) == 0:
+            raise ValueError("PLAN_VALIDATION")
+        if len(steps) > max_steps:
+            raise ValueError("PLAN_VALIDATION")
+
+        # Validate each step input serializability and min_executor_version BEFORE running any step
+        for step in steps:
+            try:
+                _ = _canonical_json(step.input)
+            except Exception:
+                raise ValueError("PLAN_VALIDATION")
+
+            if step.min_executor_version:
+                try:
+                    exe = get_executor(step.executor_id)
+                    from packaging.version import Version
+
+                    reg_ver = Version(getattr(exe, "version", "0.0.0"))
+                    needed = Version(step.min_executor_version)
+                    if reg_ver < needed:
+                        raise ValueError("PLAN_VALIDATION")
+                except Exception:
+                    raise ValueError("PLAN_VALIDATION")
+
+        # Privacy sanitization keys
         strip_keys = ["prompt", "raw_prompt", "messages", "input", "context", "payload"]
         if payload.privacy and isinstance(payload.privacy.get("strip_keys"), list):
             strip_keys = payload.privacy.get("strip_keys")
 
-        steps = payload.plan.steps
-        if not steps or len(steps) == 0:
-            raise ValueError("COMPOSITE_VALIDATION")
-        if len(steps) > max_steps:
-            raise ValueError("COMPOSITE_VALIDATION")
-
         # initial current payload
         current_payload: Any = payload.input
 
-        # validate initial payload size
+        # validate initial payload size (runtime check)
         try:
             initial_bytes = _bytes_of(current_payload)
         except Exception:
-            raise ValueError("COMPOSITE_VALIDATION")
-        if initial_bytes > max_payload_bytes:
-            raise ValueError("COMPOSITE_VALIDATION")
+            raise ValueError("PLAN_VALIDATION")
+        if initial_bytes > max_total_payload_bytes:
+            raise ValueError("PLAN_VALIDATION")
 
         steps_out: List[Dict[str, Any]] = []
 
         for step in steps:
-            # Validate step input serializability
-            try:
-                _ = _canonical_json(step.input)
-            except Exception:
-                raise ValueError("COMPOSITE_VALIDATION")
-
             # Resolve executor
             try:
                 executor = get_executor(step.executor_id)
             except Exception:
-                raise ValueError("COMPOSITE_VALIDATION")
-
-            # Check min_executor_version
-            if step.min_executor_version:
-                try:
-                    reg_ver = Version(getattr(executor, "version", "0.0.0"))
-                    needed = Version(step.min_executor_version)
-                    if reg_ver < needed:
-                        raise ValueError("COMPOSITE_VALIDATION")
-                except InvalidVersion:
-                    raise ValueError("COMPOSITE_VALIDATION")
+                raise ValueError("PLAN_VALIDATION")
 
             # Build action request for the step
             step_input = step.input
-            # Compose context: current_payload + step_input under 'input' if necessary
-            # For isolation we pass step_input as payload to the executor
             action_req = ActionRequest(action=step.name, payload=step_input, trace_id=req.trace_id)
 
             # Execute step (fail-closed semantics)
@@ -156,16 +192,16 @@ class CompositeExecutorV1(Executor):
                 current_payload = step_output_sanitized
             elif step.merge == "merge_under":
                 if not step.output_key:
-                    raise ValueError("COMPOSITE_VALIDATION")
+                    raise ValueError("PLAN_VALIDATION")
                 if not isinstance(current_payload, dict):
-                    raise ValueError("COMPOSITE_VALIDATION")
+                    raise ValueError("PLAN_VALIDATION")
                 current_payload = dict(current_payload)
                 current_payload[step.output_key] = step_output_sanitized
             elif step.merge == "append_results":
                 if not step.output_key:
-                    raise ValueError("COMPOSITE_VALIDATION")
+                    raise ValueError("PLAN_VALIDATION")
                 if not isinstance(current_payload, dict):
-                    raise ValueError("COMPOSITE_VALIDATION")
+                    raise ValueError("PLAN_VALIDATION")
                 current_payload = dict(current_payload)
                 existing = current_payload.get(step.output_key)
                 if existing is None:
@@ -176,15 +212,15 @@ class CompositeExecutorV1(Executor):
                     # convert to list
                     current_payload[step.output_key] = [existing, step_output_sanitized]
             else:
-                raise ValueError("COMPOSITE_VALIDATION")
+                raise ValueError("PLAN_VALIDATION")
 
-            # Validate payload size after merge
+            # Validate payload size after merge (runtime enforcement against global limit)
             try:
                 cur_bytes = _bytes_of(current_payload)
             except Exception:
-                raise ValueError("COMPOSITE_VALIDATION")
-            if cur_bytes > max_payload_bytes:
-                raise ValueError("COMPOSITE_VALIDATION")
+                raise ValueError("PLAN_VALIDATION")
+            if cur_bytes > max_total_payload_bytes:
+                raise ValueError("PLAN_VALIDATION")
 
             steps_out.append({
                 "name": step.name,
@@ -203,6 +239,7 @@ class CompositeExecutorV1(Executor):
         result_bytes = len(result_canonical.encode("utf-8"))
 
         composite_out = {
+            "plan": {"digest": plan_digest or "", "steps_declared": len(steps), "llm_calls_declared": declared_llm_calls},
             "composite": {"executor_id": self.executor_id, "version": self.version, "steps_executed": len(steps_out)},
             "steps": steps_out,
             "result": current_payload,
