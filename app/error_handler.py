@@ -58,7 +58,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle FastAPI HTTPException."""
     trace_id = _get_trace_id_from_request(request)
     
-    # Determine error code from detail
+    # If detail is already a dict with error envelope, use it directly
+    if isinstance(exc.detail, dict) and "error" in exc.detail and "trace_id" in exc.detail:
+        response = JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail,
+        )
+        response.headers["X-TRACE-ID"] = trace_id
+        return response
+    
+    # Otherwise, build normalized error envelope
     error_code = str(exc.detail) if exc.detail else "http_error"
     
     # Map common status codes to error codes
