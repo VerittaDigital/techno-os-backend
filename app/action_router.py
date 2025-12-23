@@ -12,6 +12,7 @@ ACTION_REGISTRY: dict[str, str] = {
     "noop": "noop_executor_v1",
     "rule_evaluate": "rule_evaluator_v1",
     "llm_generate": "llm_executor_v1",
+    "composite_run": "composite_executor_v1",
 }
 
 
