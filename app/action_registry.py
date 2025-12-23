@@ -102,6 +102,13 @@ def get_action_registry() -> ActionRegistry:
                 "required_capabilities": [],
                 "min_executor_version": "1.0.0",
             },
+            "llm_generate": {
+                "description": "Governed LLM generation",
+                "executor": "llm_executor_v1",
+                "action_version": "1.0.0",
+                "required_capabilities": [],
+                "min_executor_version": "1.0.0",
+            },
         }
     )
 

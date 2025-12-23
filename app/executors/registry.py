@@ -12,6 +12,7 @@ from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
 from app.executors.noop_executor_v1 import NoopExecutorV1
 from app.executors.rule_evaluator_v1 import RuleEvaluatorV1
+from app.executors.llm_executor_v1 import LLMExecutorV1
 
 
 
@@ -60,6 +61,7 @@ _EXECUTORS: dict[str, Executor] = {
     "text_process_v1": TextProcessExecutorV1(),
     "noop_executor_v1": NoopExecutorV1(),
     "rule_evaluator_v1": RuleEvaluatorV1(),
+    "llm_executor_v1": LLMExecutorV1(),
 }
 
 # Thread-safe lock for executor registry access
