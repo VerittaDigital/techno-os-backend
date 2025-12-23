@@ -67,23 +67,48 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     trace_id = str(uuid4())
     request.state.trace_id = trace_id
     
+    # G0: Check if VERITTA_BETA_API_KEY is configured (mandatory)
+    from app.gate_artifacts import profiles_fingerprint_sha256
+    expected_key = os.getenv("VERITTA_BETA_API_KEY")
+    if not expected_key or not expected_key.strip():
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="G0",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=["Authentication must be configured"],
+            reason_codes=["G0_auth_not_configured"],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise HTTPException(status_code=500, detail={
+            "error": "internal_error",
+            "message": "Authentication not configured",
+            "trace_id": trace_id,
+            "reason_codes": ["G0_auth_not_configured"],
+        })
+    
     # T2: G0 Feature flag routing — detect auth mode
     auth_mode = detect_auth_mode(request)
     
     # If no auth header present at all, fail with 401 missing_authorization
     if auth_mode is None:
-        from app.gate_artifacts import profiles_fingerprint_sha256
         decision_record = DecisionRecord(
             decision="DENY",
-            profile_id="default",
+            profile_id="G0",
             profile_hash=profiles_fingerprint_sha256(),
-            matched_rules=[],
+            matched_rules=["Authorization header required"],
             reason_codes=["AUTH_MISSING_AUTHORIZATION"],
             input_digest=None,  # Body not read yet
             trace_id=trace_id,
         )
         log_decision(decision_record)  # Persist audit (fail-closed)
-        raise HTTPException(status_code=401, detail="missing_authorization")
+        raise HTTPException(status_code=401, detail={
+            "error": "unauthorized",
+            "message": "missing_authorization",
+            "trace_id": trace_id,
+            "reason_codes": ["AUTH_MISSING_AUTHORIZATION"],
+        })
     
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode

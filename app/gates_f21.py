@@ -74,86 +74,52 @@ async def run_f21_chain(
     # G0_F21: Check X-API-Key header presence
     api_key = request.headers.get("X-API-Key", "").strip()
     if not api_key:
-        # No X-API-Key provided
-        # If env var is set, this is an error (fail-closed)
-        # If env var is not set, allow for backward compatibility
-        expected_key = os.getenv("VERITTA_BETA_API_KEY")
-        if expected_key:
-            # Env var is set, missing header is error
-            decision = "DENY"
-            reason_codes = ["G0_F21_missing_token"]
-            matched_rules = ["X-API-Key header required"]
-            log_decision(
-                DecisionRecord(
-                    decision=decision,
-                    profile_id="G0_F21",
-                    profile_hash=profile_hash or "",
-                    matched_rules=matched_rules,
-                    reason_codes=reason_codes,
-                    input_digest="",
-                    trace_id=trace_id,
-                    ts_utc=ts,
-                )
+        decision = "DENY"
+        reason_codes = ["G0_F21_missing_token"]
+        matched_rules = ["X-API-Key header required"]
+        log_decision(
+            DecisionRecord(
+                decision=decision,
+                profile_id="G0_F21",
+                profile_hash=profile_hash or "",
+                matched_rules=matched_rules,
+                reason_codes=reason_codes,
+                input_digest="",
+                trace_id=trace_id,
+                ts_utc=ts,
             )
-            raise HTTPException(status_code=401, detail={
-                "error": "unauthorized",
-                "message": "X-API-Key header missing",
-                "trace_id": trace_id,
-                "reason_codes": reason_codes,
-            })
-        else:
-            # Env var not set, allow backward compat (no auth required)
-            api_key = None
+        )
+        raise HTTPException(status_code=401, detail={
+            "error": "unauthorized",
+            "message": "X-API-Key header missing",
+            "trace_id": trace_id,
+            "reason_codes": reason_codes,
+        })
     
-    # G2: API key validation (FAIL-CLOSED only when env var is set)
+    # G2: API key validation (fail-closed)
     expected_key = os.getenv("VERITTA_BETA_API_KEY")
-    if expected_key:
-        # Auth is configured: fail-closed on missing/invalid key
-        if not api_key:
-            decision = "DENY"
-            reason_codes = ["G0_F21_missing_token"]
-            matched_rules = ["X-API-Key header required"]
-            log_decision(
-                DecisionRecord(
-                    decision=decision,
-                    profile_id="G0_F21",
-                    profile_hash=profile_hash or "",
-                    matched_rules=matched_rules,
-                    reason_codes=reason_codes,
-                    input_digest="",
-                    trace_id=trace_id,
-                    ts_utc=ts,
-                )
+    if api_key != expected_key:
+        decision = "DENY"
+        reason_codes = ["G2_invalid_api_key"]
+        matched_rules = ["API key mismatch"]
+        log_decision(
+            DecisionRecord(
+                decision=decision,
+                profile_id="G2",
+                profile_hash=profile_hash or "",
+                matched_rules=matched_rules,
+                reason_codes=reason_codes,
+                input_digest="",
+                trace_id=trace_id,
+                ts_utc=ts,
             )
-            raise HTTPException(status_code=401, detail={
-                "error": "unauthorized",
-                "message": "X-API-Key header missing",
-                "trace_id": trace_id,
-                "reason_codes": reason_codes,
-            })
-        
-        if api_key != expected_key:
-            decision = "DENY"
-            reason_codes = ["G2_invalid_api_key"]
-            matched_rules = ["API key mismatch"]
-            log_decision(
-                DecisionRecord(
-                    decision=decision,
-                    profile_id="G2",
-                    profile_hash=profile_hash or "",
-                    matched_rules=matched_rules,
-                    reason_codes=reason_codes,
-                    input_digest="",
-                    trace_id=trace_id,
-                    ts_utc=ts,
-                )
-            )
-            raise HTTPException(status_code=403, detail={
-                "error": "forbidden",
-                "message": "API key invalid",
-                "trace_id": trace_id,
-                "reason_codes": reason_codes,
-            })
+        )
+        raise HTTPException(status_code=401, detail={
+            "error": "unauthorized",
+            "message": "API key invalid",
+            "trace_id": trace_id,
+            "reason_codes": reason_codes,
+        })
     
     # G7: Payload validation (limits + forbidden fields)
     # Check forbidden fields first (fail-closed)
