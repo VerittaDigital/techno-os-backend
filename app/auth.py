@@ -1,19 +1,22 @@
 """
 Beta minimal authentication module.
 
-Implements fail-closed API key validation via X-API-Key header.
+Implements fail-closed API key validation via X-API-Key header (F2.1).
+Detects Authorization header for future F2.3 Bearer token support (G0).
 
 Auth behavior:
 - If VERITTA_BETA_API_KEY env var is set and non-empty: require valid key (fail-closed)
 - If VERITTA_BETA_API_KEY is not set or empty: auth is optional (backward-compatible for tests)
 
-This allows gradual adoption: existing tests work without modification, and beta tests
-can enforce auth by setting the env var.
+G0 Auth mode detection:
+- Authorization header present (Bearer token) => F2.3 mode
+- X-API-Key header present => F2.1 mode
+- Neither present => missing_authorization error
 """
 
 import os
-from typing import Optional
-from fastapi import Header, HTTPException
+from typing import Literal, Optional
+from fastapi import Header, HTTPException, Request
 
 
 def get_expected_beta_key() -> Optional[str]:
@@ -53,3 +56,28 @@ def require_beta_api_key(x_api_key: Optional[str] = Header(None)) -> None:
             status_code=401,
             detail="Unauthorized"
         )
+
+
+def detect_auth_mode(request: Request) -> Optional[Literal["F2.3", "F2.1"]]:
+    """Detect auth mode from request headers (G0).
+    
+    Returns:
+        "F2.3" if Authorization header present (Bearer token)
+        "F2.1" if X-API-Key header present
+        None if neither header present
+    
+    Does NOT validate Bearer format or API key value yet.
+    This is runtime detection only; validation happens downstream.
+    """
+    # Check for F2.3 Bearer token
+    authorization = request.headers.get("Authorization")
+    if authorization:
+        return "F2.3"
+    
+    # Check for F2.1 API key
+    x_api_key = request.headers.get("X-API-Key")
+    if x_api_key:
+        return "F2.1"
+    
+    # Neither header present
+    return None

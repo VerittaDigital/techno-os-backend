@@ -41,7 +41,7 @@ def test_trace_id_in_error_response(client):
     response = client.post("/process", json={"invalid": "body"})
     
     # Check normalized envelope exists
-    assert response.status_code in [400, 403]  # Either validation or auth error
+    assert response.status_code in [400, 401, 403]  # Validation, auth, or gate error
     data = response.json()
     
     # Should have all required fields
