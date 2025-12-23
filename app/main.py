@@ -17,7 +17,7 @@ import logging
 import uuid
 from typing import Any, Dict
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 
 from app.agentic_pipeline import run_agentic_action
 from app.auth import require_beta_api_key, detect_auth_mode
@@ -32,6 +32,7 @@ from app.error_handler import register_error_handlers
 from app.gate_engine import evaluate_gate as evaluate_gate
 from app.middleware_trace import TraceCorrelationMiddleware
 from app.schemas import ProcessRequest, ProcessResponse
+from app.gates_f21 import run_f21_chain
 
 app = FastAPI(title="Techno OS API", version="0.1.0")
 
@@ -48,18 +49,22 @@ def health():
     return {"status": "ok"}
 
 
-async def gate_request(request: Request) -> Dict[str, Any]:
+async def gate_request(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     """Dependency that validates via gate and emits gate_audit.
     
     T2: G0 Auth mode detection.
+    T3: F2.1 chain execution.
     - Detect auth mode (F2.3 Bearer vs F2.1 X-API-Key)
-    - Block F2.3 temporarily (501 not implemented until gates complete)
+    - Run F2.1 chain if X-API-Key
+    - Block F2.3 temporarily (501) until T4
     - Store auth_mode in request.state for downstream
     """
     import hashlib
     import os
+    from uuid import uuid4
     
-    trace_id = str(uuid.uuid4())
+    trace_id = str(uuid4())
+    request.state.trace_id = trace_id
     
     # T2: G0 Feature flag routing — detect auth mode
     auth_mode = detect_auth_mode(request)
@@ -82,7 +87,7 @@ async def gate_request(request: Request) -> Dict[str, Any]:
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # T2: G0 Temporary block on F2.3 (Bearer tokens) until gates land
+    # T4: G0 Temporary block on F2.3 (Bearer tokens) until gates land (will be removed in T4)
     if auth_mode == "F2.3":
         from app.gate_artifacts import profiles_fingerprint_sha256
         decision_record = DecisionRecord(
@@ -97,124 +102,35 @@ async def gate_request(request: Request) -> Dict[str, Any]:
         log_decision(decision_record)
         raise HTTPException(status_code=501, detail="f23_not_implemented")
     
-    # Continue with F2.1 flow (X-API-Key validation)
-
-    # Step 1: Auth check (before reading body)
-    expected_key = os.environ.get("VERITTA_BETA_API_KEY")
-    if expected_key:  # Auth is required only if env var is set
-        x_api_key = request.headers.get("X-API-Key")
-        
-        if x_api_key is None:
-            # Missing key: log DENY with AUTH_MISSING_KEY
-            from app.gate_artifacts import profiles_fingerprint_sha256
-            decision_record = DecisionRecord(
-                decision="DENY",
-                profile_id="default",
-                profile_hash=profiles_fingerprint_sha256(),
-                matched_rules=[],
-                reason_codes=["AUTH_MISSING_KEY"],
-                input_digest=None,  # Body not read yet
-                trace_id=trace_id,
-            )
-            log_decision(decision_record)  # Persist audit (fail-closed)
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        if x_api_key != expected_key:
-            # Invalid key: log DENY with AUTH_INVALID_KEY
-            from app.gate_artifacts import profiles_fingerprint_sha256
-            decision_record = DecisionRecord(
-                decision="DENY",
-                profile_id="default",
-                profile_hash=profiles_fingerprint_sha256(),
-                matched_rules=[],
-                reason_codes=["AUTH_INVALID_KEY"],
-                input_digest=None,  # Body not read yet
-                trace_id=trace_id,
-            )
-            log_decision(decision_record)  # Persist audit (fail-closed)
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # Step 2: Read body (only after auth passes)
+    # T3: F2.1 chain execution for X-API-Key
+    # Step 1: Read body
     try:
         body = await request.json()
     except (json.JSONDecodeError, ValueError):
         body = {}
-
+    
     action = "process"
     
     # Compute input digest using canonical rule (None for non-JSON, privacy-first)
     input_digest = sha256_json_or_none(body)
-
-    # Build gate input and evaluate
-    try:
-        gate_input = GateInput(
-            action=action,
-            payload=body,
-            allow_external=False,
-            deny_unknown_fields=False,
-        )
-        gate_result = evaluate_gate(gate_input)
-        gate_decision = gate_result.decision.value
-        gate_exception = None
-    except Exception as exc:
-        # Gate exception: treat as denial with GATE_EXCEPTION reason
-        gate_decision = "DENY"
-        gate_exception = str(exc)
-        gate_result = None
-
-    # Log decision
-    reason_codes = []
-    if gate_decision == "DENY":
-        if gate_exception:
-            # If gate raised exception, use GATE_EXCEPTION
-            reason_codes = ["GATE_EXCEPTION"]
-        elif gate_result and gate_result.reasons:
-            reason_codes = [r.code.value for r in gate_result.reasons]
-        if not reason_codes:
-            reason_codes = ["UNKNOWN_DENIAL"]
     
-    # P1.5: Extract profile_hash and matched_rules from gate_result
-    # Fail-closed: if gate_result is None (exception), use placeholder profile_hash
-    if gate_result:
-        profile_hash = gate_result.profile_hash
-        matched_rules = gate_result.matched_rules
-    else:
-        # Gate exception case: compute default profile_hash
-        from app.gate_artifacts import profiles_fingerprint_sha256
-        profile_hash = profiles_fingerprint_sha256()
-        matched_rules = ["GATE_EXCEPTION"]
-    
-    decision_record = DecisionRecord(
-        decision=gate_decision,
-        profile_id="default",
-        profile_hash=profile_hash,  # ← P1.5: Now from gate_result (never empty)
-        matched_rules=matched_rules,  # ← P1.5: Now from gate_result
-        reason_codes=reason_codes,
-        input_digest=input_digest,
+    # Step 2: Run F2.1 chain (gates G0_F21, G2, G7, G8, G10, G12)
+    # This will raise HTTPException (with audit-before-raise) if any gate fails
+    payload, decision = await run_f21_chain(
+        request=request,
+        body=body,
+        action=action,
         trace_id=trace_id,
+        background_tasks=background_tasks,
     )
-    log_decision(decision_record)
-
-    # Emit gate_audit
-    gate_audit_log = logging.getLogger("gate_audit")
-    gate_audit_log.info(
-        json.dumps({
-            "decision": gate_decision,
-            "action": action,
-            "trace_id": trace_id,
-        })
-    )
-
-    # If denied, raise 403
-    if gate_decision == "DENY":
-        raise HTTPException(status_code=403, detail="Gate denied request")
-
-    return {"payload": body, "action": action, "trace_id": trace_id}
+    
+    return {"payload": payload, "action": action, "trace_id": trace_id}
 
 
 @app.post("/process", tags=["processing"])
 async def process(
     gate_data: Dict[str, Any] = Depends(gate_request),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """Process action with gate + pipeline."""
     payload = gate_data.get("payload", {})
