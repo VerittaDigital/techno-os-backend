@@ -9,6 +9,7 @@ import logging
 
 from app.audit_sink import append_audit_record
 from app.decision_record import DecisionRecord
+from app.gate_artifacts import profiles_fingerprint_sha256
 
 
 class AuditLogError(Exception):
@@ -33,6 +34,12 @@ def log_decision(record: DecisionRecord) -> None:
     try:
         # Persist to file first (fail-closed)
         record_dict = record.model_dump(mode="json")
+        
+        # P1.1: Enforce non-empty profile_hash in persisted record
+        ph = record_dict.get("profile_hash")
+        if ph is None or (isinstance(ph, str) and not ph.strip()):
+            record_dict["profile_hash"] = profiles_fingerprint_sha256()
+        
         record_dict["event_type"] = "decision_audit"
         append_audit_record(record_dict)
         
