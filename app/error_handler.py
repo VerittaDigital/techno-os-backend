@@ -16,32 +16,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.error_envelope import http_error_detail
+
 logger = logging.getLogger(__name__)
 
-
-def build_error(
-    error: str,
-    message: str,
-    trace_id: str,
-    reason_codes: list[str] | None = None,
-) -> dict:
-    """Build normalized error envelope.
-    
-    Args:
-        error: Error code/category (e.g., "missing_authorization")
-        message: User-friendly message (must not contain secrets)
-        trace_id: Request trace ID
-        reason_codes: List of reason codes for audit (optional)
-    
-    Returns:
-        Dict with error envelope
-    """
-    return {
-        "error": error,
-        "message": message,
-        "trace_id": trace_id,
-        "reason_codes": reason_codes or [],
-    }
 
 
 def _get_trace_id_from_request(request: Request) -> str:
@@ -78,7 +56,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     elif exc.status_code == 404:
         error_code = error_code if error_code != "Not Found" else "not_found"
     
-    error_envelope = build_error(
+    error_envelope = http_error_detail(
         error=error_code,
         message=str(exc.detail) if exc.detail else "An error occurred",
         trace_id=trace_id,
@@ -97,11 +75,11 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
     """Handle Pydantic/FastAPI validation errors."""
     trace_id = _get_trace_id_from_request(request)
     
-    error_envelope = build_error(
+    error_envelope = http_error_detail(
         error="invalid_request_shape",
         message="Request validation failed",
         trace_id=trace_id,
-        reason_codes=["pydantic_validation_error"],
+        reason_codes=["P2_request_validation_error"],
     )
     
     response = JSONResponse(
@@ -122,7 +100,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
         exc_info=exc,
     )
     
-    error_envelope = build_error(
+    error_envelope = http_error_detail(
         error="internal_error",
         message="An internal error occurred",
         trace_id=trace_id,

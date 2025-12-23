@@ -15,6 +15,7 @@ Endpoint POST /process:
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
@@ -114,11 +115,34 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # Step 1: Read body
+    # Step 1: Read body (fail-closed on invalid JSON)
+    from app.gate_artifacts import profiles_fingerprint_sha256
     try:
         body = await request.json()
-    except (json.JSONDecodeError, ValueError):
-        body = {}
+    except (json.JSONDecodeError, ValueError) as e:
+        # Invalid JSON: log denial with profile_hash + reason code, then raise with envelope
+        decision = "DENY"
+        reason_codes = ["P2_invalid_json"]
+        matched_rules = ["Request body is not valid JSON"]
+        
+        decision_record = DecisionRecord(
+            decision=decision,
+            profile_id="G7",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=matched_rules,
+            reason_codes=reason_codes,
+            input_digest=None,
+            trace_id=trace_id,
+            ts_utc=datetime.now(timezone.utc),
+        )
+        log_decision(decision_record)
+        
+        raise HTTPException(status_code=400, detail=http_error_detail(
+            error="bad_request",
+            message="Request body is not valid JSON",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
     
     action = "process"
     
