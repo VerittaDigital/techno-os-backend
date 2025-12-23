@@ -88,6 +88,20 @@ def get_action_registry() -> ActionRegistry:
                 "required_capabilities": ["TEXT_PROCESSING"],
                 "min_executor_version": "1.0.0",
             },
+                "rule_evaluate": {
+                    "description": "Deterministic rule evaluation executor",
+                    "executor": "rule_evaluator_v1",
+                    "action_version": "1.0.0",
+                    "required_capabilities": [],
+                    "min_executor_version": "1.0.0",
+                },
+            "noop": {
+                "description": "No-operation action for testing pipeline",
+                "executor": "noop_executor_v1",
+                "action_version": "1.0.0",
+                "required_capabilities": [],
+                "min_executor_version": "1.0.0",
+            },
         }
     )
 

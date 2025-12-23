@@ -10,6 +10,8 @@ from typing import Any
 
 from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
+from app.executors.noop_executor_v1 import NoopExecutorV1
+from app.executors.rule_evaluator_v1 import RuleEvaluatorV1
 
 
 
@@ -56,6 +58,8 @@ class TextProcessExecutorV1:
 # Executor registry: executor_id -> Executor instance
 _EXECUTORS: dict[str, Executor] = {
     "text_process_v1": TextProcessExecutorV1(),
+    "noop_executor_v1": NoopExecutorV1(),
+    "rule_evaluator_v1": RuleEvaluatorV1(),
 }
 
 # Thread-safe lock for executor registry access
