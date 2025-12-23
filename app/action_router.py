@@ -9,6 +9,8 @@ from __future__ import annotations
 # Changes to this registry affect execution routing and MUST be audited.
 ACTION_REGISTRY: dict[str, str] = {
     "process": "text_process_v1",
+    "noop": "noop_executor_v1",
+    "rule_evaluate": "rule_evaluator_v1",
 }
 
 
