@@ -220,3 +220,38 @@ class TestF21ChainErrorEnvelope:
         data = response.json()
         assert "trace_id" in data
         assert len(data["trace_id"]) == 36  # UUID format
+
+
+class TestP2InvalidJSON:
+    """Test P2 handling of invalid JSON (fail-closed with audit)."""
+    
+    def test_invalid_json_returns_400_with_audit(self, monkeypatch):
+        """Invalid JSON body should return 400 + reason_codes includes P2_invalid_json."""
+        monkeypatch.setenv("VERITTA_BETA_API_KEY", "sk_test_abc123")
+        get_rate_limiter().reset_all()
+        
+        # Send invalid JSON (malformed)
+        response = client.post(
+            "/process",
+            content="{broken json",  # Invalid JSON
+            headers={
+                "X-API-Key": "sk_test_abc123",
+                "Content-Type": "application/json",
+            },
+        )
+        
+        # Should return 400 bad_request
+        assert response.status_code == 400
+        data = response.json()
+        
+        # Check envelope structure
+        assert "error" in data
+        assert "message" in data
+        assert "trace_id" in data
+        assert "reason_codes" in data
+        
+        # Check specific values
+        assert data["error"] == "bad_request"
+        assert "P2_invalid_json" in data["reason_codes"]
+        assert "trace_id" in data
+        assert len(data["trace_id"]) == 36  # UUID format
