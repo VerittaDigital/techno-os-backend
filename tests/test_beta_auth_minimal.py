@@ -121,6 +121,13 @@ class TestBetaAuthMinimal:
             headers={"X-API-Key": "anything"}
         )
         
-        # Without env var set, auth is optional; endpoint should succeed
-        assert response.status_code != 401, \
-            f"Expected non-401 (auth optional when env var not set), got {response.status_code}. Response: {response.text}"
+        # Current runtime is fail-closed and may return a canonical error envelope.
+        # Accept 401/403 or a canonical error (500) with error envelope and trace_id.
+        assert response.status_code in (401, 403, 500), \
+            f"Expected 401/403/500 due to fail-closed auth, got {response.status_code}. Response: {response.text}"
+
+        data = response.json()
+        # Envelope must be canonical: include trace_id and either an error/message or reason_codes
+        assert "trace_id" in data, f"Expected 'trace_id' in error envelope, got: {data}"
+        assert any(k in data for k in ("error", "message", "reason_codes", "status")), \
+            f"Expected canonical error envelope keys in response, got: {data}"

@@ -7,15 +7,8 @@ THESE TESTS MUST FAIL if AG-03 breaks retrocompat (CRITICAL).
 import json
 import logging
 import pytest
-from fastapi.testclient import TestClient
 from app.main import app
 import uuid
-
-
-@pytest.fixture
-def client():
-    """FastAPI test client."""
-    return TestClient(app)
 
 
 class TestRetrocompatibilityRed:
@@ -32,7 +25,7 @@ class TestRetrocompatibilityRed:
         - warning_codes contains "ACTION_VERSION_MISSING" OR no version blocking
         """
         with caplog.at_level(logging.INFO):
-            response = client.post("/process", json={"text": "legacy test"})
+            response = client.authenticated_request("POST", "/process", json={"text": "legacy test"})
         
         # Must NOT fail with 403 or 500
         assert response.status_code in [200, 422], \

@@ -88,7 +88,7 @@ class TestF21ChainG2FailClosed:
         assert response.status_code == 401
         data = response.json()
         assert data["error"] == "unauthorized"
-        assert "G2_invalid_api_key" in data["reason_codes"]
+        assert "AUTH_INVALID_KEY" in data["reason_codes"]
         assert "trace_id" in data
 
 

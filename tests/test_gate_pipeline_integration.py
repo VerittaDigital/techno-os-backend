@@ -10,12 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-
-
-@pytest.fixture
-def client():
-    """FastAPI test client."""
-    return TestClient(app)
+# NOTE: client fixture comes from conftest.py
 
 
 class TestGateDenyPreventsExecution:
@@ -24,7 +19,7 @@ class TestGateDenyPreventsExecution:
     def test_gate_deny_no_action_audit(self, client, caplog):
         """When gate denies, action_audit MUST NOT be emitted."""
         # Force gate to deny
-        with patch("app.main.evaluate_gate") as mock_gate:
+        with patch("app.gate_engine.evaluate_gate") as mock_gate:
             from app.contracts.gate_v1 import GateDecision, GateResult
 
             mock_result = GateResult(
@@ -38,7 +33,7 @@ class TestGateDenyPreventsExecution:
             mock_gate.return_value = mock_result
 
             with caplog.at_level(logging.INFO):
-                response = client.post("/process", json={"text": "should deny"})
+                response = client.post("/process", json={"text": "should deny"}, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
 
             assert response.status_code == 403
 
@@ -59,7 +54,7 @@ class TestGateAllowThenExecute:
     def test_gate_allow_produces_both_audits(self, client, caplog):
         """Gate ALLOW produces gate_audit + action_audit (PENDING + SUCCESS)."""
         with caplog.at_level(logging.INFO):
-            response = client.post("/process", json={"text": "hello"})
+            response = client.authenticated_request("POST", "/process", json={"text": "hello"})
 
         assert response.status_code == 200
 
@@ -87,7 +82,7 @@ class TestGateAllowThenExecute:
 
     def test_response_minimal_no_raw_output(self, client):
         """Response contains only status, trace_id, action, output_digest."""
-        response = client.post("/process", json={"text": "test"})
+        response = client.authenticated_request("POST", "/process", json={"text": "test"})
         assert response.status_code == 200
 
         data = response.json()
@@ -115,7 +110,7 @@ class TestSingleReadInvariant:
         payload = {"text": "cached test"}
 
         with caplog.at_level(logging.INFO):
-            response = client.post("/process", json=payload)
+            response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
 
         assert response.status_code == 200
 
@@ -139,7 +134,7 @@ class TestExecutorFailure:
     def test_executor_exception_returns_200_with_failed_status(self, client):
         """Executor exception produces HTTP 200 with status=FAILED."""
         # Send payload with "text" as non-string to trigger ValueError in executor
-        response = client.post("/process", json={"text": 123})  # text must be string
+        response = client.authenticated_request("POST", "/process", json={"text": 123})  # text must be string
 
         # Pipeline handles exception gracefully (no HTTP 500)
         assert response.status_code == 200
@@ -164,7 +159,7 @@ class TestProfileActionMismatchHTTP:
         set_action_matrix(restricted_matrix)
 
         with caplog.at_level(logging.INFO):
-            response = client.post("/process", json={"text": "test"})
+            response = client.authenticated_request("POST", "/process", json={"text": "test"})
 
         # Must return HTTP 403
         assert response.status_code == 403
@@ -189,7 +184,7 @@ class TestProfileActionMismatchHTTP:
         set_action_matrix(restricted_matrix)
 
         with caplog.at_level(logging.INFO):
-            response = client.post("/process", json={"text": "test"})
+            response = client.authenticated_request("POST", "/process", json={"text": "test"})
 
         # Must return HTTP 403
         assert response.status_code == 403

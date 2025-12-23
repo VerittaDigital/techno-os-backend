@@ -9,11 +9,11 @@ from fastapi import Request, HTTPException
 from fastapi.background import BackgroundTasks
 
 from app.payload_limits import check_payload_limits, LimitExceeded
-from app.gate_engine import evaluate_gate
+import app.gate_engine
 from app.audit_log import log_decision
+from app.decision_record import DecisionRecord, make_input_digest
 from app.rate_limiter import get_rate_limiter
 from app.schemas import ProcessRequest
-from app.decision_record import DecisionRecord
 from app.contracts.gate_v1 import GateInput, GateDecision
 from datetime import datetime, timezone
 from app.error_envelope import http_error_detail
@@ -101,7 +101,7 @@ async def run_f21_chain(
     expected_key = os.getenv("VERITTA_BETA_API_KEY")
     if api_key != expected_key:
         decision = "DENY"
-        reason_codes = ["G2_invalid_api_key"]
+        reason_codes = ["AUTH_INVALID_KEY"]
         matched_rules = ["API key mismatch"]
         log_decision(
             DecisionRecord(
@@ -137,7 +137,7 @@ async def run_f21_chain(
                 profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
-                input_digest="",
+                input_digest=make_input_digest(body),
                 trace_id=trace_id,
                 ts_utc=ts,
             )
@@ -163,7 +163,7 @@ async def run_f21_chain(
                 profile_hash=profile_hash or "",
                 matched_rules=matched_rules,
                 reason_codes=reason_codes,
-                input_digest="",
+                input_digest=make_input_digest(body),
                 trace_id=trace_id,
                 ts_utc=ts,
             )
@@ -185,9 +185,35 @@ async def run_f21_chain(
         allow_external=False,
         deny_unknown_fields=False,
     )
-    gate_result = evaluate_gate(gate_input)
+    try:
+        gate_result = app.gate_engine.evaluate_gate(gate_input)
+    except Exception as e:
+        # Gate evaluation failed; default to DENY
+        reason_codes = ["GATE_EXCEPTION"]
+        log_decision(
+            DecisionRecord(
+                decision="DENY",
+                profile_id="G8",
+                profile_hash=profiles_fingerprint_sha256(),
+                matched_rules=[str(type(e).__name__)],
+                reason_codes=reason_codes,
+                input_digest=make_input_digest(body),
+                trace_id=trace_id,
+                ts_utc=ts,
+            )
+        )
+        raise HTTPException(status_code=403, detail=http_error_detail(
+            error="forbidden",
+            message="Gate evaluation error",
+            trace_id=trace_id,
+            reason_codes=reason_codes,
+        ))
+    
     if gate_result.decision != GateDecision.ALLOW:
         reason_codes = ["G8_" + r.code.value for r in gate_result.reasons]
+        # Fallback: if no reasons, use a generic code
+        if not reason_codes:
+            reason_codes = ["G8_denied"]
         log_decision(
             DecisionRecord(
                 decision=gate_result.decision.value,
@@ -195,7 +221,7 @@ async def run_f21_chain(
                 profile_hash=profiles_fingerprint_sha256(),
                 matched_rules=getattr(gate_result, 'matched_rules', []),
                 reason_codes=reason_codes,
-                input_digest="",
+                input_digest=make_input_digest(body),
                 trace_id=trace_id,
                 ts_utc=ts,
             )
@@ -220,7 +246,7 @@ async def run_f21_chain(
                     profile_hash=profiles_fingerprint_sha256(),
                     matched_rules=["Rate limit exceeded for API key"],
                     reason_codes=reason_codes,
-                    input_digest="",
+                    input_digest=make_input_digest(body),
                     trace_id=trace_id,
                     ts_utc=ts,
                 )
@@ -241,7 +267,7 @@ async def run_f21_chain(
             profile_hash=profiles_fingerprint_sha256(),
             matched_rules=getattr(gate_result, 'matched_rules', []),
             reason_codes=[],
-            input_digest="",
+            input_digest=make_input_digest(body),
             trace_id=trace_id,
             ts_utc=ts,
         )

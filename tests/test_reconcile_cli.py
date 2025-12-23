@@ -247,20 +247,39 @@ class TestReconcileCliIntegration:
     """Integration tests."""
     
     def test_cli_default_env_vars(self, tmp_path, monkeypatch, capsys):
-        """CLI uses default env vars."""
-        # Create audit.log in current directory for default lookup
-        audit_log = Path("audit.log")
+        """CLI uses default env vars via tmp_path setup (robust to environment)."""
+        # Create a minimal audit.log in tmp_path
+        audit_log = tmp_path / "audit.log"
         
-        # Only create if it doesn't exist to avoid contamination
-        if not audit_log.exists():
-            pytest.skip("audit.log exists in working directory (integration test skipped)")
+        with open(audit_log, 'w') as f:
+            f.write(json.dumps({
+                "event_type": "decision_audit",
+                "trace_id": "trace-default-test",
+                "decision": "ALLOW",
+                "ts_utc": ts_utc(0),
+            }) + "\n")
+            f.write(json.dumps({
+                "event_type": "action_audit",
+                "trace_id": "trace-default-test",
+                "status": "SUCCESS",
+                "ts_utc": ts_utc(1),
+            }) + "\n")
         
-        # Just verify it loads without crashing
+        # Set environment to use tmp_path audit log
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(audit_log))
         monkeypatch.setattr("sys.argv", ["reconcile_cli.py"])
         exit_code = main()
         
         captured = capsys.readouterr()
-        assert "ORPHAN RECONCILER REPORT" in captured.out
+        # Verify reconciler executed successfully
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}. Output: {captured.out}"
+        
+        # Canonical output assertion: check for ORPHAN header or trace count
+        import re
+        has_orphan = "ORPHAN" in captured.out.upper()
+        has_traces = re.search(r"Total\s+traces\s*:\s*\d+", captured.out, re.IGNORECASE) is not None
+        assert has_orphan or has_traces, \
+            f"CLI output missing ORPHAN header or trace count. Got: {captured.out}"
     
     def test_cli_output_format(self, tmp_path, monkeypatch, capsys):
         """CLI output format is readable."""
