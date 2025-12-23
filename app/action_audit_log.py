@@ -22,12 +22,14 @@ def log_action_result(result: ActionResult) -> None:
     - Contains only structured metadata (no raw payload/output)
     - One line per execution for parsing and audit analysis
     - Logs MUST occur even on FAILED/BLOCKED outcomes
+    - event_type: "action_audit" for offline reconciliation
     
     Raises AuditLogError if logging fails (fail-closed).
     """
     try:
         # Persist to file first (fail-closed)
         result_dict = result.model_dump(mode="json")
+        result_dict["event_type"] = "action_audit"
         append_audit_record(result_dict)
         
         # Then emit to logger

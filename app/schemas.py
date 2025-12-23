@@ -25,3 +25,10 @@ class ProcessResponse(BaseModel):
     original: str = Field(..., description="Texto original do usuário (somente para eco)")
     processed: str = Field(..., description="Texto processado")
     length: int = Field(..., description="Comprimento do texto processado")
+
+class ErrorResponse(BaseModel):
+    """Normalized error envelope (G11)."""
+    error: str = Field(..., description="Error code/category")
+    message: str = Field(..., description="User-friendly message (no secrets)")
+    trace_id: str = Field(..., description="Request trace ID for correlation")
+    reason_codes: list[str] = Field(default_factory=list, description="Audit reason codes")
