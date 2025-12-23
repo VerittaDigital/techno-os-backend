@@ -20,7 +20,7 @@ from typing import Any, Dict
 from fastapi import Depends, FastAPI, HTTPException, Request
 
 from app.agentic_pipeline import run_agentic_action
-from app.auth import require_beta_api_key
+from app.auth import require_beta_api_key, detect_auth_mode
 from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
@@ -49,11 +49,55 @@ def health():
 
 
 async def gate_request(request: Request) -> Dict[str, Any]:
-    """Dependency that validates via gate and emits gate_audit."""
+    """Dependency that validates via gate and emits gate_audit.
+    
+    T2: G0 Auth mode detection.
+    - Detect auth mode (F2.3 Bearer vs F2.1 X-API-Key)
+    - Block F2.3 temporarily (501 not implemented until gates complete)
+    - Store auth_mode in request.state for downstream
+    """
     import hashlib
     import os
     
     trace_id = str(uuid.uuid4())
+    
+    # T2: G0 Feature flag routing — detect auth mode
+    auth_mode = detect_auth_mode(request)
+    
+    # If no auth header present at all, fail with 401 missing_authorization
+    if auth_mode is None:
+        from app.gate_artifacts import profiles_fingerprint_sha256
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="default",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=[],
+            reason_codes=["AUTH_MISSING_AUTHORIZATION"],
+            input_digest=None,  # Body not read yet
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)  # Persist audit (fail-closed)
+        raise HTTPException(status_code=401, detail="missing_authorization")
+    
+    # Store auth_mode in request state (for audit/logging downstream)
+    request.state.auth_mode = auth_mode
+    
+    # T2: G0 Temporary block on F2.3 (Bearer tokens) until gates land
+    if auth_mode == "F2.3":
+        from app.gate_artifacts import profiles_fingerprint_sha256
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="default",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=[],
+            reason_codes=["F23_NOT_IMPLEMENTED"],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise HTTPException(status_code=501, detail="f23_not_implemented")
+    
+    # Continue with F2.1 flow (X-API-Key validation)
 
     # Step 1: Auth check (before reading body)
     expected_key = os.environ.get("VERITTA_BETA_API_KEY")
