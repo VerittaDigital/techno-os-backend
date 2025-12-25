@@ -21,7 +21,7 @@ from typing import Any, Dict
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 
 from app.agentic_pipeline import run_agentic_action
-from app.auth import require_beta_api_key, detect_auth_mode
+from app.auth import detect_auth_mode
 from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
@@ -33,7 +33,6 @@ from app.error_handler import register_error_handlers
 from app.error_envelope import http_error_detail
 from app.gate_engine import evaluate_gate as evaluate_gate
 from app.middleware_trace import TraceCorrelationMiddleware
-from app.schemas import ProcessRequest, ProcessResponse
 from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
 from app.api.admin import router as admin_router
