@@ -13,7 +13,6 @@ import app.gate_engine
 from app.audit_log import log_decision
 from app.decision_record import DecisionRecord, make_input_digest
 from app.rate_limiter import get_rate_limiter
-from app.schemas import ProcessRequest
 from app.contracts.gate_v1 import GateInput, GateDecision
 from datetime import datetime, timezone
 from app.error_envelope import http_error_detail

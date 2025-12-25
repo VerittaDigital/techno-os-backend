@@ -1,0 +1,115 @@
+{
+  "execution": {
+    "timestamp": "2025-12-24T21:30:00Z",
+    "phase": "KATANA II PHASE 0 - BASELINE",
+    "type": "DISCOVERY & METRICS",
+    "status": "COMPLETE"
+  },
+  "workspace_quantification": {
+    "python_files_app": 57,
+    "python_files_tests": 59,
+    "python_files_scripts": 1,
+    "total_python_files": 117,
+    "markdown_files_docs": 18,
+    "total_files_scope": 135
+  },
+  "a1_legacy_residues": {
+    "begin_a1_legacy_count": 0,
+    "old_execution_mode_count": 0,
+    "a1_variables_count": 0,
+    "total_a1_residues": 0,
+    "status": "CLEAN ✅"
+  },
+  "static_analysis_dead_code": {
+    "tool": "vulture",
+    "min_confidence": 80,
+    "total_issues": 6,
+    "unused_variables": 1,
+    "unused_imports": 5,
+    "details": [
+      {
+        "file": "app/db/database.py:22",
+        "type": "unused variable",
+        "name": "connection_record",
+        "confidence": "100%"
+      },
+      {
+        "file": "app/db/session_repository.py:6",
+        "type": "unused import",
+        "name": "IntegrityError",
+        "confidence": "90%"
+      },
+      {
+        "file": "app/gates_f21.py:16",
+        "type": "unused import",
+        "name": "ProcessRequest",
+        "confidence": "90%"
+      },
+      {
+        "file": "app/main.py:24",
+        "type": "unused import",
+        "name": "require_beta_api_key",
+        "confidence": "90%"
+      },
+      {
+        "file": "app/main.py:36",
+        "type": "unused import",
+        "name": "ProcessRequest",
+        "confidence": "90%"
+      },
+      {
+        "file": "app/main.py:36",
+        "type": "unused import",
+        "name": "ProcessResponse",
+        "confidence": "90%"
+      }
+    ]
+  },
+  "dependencies_analysis": {
+    "openai_references": 1,
+    "openai_location": "app/llm/__init__.py:6 (from .openai_client import OpenAIClient)",
+    "openai_status": "⚠️ REFERENCED - NÃO DELETAR SEM REVISÃO",
+    "retrying_references": 0,
+    "fastapi_utils_references": 0,
+    "total_obsolete_unused": 2,
+    "notes": "openai é importado mas pode ser crítico para LLM backend - verificar antes de deletar"
+  },
+  "imports_baseline": {
+    "total_unique_imports": 0,
+    "external_packages": [
+      "fastapi",
+      "pydantic",
+      "sqlalchemy",
+      "pytest",
+      "openai"
+    ],
+    "status": "CAPTURED"
+  },
+  "tests_status": {
+    "total_test_files": 59,
+    "total_test_functions": 0,
+    "skipped_tests": 2,
+    "skipped_details": [
+      "test_llm_executor_hardening.py",
+      "test_router_describe.py"
+    ]
+  },
+  "migrations_status": {
+    "total_migrations": 3,
+    "migrations": [
+      "db/migrations/001_create_sessions.sql",
+      "db/migrations/002_add_audit_log.sql",
+      "db/migrations/003_refactor_policies.sql"
+    ],
+    "status": "PROTECTED - NEVER DELETE ✅"
+  },
+  "recommendations_phase_0": [
+    "✅ A1 legacy: CLEAN (0 resíduos)",
+    "⚠️ Vulture issues: 6 achados (5 imports não usados, 1 variável)",
+    "⚠️ openai dependency: VERIFICAR antes de deletar (1 referência ativa)",
+    "✅ retrying: SEGURO DELETAR (0 referências)",
+    "✅ fastapi-utils: SEGURO DELETAR (0 referências)",
+    "⚠️ Testes skipped: 2 casos - REATIVAR ou JUSTIFICAR no README"
+  ],
+  "next_phase": "FASE 1 - CLASSIFICAÇÃO & MATRIZ DE DECISÃO"
+}
