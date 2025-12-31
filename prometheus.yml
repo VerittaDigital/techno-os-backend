@@ -1,0 +1,35 @@
+# Techno OS - F8.3 Prometheus Configuration
+# Scrape governado de métricas F8.2 do backend
+#
+# DECISÃO APOLLO V2: Target primário = host.docker.internal:8000
+# Fallback manual (se DOWN): 172.17.0.1:8000
+
+global:
+  scrape_interval: 5s       # Scrape a cada 5 segundos
+  evaluation_interval: 5s   # Avaliar regras a cada 5 segundos
+  external_labels:
+    cluster: 'techno_os_local'
+    environment: 'development'
+
+# F8.5 Alert Rules
+rule_files:
+  - 'alert.rules.yml'
+
+scrape_configs:
+  # Job: Backend Techno OS (F8.2 metrics)
+  - job_name: 'techno_os_backend'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    
+    # V2 APOLLO: host.docker.internal (Docker Desktop + WSL2)
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+        labels:
+          service: 'backend'
+          phase: 'f8.2'
+    
+    # Timeout conservador (backend local rápido)
+    scrape_timeout: 3s
+    
+    # Honor timestamps dos exporter (prometheus_client)
+    honor_timestamps: true
