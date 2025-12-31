@@ -484,8 +484,11 @@ def run_agentic_action(
         # Success: clean shutdown (wait for thread to complete)
         pool.shutdown(wait=True)
             
-    except FuturesTimeoutError:
+    except (FuturesTimeoutError, TimeoutError):
         # Executor exceeded timeout (fail-safe)
+        # Catches both:
+        # - FuturesTimeoutError: ThreadPoolExecutor timeout
+        # - TimeoutError: Executor raises TimeoutError directly
         # Shutdown immediately without waiting (don't block on orphan thread)
         pool.shutdown(wait=False)
         
