@@ -15,6 +15,7 @@ Endpoint POST /process:
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -38,7 +39,15 @@ from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
 from app.api.admin import router as admin_router
 
-app = FastAPI(title="Techno OS API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize tracing on app startup (F8.6.1 fail-closed)."""
+    init_tracing(service_name="techno-os-backend")
+    logging.info("✅ Startup complete (tracing initialized)")
+    yield
+
+
+app = FastAPI(title="Techno OS API", version="0.1.0", lifespan=lifespan)
 
 # Register admin API router
 app.include_router(admin_router)
@@ -48,13 +57,6 @@ app.add_middleware(TraceCorrelationMiddleware)
 
 # Register exception handlers (T1: G11 error normalization)
 register_error_handlers(app)
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize tracing on app startup (F8.6.1 fail-closed)."""
-    init_tracing(service_name="techno-os-backend")
-    logging.info("✅ Startup complete (tracing initialized)")
 
 
 @app.get("/health", tags=["health"])
