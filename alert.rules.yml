@@ -1,0 +1,69 @@
+# Techno OS - F8.5 Alert Rules (Prometheus)
+# Alertas governados usando apenas métricas existentes
+# Canal: stdout (sem Alertmanager nesta fase)
+#
+# Framework: V-COF
+# Fase: F8.5 — ALERTING GOVERNADO
+# Data: 2025-12-30
+
+groups:
+  - name: techno_os_alerts
+    interval: 5s
+    rules:
+      # ALERT 1 — BackendDown (CRÍTICO)
+      # SLO: Backend deve responder em até 30s
+      # Métrica: up{job="techno_os_backend"}
+      - alert: BackendDown
+        expr: up{job="techno_os_backend"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: backend
+          phase: f8.5
+        annotations:
+          summary: "Backend TECHNO OS indisponível"
+          description: "Backend não responde há mais de 30s. Serviço crítico DOWN."
+          impact: "API indisponível para usuários"
+          action: "Verificar logs do backend, checar processo uvicorn"
+
+      # ALERT 2 — HighLatencyP95 (MÉDIO)
+      # SLO: P95 latency <= 1.5s
+      # Métrica: techno_os_request_latency_seconds_bucket
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(techno_request_latency_seconds_bucket[3m])) by (le)
+          ) > 1.5
+        for: 3m
+        labels:
+          severity: medium
+          service: backend
+          phase: f8.5
+        annotations:
+          summary: "Latência P95 acima do SLO"
+          description: "Latência P95 está acima de 1.5s por mais de 3 minutos."
+          impact: "Degradação perceptível na experiência do usuário"
+          action: "Verificar carga do sistema, queries lentas, ou gargalos de I/O"
+
+      # ALERT 3 — HighRequestVolume (BAIXO)
+      # SLO: Taxa sustentada <= 100 req/s (limite de observação)
+      # Métrica: techno_requests_total
+      - alert: HighRequestVolume
+        expr: |
+          rate(techno_requests_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: low
+          service: backend
+          phase: f8.5
+        annotations:
+          summary: "Volume elevado de requisições"
+          description: "Taxa acima de 100 req/s por 2 minutos consecutivos."
+          impact: "Possível saturação futura, monitorar recursos"
+          action: "Observar métricas de CPU/memória, considerar escalonamento"
+
+# ALERTAS OMITIDOS (documentados para auditoria):
+# - HighErrorRate: Requer label 'status' em techno_requests_total (não existe)
+#   Métrica necessária: techno_os_http_requests_total{status=~"5.."}
+#   Ação futura: F8.6 enriquecimento de labels

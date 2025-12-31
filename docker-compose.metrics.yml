@@ -1,0 +1,33 @@
+# Techno OS - F8.3 Prometheus Light (Scrape Governado)
+# 
+# DECISÕES APOLLO F8.3:
+# - V1: Docker Desktop + WSL2 integration (pré-requisito)
+# - V2: Target primário = host.docker.internal:8000
+# - V3: SEM persistência de volume (testes limpos)
+#
+# Uso:
+#   docker compose -f docker-compose.metrics.yml up -d
+#   docker compose -f docker-compose.metrics.yml down
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: technoos_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      # V3: SEM volume de dados (testes limpos, não persistir séries)
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--log.level=info"
+    restart: unless-stopped
+    networks:
+      - techno_observability
+
+networks:
+  techno_observability:
+    external: true
