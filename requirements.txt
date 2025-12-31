@@ -5,3 +5,8 @@ pytest
 httpx
 packaging
 sqlalchemy
+# F8.6.1 - OpenTelemetry Distributed Tracing
+opentelemetry-api==1.23.0
+opentelemetry-sdk==1.23.0
+opentelemetry-exporter-jaeger==1.21.0
+opentelemetry-instrumentation==0.44b0
