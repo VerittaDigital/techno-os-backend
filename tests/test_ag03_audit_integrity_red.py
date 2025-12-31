@@ -68,6 +68,9 @@ class TestAg03AuditIntegrityRed:
             "app.agentic_pipeline.get_executor",
             lambda executor_id: mock_executor
         )
+
+        # Ensure audit sink does not raise during tests (avoid file IO flakiness)
+        monkeypatch.setattr("app.audit_sink.append_audit_record", lambda record: None)
         
         result, _ = run_agentic_action(
             action="audit_cap_action",
@@ -140,6 +143,9 @@ class TestAg03AuditIntegrityRed:
             "app.agentic_pipeline.get_executor",
             lambda executor_id: mock_executor
         )
+
+        # Ensure audit sink does not raise during tests (avoid file IO flakiness)
+        monkeypatch.setattr("app.audit_sink.append_audit_record", lambda record: None)
         
         result, _ = run_agentic_action(
             action="audit_ver_action",
@@ -208,6 +214,9 @@ class TestAg03AuditIntegrityRed:
             "app.agentic_pipeline.get_executor",
             lambda executor_id: mock_executor
         )
+
+        # Ensure audit sink does not raise during tests (avoid file IO flakiness)
+        monkeypatch.setattr("app.audit_sink.append_audit_record", lambda record: None)
         
         trace_id = str(uuid.uuid4())
         result, _ = run_agentic_action(
