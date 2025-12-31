@@ -26,3 +26,8 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+# Audit artifacts (backups, não versionar)
+*.backend.pid
+app.db.F8.*-audited-*
+techno-os-F8.*-audited-*.bundle
+checksums-F8.*-audited.txt
