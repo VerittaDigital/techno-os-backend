@@ -31,3 +31,4 @@ Thumbs.db
 app.db.F8.*-audited-*
 techno-os-F8.*-audited-*.bundle
 checksums-F8.*-audited.txt
+venv/
