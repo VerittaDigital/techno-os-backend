@@ -80,7 +80,11 @@ class TestAg03AuditIntegrityRed:
         assert "EXECUTOR_CAPABILITY_MISMATCH" in result.reason_codes
         
         # action_audit MUST be emitted
-        action_logs = [r.message for r in caplog_configured.records if r.name == "action_audit"]
+        action_logs = [
+            (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+            for r in caplog_configured.records
+            if "action_audit" in r.name or "action_audit" in (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+        ]
         assert len(action_logs) > 0, "action_audit MUST be emitted on capability mismatch"
         
         audit_json = json.loads(action_logs[0])
@@ -148,7 +152,11 @@ class TestAg03AuditIntegrityRed:
         assert "EXECUTOR_VERSION_INCOMPATIBLE" in result.reason_codes
         
         # action_audit MUST be emitted
-        action_logs = [r.message for r in caplog_configured.records if r.name == "action_audit"]
+        action_logs = [
+            (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+            for r in caplog_configured.records
+            if "action_audit" in r.name or "action_audit" in (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+        ]
         assert len(action_logs) > 0, "action_audit MUST be emitted on version mismatch"
         
         audit_json = json.loads(action_logs[0])
@@ -209,7 +217,11 @@ class TestAg03AuditIntegrityRed:
         )
         
         # Extract audit logs
-        action_logs = [r.message for r in caplog_configured.records if r.name == "action_audit"]
+        action_logs = [
+            (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+            for r in caplog_configured.records
+            if "action_audit" in r.name or "action_audit" in (r.getMessage() if hasattr(r, 'getMessage') else r.message)
+        ]
         assert len(action_logs) > 0, "action_audit must be emitted"
         
         action_audit = json.loads(action_logs[0])
