@@ -14,7 +14,6 @@ from contextlib import nullcontext
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
 from opentelemetry.sdk.resources import Resource
 
 _tracer: Optional[trace.Tracer] = None
@@ -55,7 +54,8 @@ def init_tracing(service_name: str = "techno-os-backend") -> Optional[trace.Trac
         # Create tracer provider
         provider = TracerProvider(resource=resource)
         
-        # Create Jaeger exporter (agent on localhost:6831)
+        # Create Jaeger exporter (agent on localhost:6831) - isolated under TRACING_ENABLED
+        from opentelemetry.exporter.jaeger.thrift import JaegerExporter
         jaeger_exporter = JaegerExporter(
             agent_host_name="localhost",
             agent_port=6831,
