@@ -12,6 +12,7 @@ from typing import Any
 
 from app.action_contracts import ActionRequest
 from app.executors.base import ExecutorLimits
+from app.tracing import observed_span
 
 
 class NoopExecutorV1:
@@ -48,9 +49,18 @@ class NoopExecutorV1:
         Raises:
             Nothing — always succeeds deterministically
         """
-        # Consume request to verify it was passed correctly
-        # (use for validation but produce no side effects)
-        _ = (req.action, req.payload, req.trace_id)
-        
-        # Return None to indicate no output
-        return None
+        # F8.6.1 FASE 3: Instrument executor at boundaries (fail-closed, wrapper-only)
+        with observed_span(
+            f"executor.{self.executor_id}",
+            attributes={
+                "executor_name": self.executor_id,
+                "action": getattr(req, "action", "unknown"),
+                "trace_id": getattr(req, "trace_id", "unknown"),
+            }
+        ):
+            # Consume request to verify it was passed correctly
+            # (use for validation but produce no side effects)
+            _ = (req.action, req.payload, req.trace_id)
+            
+            # Return None to indicate no output
+            return None
