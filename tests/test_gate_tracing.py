@@ -35,3 +35,41 @@ def test_evaluate_gate_fail_closed(monkeypatch):
     assert isinstance(result, GateResult)
     assert result.decision in [result.decision.ALLOW, result.decision.DENY]
     # Nenhuma exceção
+
+
+def test_gate_tracing_governance_on_off():
+    """TRACING_ENABLED=0 → gate funciona"""
+    os.environ["TRACING_ENABLED"] = "0"
+    inp = GateInput(action="test_action", payload={"key": "value"})
+    result = evaluate_gate(inp)
+    assert isinstance(result, GateResult)
+    assert result.decision in ["ALLOW", "DENY"]
+
+
+def test_gate_tracing_governance_on():
+    """TRACING_ENABLED=1 → gate funciona"""
+    os.environ["TRACING_ENABLED"] = "1"
+    inp = GateInput(action="test_action", payload={"key": "value"})
+    result = evaluate_gate(inp)
+    assert isinstance(result, GateResult)
+    assert result.decision in ["ALLOW", "DENY"]
+
+
+def test_gate_semantic_invariance():
+    """Mesmo GateInput, GateResult idêntico com tracing ON/OFF"""
+    from app.gate_profiles import ACTION_AGENT_RUN
+    inp = GateInput(action=ACTION_AGENT_RUN, payload={"agent_id": "a1", "task": "t1"})
+    
+    os.environ["TRACING_ENABLED"] = "0"
+    result_off = evaluate_gate(inp)
+    
+    os.environ["TRACING_ENABLED"] = "1"
+    result_on = evaluate_gate(inp)
+    
+    # Comparar campos relevantes, ignorando 'at' que muda
+    assert result_off.decision == result_on.decision
+    assert result_off.reasons == result_on.reasons
+    assert result_off.action == result_on.action
+    assert result_off.evaluated_keys == result_on.evaluated_keys
+    assert result_off.profile_hash == result_on.profile_hash
+    assert result_off.matched_rules == result_on.matched_rules
