@@ -25,6 +25,7 @@ from app.auth import detect_auth_mode
 from app.action_audit_log import log_action_result
 from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
+from app.tracing import init_tracing, observed_span
 from app.audit_log import AuditLogError
 from app.contracts.gate_v1 import GateDecision, GateInput
 from app.decision_record import DecisionRecord, make_input_digest
@@ -47,6 +48,13 @@ app.add_middleware(TraceCorrelationMiddleware)
 
 # Register exception handlers (T1: G11 error normalization)
 register_error_handlers(app)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize tracing on app startup (F8.6.1 fail-closed)."""
+    init_tracing(service_name="techno-os-backend")
+    logging.info("✅ Startup complete (tracing initialized)")
 
 
 @app.get("/health", tags=["health"])
@@ -184,7 +192,7 @@ async def process(
     gate_data: Dict[str, Any] = Depends(gate_request),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Process action with gate + pipeline."""
+    """Process action with gate + pipeline (F8.6.1 observed)."""
     # Check if F2.3 response already prepared (with echo-back headers)
     if hasattr(request.state, "f23_response") and request.state.f23_response:
         return request.state.f23_response
@@ -192,64 +200,74 @@ async def process(
     payload = gate_data.get("payload", {})
     action = gate_data.get("action", "process")
     trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
+    
+    # F8.6.1: Create root span for request (fail-closed, wrapper-only)
+    with observed_span(
+        "process_action",
+        attributes={
+            "trace_id": trace_id,
+            "action": action,
+            "context_id": gate_data.get("context_id", "unknown"),
+        }
+    ):
 
-    # Check if action is allowed in action matrix (PROFILE_ACTION_MISMATCH)
-    matrix = get_action_matrix()
-    if action not in matrix.allowed_actions:
-        # Persist PROFILE_ACTION_MISMATCH ActionResult BLOCKED before returning 403
-        from datetime import datetime, timezone
-        from app.action_contracts import ActionResult
-        
-        mismatch_result = ActionResult(
-            action=action,
-            executor_id="unknown",
-            executor_version="unknown",
-            status="BLOCKED",
-            reason_codes=["PROFILE_ACTION_MISMATCH"],
-            input_digest="",
-            output_digest=None,
-            trace_id=trace_id,
-            ts_utc=datetime.now(timezone.utc),
-        )
-        try:
-            log_action_result(mismatch_result)
-        except AuditLogError:
-            # Audit logging failed — emit BLOCKED with AUDIT_LOG_FAILED marker (best effort)
-            fallback_result = ActionResult(
+        # Check if action is allowed in action matrix (PROFILE_ACTION_MISMATCH)
+        matrix = get_action_matrix()
+        if action not in matrix.allowed_actions:
+            # Persist PROFILE_ACTION_MISMATCH ActionResult BLOCKED before returning 403
+            from datetime import datetime, timezone
+            from app.action_contracts import ActionResult
+            
+            mismatch_result = ActionResult(
                 action=action,
                 executor_id="unknown",
                 executor_version="unknown",
                 status="BLOCKED",
-                reason_codes=["PROFILE_ACTION_MISMATCH", "AUDIT_LOG_FAILED"],
+                reason_codes=["PROFILE_ACTION_MISMATCH"],
                 input_digest="",
                 output_digest=None,
                 trace_id=trace_id,
                 ts_utc=datetime.now(timezone.utc),
             )
             try:
-                log_action_result(fallback_result)
+                log_action_result(mismatch_result)
             except AuditLogError:
-                pass  # Last resort: logging is completely down
-        
-        raise HTTPException(status_code=403, detail="Action not allowed in profile")
+                # Audit logging failed — emit BLOCKED with AUDIT_LOG_FAILED marker (best effort)
+                fallback_result = ActionResult(
+                    action=action,
+                    executor_id="unknown",
+                    executor_version="unknown",
+                    status="BLOCKED",
+                    reason_codes=["PROFILE_ACTION_MISMATCH", "AUDIT_LOG_FAILED"],
+                    input_digest="",
+                    output_digest=None,
+                    trace_id=trace_id,
+                    ts_utc=datetime.now(timezone.utc),
+                )
+                try:
+                    log_action_result(fallback_result)
+                except AuditLogError:
+                    pass  # Last resort: logging is completely down
+            
+            raise HTTPException(status_code=403, detail="Action not allowed in profile")
 
-    # Run pipeline
-    result, output = run_agentic_action(
-        action=action,
-        payload=payload,
-        trace_id=trace_id,
-        executor_id="text_process_v1",
-    )
+        # Run pipeline
+        result, output = run_agentic_action(
+            action=action,
+            payload=payload,
+            trace_id=trace_id,
+            executor_id="text_process_v1",
+        )
 
-    # Return ActionResult JSON
-    return {
-        "status": result.status,
-        "action": result.action,
-        "executor_id": result.executor_id,
-        "executor_version": result.executor_version,
-        "reason_codes": result.reason_codes,
-        "input_digest": result.input_digest,
-        "output_digest": result.output_digest,
-        "trace_id": result.trace_id,
-        "ts_utc": result.ts_utc.isoformat() if result.ts_utc else None,
-    }
+        # Return ActionResult JSON
+        return {
+            "status": result.status,
+            "action": result.action,
+            "executor_id": result.executor_id,
+            "executor_version": result.executor_version,
+            "reason_codes": result.reason_codes,
+            "input_digest": result.input_digest,
+            "output_digest": result.output_digest,
+            "trace_id": result.trace_id,
+            "ts_utc": result.ts_utc.isoformat() if result.ts_utc else None,
+        }
