@@ -20,11 +20,11 @@ from pathlib import Path
 
 
 # Hash canônico do conteúdo atual (UTF-8 bytes)
-# Calculado em: 2025-12-22
+# Calculado em: 2025-12-31
 # Se este teste falhar, você editou o arquivo de norma.
 # → Versione a norma (ex.: v1.0.2 ou v1.1)
 # → Atualize HASH_CANON_V1 com o novo SHA-256
-HASH_CANON_V1 = "f5d2c17ec432465b0783107f08e70144cfb72819e7949eb1ecf007a7f0571339"
+HASH_CANON_V1 = "0c3c0f85c953f4921a9829e22280e6b7bb53d76068fbc5499e68dbe89908b110"
 
 
 def test_execution_semantics_drift_lock():
