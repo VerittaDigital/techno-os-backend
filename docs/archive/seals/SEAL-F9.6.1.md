@@ -1,27 +1,27 @@
-# SEAL F9.6.1 — WORKSPACE REORGANIZATION
+# SEAL F9.6.1 — CI/CD MINIMAL
 
-**Timestamp:** 20260101_201700  
+**Timestamp:** 20260101_202500  
 **Branch:** stage/f9.6.1-cicd-minimal  
-**HEAD:** 6e7d0e0  
+**HEAD:** 0815ceb  
 **Tag:** v0.1.0-f9.6.0 (34225de)  
 
 ## Objetivo
-Reorganização do workspace para conformidade com Evidence Policy, movendo evidências pesadas para locais apropriados.
+Implementar CI/CD minimal governado, executando gate mínimo em CI, coletando artifacts fora do Git.
 
 ## Ações Executadas
-- Movidos 50+ arquivos *.log de raiz para artifacts/workspace_cleanup_20260101_201700/
-- Movidos 4 arquivos SEAL-F9.*.md de raiz para docs/archive/seals/
-- Gerados SHA256SUMS.txt e FINAL_REPORT.md para auditoria
-- Commits realizados para refletir mudanças
+- Criado .github/workflows/ci_gate_minimal.yml (workflow CI)
+- Criado docs/CI_CD_MINIMAL_F9_6_1.md (guia)
+- Criado docs/SENIOR_AUDIT_F9_6_1_CICD_MINIMAL_20260101_202500.md (auditoria APTO)
+- Commits realizados em dois passos
 
 ## Evidências
-- artifacts/workspace_cleanup_20260101_201700/FINAL_REPORT.md
-- artifacts/workspace_cleanup_20260101_201700/SHA256SUMS.txt
-- docs/archive/seals/ (nova localização dos seals)
+- Workflow: .github/workflows/ci_gate_minimal.yml
+- Docs: docs/CI_CD_MINIMAL_F9_6_1.md
+- Auditoria: docs/SENIOR_AUDIT_F9_6_1_CICD_MINIMAL_20260101_202500.md
 
 ## Veredicto
-GO — Workspace limpo e organizado.
+GO — CI/CD minimal implementado, gate executável, artifacts coletados.
 
 ## Assinatura
-Vinícius Soares  
+GitHub Copilot  
 Human-in-the-loop validation.
