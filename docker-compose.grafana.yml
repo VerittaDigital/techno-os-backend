@@ -6,9 +6,13 @@ services:
       - "3000:3000"
     environment:
       - GF_LOG_LEVEL=info
-      # Admin default (staging local). Hardening fica para fase posterior.
+      # Admin via env vars (não hardcoded)
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Access control: desabilitar anonymous
+      # Por quê: Mitiga acesso não autorizado a dashboards
+      # Risco mitigado: Exposição de métricas operacionais
+      - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro

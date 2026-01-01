@@ -5,11 +5,13 @@ services:
     image: nginx:alpine
     container_name: technoos_nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:80"  # Para ACME HTTP-01 e redirect
+      - "443:443"  # HTTPS
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+      - ./certs:/etc/nginx/certs:ro  # Self-signed certs for local testing
+      - letsencrypt:/etc/letsencrypt  # Let's Encrypt certs (persistente)
     networks:
       - techno_observability
     healthcheck:
@@ -18,6 +20,9 @@ services:
       timeout: 3s
       retries: 3
     restart: unless-stopped
+
+volumes:
+  letsencrypt:  # Volume para certificados Let's Encrypt (renováveis)
 
 networks:
   techno_observability:

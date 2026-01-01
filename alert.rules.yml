@@ -63,6 +63,45 @@ groups:
           impact: "Possível saturação futura, monitorar recursos"
           action: "Observar métricas de CPU/memória, considerar escalonamento"
 
+      # ALERT 4 — API DOWN (F9.3 — CRÍTICO)
+      # O que detecta: API indisponível para usuários
+      # Risco mitigado: Falha crítica de serviço
+      # Métrica: up{job="techno_os_backend"}
+      - alert: APIDown
+        expr: up{job="techno_os_backend"} == 0
+        for: 60s
+        labels:
+          severity: critical
+          service: techno-os-api
+          phase: f9.3
+        annotations:
+          summary: "API TECHNO OS DOWN"
+          description: "API não responde há mais de 60s. Serviço crítico indisponível."
+          impact: "Usuários não conseguem acessar o sistema"
+          action: "Verificar logs do backend, checar container uvicorn, reiniciar se necessário"
+
+      # ALERT 5 — Prometheus Scrape Failing (F9.3 — CRÍTICO)
+      # O que detecta: Falha na coleta de métricas essenciais
+      # Risco mitigado: Perda de observabilidade
+      # Métrica: up (qualquer target essencial)
+      - alert: PrometheusScrapeFailing
+        expr: up == 0
+        for: 60s
+        labels:
+          severity: critical
+          service: observability
+          phase: f9.3
+        annotations:
+          summary: "Scrape Prometheus falhando"
+          description: "Target essencial não responde há mais de 60s."
+          impact: "Perda de visibilidade operacional, alertas podem falhar"
+          action: "Verificar conectividade de rede, status dos containers, reiniciar Prometheus se necessário"
+
+# ALERTA DATABASE DOWN: NÃO IMPLEMENTADO
+# Justificativa: SQLite não possui exporter confiável ou métrica de disponibilidade
+# Limitação técnica: Sem métrica up para database
+# Recomendação futura: Implementar em F9.5 com PostgreSQL + exporter
+
 # ALERTAS OMITIDOS (documentados para auditoria):
 # - HighErrorRate: Requer label 'status' em techno_requests_total (não existe)
 #   Métrica necessária: techno_os_http_requests_total{status=~"5.."}
