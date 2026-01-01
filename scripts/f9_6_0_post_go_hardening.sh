@@ -82,19 +82,27 @@ fi
 if [ "$DRY_RUN" -eq 0 ]; then
   # Add and commit changes
   git add docs/evidence_policy.md .gitignore
-  git commit -m "F9.6.0: Implement evidence policy for lean git
+  if ! git diff --cached --quiet; then
+    git commit -m "F9.6.0: Implement evidence policy for lean git
 
 - Add docs/evidence_policy.md defining canonical light vs heavy evidence
 - Update .gitignore to ignore artifacts/ for heavy runtime evidences
 - Ensures repo hygiene for CI/CD pipelines" 2>&1 | tee "$ART_DIR/git_commit_${TS}.txt"
+  else
+    echo "No changes to commit for evidence policy" | tee "$ART_DIR/git_commit_${TS}.txt"
+  fi
 
   # Create tag
   TAG_NAME="v0.1.0-f9.6.0"
-  git tag -a "$TAG_NAME" -m "F9.6.0 Post-GO Hardening Release
+  if ! git tag -l | grep -q "^${TAG_NAME}$"; then
+    git tag -a "$TAG_NAME" -m "F9.6.0 Post-GO Hardening Release
 
 - Evidence policy implemented
 - Repo hygiene ensured
 - Ready for production deployment" 2>&1 | tee "$ART_DIR/git_tag_${TS}.txt"
+  else
+    echo "Tag $TAG_NAME already exists" | tee "$ART_DIR/git_tag_${TS}.txt"
+  fi
 
   if [ "$PUSH_TAG" -eq 1 ]; then
     git push origin "$TAG_NAME" 2>&1 | tee "$ART_DIR/git_push_tag_${TS}.txt"
