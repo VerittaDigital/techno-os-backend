@@ -1,0 +1,13 @@
+🔍 Iniciando Contract Tests Observabilidade (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: Prometheus targets UP
+✅ Targets essenciais UP
+Teste 2: Prometheus rules OK
+✅ Rules carregadas sem erro
+Teste 3: Alerting rules presentes
+✅ Alerting rules presentes (0)
+Teste 4: Grafana datasource
+✅ Grafana datasource acessível (requer auth)
+🎉 Contract Tests Observabilidade PASS
+Logs salvos em: contract_obs_20260101_184940.log

@@ -1,0 +1,24 @@
+services:
+  proxy:
+    image: nginx:alpine
+    container_name: techno_os_proxy
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/auth:/etc/nginx/auth:ro
+    depends_on:
+      - api
+      - grafana
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: techno_os_grafana
+    environment:
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

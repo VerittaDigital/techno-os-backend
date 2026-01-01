@@ -1,0 +1,103 @@
+app/f23_bindings.py:14: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/session_store.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/rate_limiter.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/tools/orphan_reconciler.py:162: error: No overload variant of "__sub__" of "datetime" matches argument type "None"  [operator]
+app/tools/orphan_reconciler.py:162: note: Possible overload variants:
+app/tools/orphan_reconciler.py:162: note:     def __sub__(self, datetime, /) -> timedelta
+app/tools/orphan_reconciler.py:162: note:     def __sub__(self, timedelta, /) -> datetime
+app/tools/orphan_reconciler.py:162: error: Unsupported left operand type for - ("None")  [operator]
+app/tools/orphan_reconciler.py:162: note: Both left and right operands are unions
+app/contracts/schema_export.py:42: error: Argument 1 to "_model_schema" has incompatible type "type[Agent]"; expected "BaseModel"  [arg-type]
+app/contracts/schema_export.py:43: error: Argument 1 to "_model_schema" has incompatible type "type[Arconte]"; expected "BaseModel"  [arg-type]
+app/contracts/schema_export.py:44: error: Argument 1 to "_model_schema" has incompatible type "type[AdminSignal]"; expected "BaseModel"  [arg-type]
+app/executors/rule_evaluator_v1.py:25: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/executors/_executor_template.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/executors/_executor_template.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/executors/_executor_template.py:29: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/models/session.py:11: error: Variable "app.models.session.Base" is not valid as a type  [valid-type]
+app/models/session.py:11: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+app/models/session.py:11: error: Invalid base class "Base"  [misc]
+app/models/session.py:81: error: Incompatible return value type (got "ColumnElement[bool]", expected "bool")  [return-value]
+app/db/session_repository.py:92: error: Incompatible types in assignment (expression has type "datetime", variable has type "Column[datetime]")  [assignment]
+app/db/session_repository.py:93: error: Incompatible types in assignment (expression has type "datetime", variable has type "Column[datetime]")  [assignment]
+app/gates/gate_f23_sessions_db.py:54: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/decision_record.py: note: "DecisionRecord" defined here
+app/gates/gate_f23_sessions_db.py:66: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:77: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:90: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:93: error: List item 0 has incompatible type "str | None"; expected "str"  [list-item]
+app/gates/gate_f23_sessions_db.py:102: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:112: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:122: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:132: error: Unexpected keyword argument "input_payload" for "DecisionRecord"  [call-arg]
+app/gates/gate_f23_sessions_db.py:164: error: Incompatible return value type (got "Column[str]", expected "str")  [return-value]
+app/tracing.py:90: error: Incompatible default for argument "attributes" (default has type "None", argument has type "dict[Any, Any]")  [assignment]
+app/tracing.py:90: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/tracing.py:90: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/tracing.py:116: error: "_GeneratorContextManager[Span, None, None]" has no attribute "set_attribute"  [attr-defined]
+app/executors/registry.py:63: error: Dict entry 2 has incompatible type "str": "RuleEvaluatorV1"; expected "str": "Executor"  [dict-item]
+app/executors/composite_executor_v1.py:64: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+app/executors/composite_executor_v1.py:143: error: Incompatible types in assignment (expression has type "Any | None", variable has type "list[str]")  [assignment]
+app/agentic_pipeline.py:210: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:240: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:260: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:276: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:297: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+app/agentic_pipeline.py:305: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:345: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:362: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:389: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:411: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:439: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:455: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:518: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:538: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/agentic_pipeline.py:557: error: Argument "status" to "ActionResult" has incompatible type "str"; expected "Literal['SUCCESS', 'FAILED', 'BLOCKED', 'PENDING']"  [arg-type]
+app/middleware_trace.py:26: error: Incompatible return value type (got "None", expected "str")  [return-value]
+app/gates_f23.py:65: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:92: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:117: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:144: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:169: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:195: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:218: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:242: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:265: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:292: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f23.py:420: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f21.py:82: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f21.py:107: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f21.py:134: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f21.py:160: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/gates_f21.py:264: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+app/error_handler.py:120: error: Argument 2 to "add_exception_handler" of "Starlette" has incompatible type "Callable[[Request, HTTPException], Coroutine[Any, Any, Any]]"; expected "Callable[[Request, Exception], Response | Awaitable[Response]] | Callable[[WebSocket, Exception], Awaitable[None]]"  [arg-type]
+app/error_handler.py:121: error: Argument 2 to "add_exception_handler" of "Starlette" has incompatible type "Callable[[Request, RequestValidationError], Coroutine[Any, Any, Any]]"; expected "Callable[[Request, Exception], Response | Awaitable[Response]] | Callable[[WebSocket, Exception], Awaitable[None]]"  [arg-type]
+app/api/admin.py:60: error: List item 0 has incompatible type "str | None"; expected "str"  [list-item]
+app/api/admin.py:64: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
+app/api/admin.py:69: error: Incompatible default for argument "request" (default has type "None", argument has type "Request")  [assignment]
+app/api/admin.py:69: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/api/admin.py:69: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/api/admin.py:102: error: List item 0 has incompatible type "str | None"; expected "str"  [list-item]
+app/api/admin.py:163: error: Incompatible default for argument "request" (default has type "None", argument has type "Request")  [assignment]
+app/api/admin.py:163: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/api/admin.py:163: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/api/admin.py:209: error: Argument "session_id" to "RevokeSessionResponse" has incompatible type "Column[str]"; expected "str"  [arg-type]
+app/api/admin.py:216: error: Argument 1 to "revoke" of "SessionRepository" has incompatible type "Column[str]"; expected "str"  [arg-type]
+app/api/admin.py:234: error: Argument "session_id" to "RevokeSessionResponse" has incompatible type "Column[str]"; expected "str"  [arg-type]
+app/api/admin.py:268: error: Incompatible default for argument "request" (default has type "None", argument has type "Request")  [assignment]
+app/api/admin.py:268: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/api/admin.py:268: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/api/admin.py:292: error: Argument "session_id" to "SessionDetailResponse" has incompatible type "Column[str]"; expected "str"  [arg-type]
+app/api/admin.py:293: error: Argument "user_id" to "SessionDetailResponse" has incompatible type "Column[str]"; expected "str"  [arg-type]
+app/api/admin.py:306: error: Incompatible default for argument "request" (default has type "None", argument has type "Request")  [assignment]
+app/api/admin.py:306: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/api/admin.py:306: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/api/admin.py:336: error: Incompatible default for argument "request" (default has type "None", argument has type "Request")  [assignment]
+app/api/admin.py:336: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/api/admin.py:336: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/api/admin.py:348: error: No overload variant of "execute" of "Session" matches argument type "str"  [call-overload]
+app/api/admin.py:348: note: Possible overload variants:
+app/api/admin.py:348: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Result[_T]
+app/api/admin.py:348: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Result[Any]
+app/main.py:149: error: Argument "decision" to "DecisionRecord" has incompatible type "str"; expected "Literal['ALLOW', 'DENY']"  [arg-type]
+Found 73 errors in 15 files (checked 58 source files)

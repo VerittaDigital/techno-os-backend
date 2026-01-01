@@ -1,0 +1,16 @@
+total 68
+drwxrwxrwx 1 vinicius vinicius  4096 Jan  1 13:13 .
+drwxrwxrwx 1 vinicius vinicius  4096 Jan  1 15:45 ..
+-rwxrwxrwx 1 vinicius vinicius   493 Jan  1 12:56 baseline_contract_obs.txt
+-rwxrwxrwx 1 vinicius vinicius   822 Jan  1 12:57 baseline_contract_sec.txt
+-rwxrwxrwx 1 vinicius vinicius     0 Jan  1 12:55 baseline_flake8.txt
+-rwxrwxrwx 1 vinicius vinicius 14906 Jan  1 12:55 baseline_mypy.txt
+-rwxrwxrwx 1 vinicius vinicius  2563 Jan  1 12:55 baseline_pytest.txt
+-rwxrwxrwx 1 vinicius vinicius  1413 Jan  1 12:56 baseline_smoke_https.txt
+-rwxrwxrwx 1 vinicius vinicius  6494 Jan  1 13:13 ci_gate_20260101_131307.log
+-rwxrwxrwx 1 vinicius vinicius  3116 Jan  1 12:58 ci_gate_test.txt
+-rwxrwxrwx 1 vinicius vinicius  6347 Jan  1 12:59 ci_gate_test_fixed.txt
+-rwxrwxrwx 1 vinicius vinicius    41 Jan  1 12:54 git_head.txt
+-rwxrwxrwx 1 vinicius vinicius 14906 Jan  1 13:13 mypy_full_20260101_131307.txt
+-rwxrwxrwx 1 vinicius vinicius  1579 Jan  1 12:54 pip_freeze.txt
+-rwxrwxrwx 1 vinicius vinicius    15 Jan  1 12:54 python_version.txt

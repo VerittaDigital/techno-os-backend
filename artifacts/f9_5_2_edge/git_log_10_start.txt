@@ -1,0 +1,10 @@
+1912a1a F9.5.1 SEAL - GO FOR PRODUCTION
+72b2b97 F9.5.1: harden ci_gate for CI logs & preflight (no runtime changes)
+969eb02 F9.5 SEAL - GO FOR PRODUCTION
+0481681 F9.5 CI READINESS GATE - COMPLETE
+0e17367 F9.4.1: add integral test artifacts and final report
+7924b94 F9.4.1: update git status clean evidence
+0c33b0f F9.4.1: finalize mypy backlog and checklist hash
+30ba49e F9.4.1: Harden tests & QA gate - tracing optional, flake8 critical fixed, mypy bugs corrected
+0ca2bdf Consolidate pending changes for F9.4.1 readiness - F9.4 PASS local with BASE_URL fixes
+e93f495 chore(obs): add F8.8 observability contract runbook (CI-friendly, fail-closed)

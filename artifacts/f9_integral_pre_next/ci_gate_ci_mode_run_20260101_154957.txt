@@ -1,0 +1,70 @@
+2026-01-01 15:49:58 - 🚀 Iniciando CI Gate F9.5 - TECHNO OS BACKEND
+2026-01-01 15:49:58 - BASE_URL: http://localhost:8000
+2026-01-01 15:49:58 - ARTIFACTS_DIR: artifacts/f9_5
+2026-01-01 15:49:58 - REQUIRE_HEALTHCHECK: 0
+2026-01-01 15:49:58 - CURL_INSECURE: 0
+2026-01-01 15:49:58 - Timestamp: 20260101_154957
+2026-01-01 15:49:58 - Log file: artifacts/f9_5/ci_gate_20260101_154957.log
+[1;33m⚠️  WARNING: Healthcheck desabilitado (REQUIRE_HEALTHCHECK=0)[0m
+2026-01-01 15:49:58 - 🧪 Executando pytest...
+........................................................................ [ 19%]
+.........................s..s........................................... [ 38%]
+.....................s.s..ss............................................ [ 57%]
+........................................................................ [ 77%]
+........................................................................ [ 96%]
+..ss.s.s.s...s                                                           [100%]
+=============================== warnings summary ===============================
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_result_identical_with_without_tracing
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_blocked_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_llm_executor_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_noop_executor_result_identical_with_without_tracing
+  /mnt/d/Projects/techno-os-backend/app/tracing.py:59: DeprecationWarning: Call to deprecated method __init__. (Since v1.35, the Jaeger supports OTLP natively. Please use the OTLP exporter instead. Support for this exporter will end July 2023.) -- Deprecated since version 1.16.0.
+    jaeger_exporter = JaegerExporter(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:36: Tracing dependencies not available
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:145: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:42: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:99: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:203: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:233: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:25: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:43: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:70: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:98: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:29: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:123: Tracing dependencies not available
+362 passed, 12 skipped, 4 warnings in 11.14s
+[0;32m✅ Pytest OK[0m
+2026-01-01 15:50:16 - 🔍 Executando flake8 (críticos)...
+[0;32m✅ Flake8 OK[0m
+2026-01-01 15:50:19 - 🔍 Executando mypy (baseline check)...
+[0;32m✅ Mypy OK (73 erros, baseline: 73)[0m
+2026-01-01 15:50:30 - 🚀 Executando smoke HTTPS...
+🚀 Iniciando Smoke Tests HTTPS (BASE_URL: http://localhost:8000)...
+Precheck: Conectividade http://localhost:8000/health
+✅ Precheck OK
+Teste 1: /health via HTTPS
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0   5626      0 --:--:-- --:--:-- --:--:--  7500
+{"status":"ok"}✅ /health OK
+Teste 2: Endpoint raiz sem auth
+HTTP/1.1 404 Not Found
+date: Thu, 01 Jan 2026 18:50:30 GMT
+server: uvicorn
+content-length: 22
+content-type: application/json
+x-trace-id: trc_71d7f2ae38e8a2f5
+
+✅ Endpoint protegido (401/403 esperado)
+Teste 3: Endpoint raiz com auth
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0   5145      0 --:--:-- --:--:-- --:--:--  7500
+{"status":"ok"}✅ Auth OK
+Teste 4: Grafana HTTPS e login
+❌ Falha: Grafana sem proteção
+[0;31m❌ ERROR: Smoke HTTPS falhou[0m
+Logs salvos em: artifacts/f9_5/ci_gate_20260101_154957.log

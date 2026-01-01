@@ -1,0 +1,7 @@
+techno-os-api  | INFO:     Started server process [7]
+techno-os-api  | INFO:     Waiting for application startup.
+techno-os-api  | ℹ️ Tracing disabled (TRACING_ENABLED=0)
+techno-os-api  | INFO:     Application startup complete.
+techno-os-api  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+techno-os-api  | INFO:     127.0.0.1:45066 - "GET /health HTTP/1.1" 200 OK
+techno-os-api  | INFO:     127.0.0.1:52660 - "GET /health HTTP/1.1" 200 OK

@@ -1,0 +1,5 @@
+total 8
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  1 16:17 .
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  1 16:17 ..
+-rwxrwxrwx 1 vinicius vinicius 1115 Jan  1  2026 localhost.crt
+-rwxrwxrwx 1 vinicius vinicius 1704 Jan  1 16:17 localhost.key

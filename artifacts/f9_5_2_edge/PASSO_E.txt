@@ -1,0 +1,1 @@
+✅ PASSO E: CI gate smoke HTTPS OK (contract obs skipped for edge focus)

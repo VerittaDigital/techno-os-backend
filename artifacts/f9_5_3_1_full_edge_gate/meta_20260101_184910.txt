@@ -1,0 +1,4 @@
+TS=20260101_184910
+PWD=/mnt/d/Projects/techno-os-backend
+BRANCH=work/F9_5_2_edge_stack
+HEAD=aaa58c873277892a91f4702e3de8ffd6a1cb0c17

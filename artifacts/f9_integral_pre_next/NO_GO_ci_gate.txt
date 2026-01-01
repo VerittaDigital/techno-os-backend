@@ -1,0 +1,1 @@
+NO-GO: ci_gate falhou em ambos os modos (default=1, ci_mode=1)

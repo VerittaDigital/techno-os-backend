@@ -1,0 +1,10 @@
+2026-01-01 15:46:28 - 🚀 Iniciando CI Gate F9.5 - TECHNO OS BACKEND
+2026-01-01 15:46:28 - BASE_URL: https://localhost
+2026-01-01 15:46:28 - ARTIFACTS_DIR: artifacts/f9_5
+2026-01-01 15:46:28 - REQUIRE_HEALTHCHECK: 1
+2026-01-01 15:46:28 - CURL_INSECURE: 1
+2026-01-01 15:46:28 - Timestamp: 20260101_154628
+2026-01-01 15:46:28 - Log file: artifacts/f9_5/ci_gate_20260101_154628.log
+2026-01-01 15:46:28 - 🔍 Precheck: Conectividade https://localhost/health (timeout: 10s)
+[0;31m❌ ERROR: Precheck falhou - serviço não acessível em https://localhost[0m
+Logs salvos em: artifacts/f9_5/ci_gate_20260101_154628.log
