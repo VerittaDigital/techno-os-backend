@@ -1,0 +1,16 @@
+🔒 Iniciando Contract Tests Segurança (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: HTTP redireciona para HTTPS
+✅ HTTP redireciona para HTTPS
+Teste 2: Backend via proxy
+✅ Backend acessível via proxy
+Teste 3: /metrics acesso controlado
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  1905  100  1905    0     0  99555      0 --:--:-- --:--:-- --:--:--  103k
+✅ /metrics acessível via proxy
+Teste 4: Endpoints sensíveis protegidos
+✅ Endpoints protegidos (contrato F9.2)
+🎉 Contract Tests Segurança PASS
+Logs salvos em: contract_sec_20260101_125735.log

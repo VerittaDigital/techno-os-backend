@@ -1,0 +1,40 @@
+2026-01-01 12:58:00 - 🚀 Iniciando CI Gate F9.5 - TECHNO OS BACKEND
+2026-01-01 12:58:00 - BASE_URL: https://localhost
+2026-01-01 12:58:00 - Timestamp: 20260101_125800
+2026-01-01 12:58:00 - Log file: ci_gate_20260101_125800.log
+2026-01-01 12:58:00 - 🔍 Precheck: Conectividade https://localhost/health
+[0;32m✅ Precheck OK[0m
+2026-01-01 12:58:00 - 🧪 Executando pytest...
+........................................................................ [ 19%]
+.........................s..s........................................... [ 38%]
+.....................s.s..ss............................................ [ 57%]
+........................................................................ [ 77%]
+........................................................................ [ 96%]
+..ss.s.s.s...s                                                           [100%]
+=============================== warnings summary ===============================
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_result_identical_with_without_tracing
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_blocked_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_llm_executor_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_noop_executor_result_identical_with_without_tracing
+  /mnt/d/Projects/techno-os-backend/app/tracing.py:59: DeprecationWarning: Call to deprecated method __init__. (Since v1.35, the Jaeger supports OTLP natively. Please use the OTLP exporter instead. Support for this exporter will end July 2023.) -- Deprecated since version 1.16.0.
+    jaeger_exporter = JaegerExporter(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:36: Tracing dependencies not available
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:145: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:42: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:99: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:203: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:233: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:25: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:43: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:70: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:98: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:29: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:123: Tracing dependencies not available
+362 passed, 12 skipped, 4 warnings in 7.85s
+[0;32m✅ Pytest OK[0m
+2026-01-01 12:58:13 - 🔍 Executando flake8 (críticos)...
+[0;32m✅ Flake8 OK[0m
+2026-01-01 12:58:15 - 🔍 Executando mypy (baseline check)...
