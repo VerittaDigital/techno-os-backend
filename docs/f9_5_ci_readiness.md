@@ -55,6 +55,26 @@ pip install pytest-cov bandit
 ./scripts/bandit.sh
 ```
 
+### Configuração Avançada
+O script suporta flags de ambiente para controle fino em CI:
+
+- `ARTIFACTS_DIR`: Diretório para logs e artefatos (padrão: `artifacts/f9_5`)
+- `REQUIRE_HEALTHCHECK`: 1 para executar precheck de conectividade, 0 para pular (padrão: 1)
+- `CURL_INSECURE`: 1 para aceitar certificados auto-assinados, 0 para verificar (padrão: 1)
+- `HEALTHCHECK_TIMEOUT`: Timeout em segundos para healthcheck (padrão: 10)
+
+Exemplos:
+```bash
+# CI sem healthcheck (serviço não disponível)
+REQUIRE_HEALTHCHECK=0 ./scripts/ci_gate.sh
+
+# Produção com certificados válidos
+BASE_URL=https://api.techno-os.com CURL_INSECURE=0 ./scripts/ci_gate.sh
+
+# Artefatos em diretório customizado
+ARTIFACTS_DIR=ci_artifacts ./scripts/ci_gate.sh
+```
+
 ## Artefatos Gerados
 - `artifacts/f9_5/`: Logs de baseline e teste do gate
 - `ci_gate_*.log`: Logs detalhados de cada execução
@@ -73,7 +93,8 @@ pip install pytest-cov bandit
 - Monitorar métricas de cobertura ao longo do tempo
 
 ## Rollback
-Se necessário: `bash scripts/rollback_f9_4_1.sh`
+- **Para F9.5**: `git revert <commit-hash>` (ex.: `git revert 969eb02`)
+- **Para F9.4.1**: `bash scripts/rollback_f9_4_1.sh`
 
 ---
 **F9.5 CI READINESS GATE: GO ✅**

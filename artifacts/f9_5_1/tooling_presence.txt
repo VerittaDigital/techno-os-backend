@@ -1,0 +1,4 @@
+curl: /usr/bin/curl
+flake8: /mnt/d/Projects/techno-os-backend/.venv/bin/flake8
+mypy: /mnt/d/Projects/techno-os-backend/.venv/bin/mypy
+pytest: pytest 9.0.2

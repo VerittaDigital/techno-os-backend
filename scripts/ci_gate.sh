@@ -9,9 +9,17 @@ set -euo pipefail
 # Default BASE_URL (localhost staging)
 BASE_URL="${BASE_URL:-https://localhost}"
 
+# Artifacts directory (configurable)
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-artifacts/f9_5}"
+
+# Healthcheck flags
+REQUIRE_HEALTHCHECK="${REQUIRE_HEALTHCHECK:-1}"
+CURL_INSECURE="${CURL_INSECURE:-1}"
+HEALTHCHECK_TIMEOUT="${HEALTHCHECK_TIMEOUT:-10}"
+
 # Timestamp for logs
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="ci_gate_${TIMESTAMP}.log"
+LOG_FILE="$ARTIFACTS_DIR/ci_gate_${TIMESTAMP}.log"
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,8 +51,17 @@ warning() {
 
 # Precheck function
 precheck() {
-    log "🔍 Precheck: Conectividade $BASE_URL/health"
-    if ! curl -k -s --max-time 10 "$BASE_URL/health" > /dev/null; then
+    if [ "$REQUIRE_HEALTHCHECK" -eq 0 ]; then
+        warning "Healthcheck desabilitado (REQUIRE_HEALTHCHECK=0)"
+        return 0
+    fi
+
+    log "🔍 Precheck: Conectividade $BASE_URL/health (timeout: ${HEALTHCHECK_TIMEOUT}s)"
+    CURL_OPTS="-s --max-time $HEALTHCHECK_TIMEOUT"
+    if [ "$CURL_INSECURE" -eq 1 ]; then
+        CURL_OPTS="$CURL_OPTS -k"
+    fi
+    if ! curl $CURL_OPTS "$BASE_URL/health" > /dev/null; then
         error "Precheck falhou - serviço não acessível em $BASE_URL"
     fi
     success "Precheck OK"
@@ -53,7 +70,7 @@ precheck() {
 # Pytest execution
 run_pytest() {
     log "🧪 Executando pytest..."
-    if ! python -m pytest -q 2>&1; then
+    if ! python -m pytest -q 2>&1 | tee -a "$LOG_FILE"; then
         error "Pytest falhou"
     fi
     success "Pytest OK"
@@ -62,7 +79,7 @@ run_pytest() {
 # Flake8 execution (critical only)
 run_flake8() {
     log "🔍 Executando flake8 (críticos)..."
-    if ! flake8 app tests --select=E9,F63,F7,F82 2>&1; then
+    if ! flake8 app tests --select=E9,F63,F7,F82 2>&1 | tee -a "$LOG_FILE"; then
         error "Flake8 falhou"
     fi
     success "Flake8 OK"
@@ -73,6 +90,7 @@ run_mypy() {
     log "🔍 Executando mypy (baseline check)..."
     # Count errors - must not exceed baseline
     OUTPUT=$(mypy app --ignore-missing-imports --no-implicit-optional 2>&1 || true)
+    echo "$OUTPUT" > "$ARTIFACTS_DIR/mypy_full_${TIMESTAMP}.txt"
     ERROR_COUNT=$(echo "$OUTPUT" | grep -c "error:" || true)
     BASELINE=73
     if [ "$ERROR_COUNT" -gt "$BASELINE" ]; then
@@ -85,7 +103,7 @@ run_mypy() {
 # Smoke HTTPS test
 run_smoke() {
     log "🚀 Executando smoke HTTPS..."
-    if ! bash scripts/smoke_https.sh 2>&1; then
+    if ! bash scripts/smoke_https.sh 2>&1 | tee -a "$LOG_FILE"; then
         error "Smoke HTTPS falhou"
     fi
     success "Smoke HTTPS OK"
@@ -94,7 +112,7 @@ run_smoke() {
 # Contract Observabilidade
 run_contract_obs() {
     log "🔍 Executando contract observabilidade..."
-    if ! bash scripts/contract_obs.sh 2>&1; then
+    if ! bash scripts/contract_obs.sh 2>&1 | tee -a "$LOG_FILE"; then
         error "Contract Observabilidade falhou"
     fi
     success "Contract Observabilidade OK"
@@ -103,7 +121,7 @@ run_contract_obs() {
 # Contract Segurança
 run_contract_sec() {
     log "🔒 Executando contract segurança..."
-    if ! bash scripts/contract_sec.sh 2>&1; then
+    if ! bash scripts/contract_sec.sh 2>&1 | tee -a "$LOG_FILE"; then
         error "Contract Segurança falhou"
     fi
     success "Contract Segurança OK"
@@ -111,8 +129,14 @@ run_contract_sec() {
 
 # Main execution
 main() {
+    # Ensure artifacts directory exists
+    mkdir -p "$ARTIFACTS_DIR"
+
     log "🚀 Iniciando CI Gate F9.5 - TECHNO OS BACKEND"
     log "BASE_URL: $BASE_URL"
+    log "ARTIFACTS_DIR: $ARTIFACTS_DIR"
+    log "REQUIRE_HEALTHCHECK: $REQUIRE_HEALTHCHECK"
+    log "CURL_INSECURE: $CURL_INSECURE"
     log "Timestamp: $TIMESTAMP"
     log "Log file: $LOG_FILE"
 

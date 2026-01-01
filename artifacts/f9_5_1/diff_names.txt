@@ -1,0 +1,2 @@
+docs/f9_5_ci_readiness.md
+scripts/ci_gate.sh
