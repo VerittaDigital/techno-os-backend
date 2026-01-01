@@ -30,6 +30,7 @@ services:
       - ENV=${ENV:-production}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Critical: These keys MUST be set in .env or will fail-closed (security by design)
       - VERITTA_BETA_API_KEY=${VERITTA_BETA_API_KEY}
       - VERITTA_PROFILES_FINGERPRINT=${VERITTA_PROFILES_FINGERPRINT}
       - VERITTA_ADMIN_API_KEY=${VERITTA_ADMIN_API_KEY}
