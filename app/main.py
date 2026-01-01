@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 
 from app.agentic_pipeline import run_agentic_action
 from app.auth import detect_auth_mode
@@ -28,6 +28,7 @@ from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
 from app.tracing import init_tracing, observed_span
 from app.audit_log import AuditLogError
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from app.contracts.gate_v1 import GateDecision, GateInput
 from app.decision_record import DecisionRecord, make_input_digest
 from app.digests import sha256_json_or_none
@@ -63,6 +64,12 @@ register_error_handlers(app)
 def health():
     """Lightweight health check used by orchestration and tests."""
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 async def gate_request(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
