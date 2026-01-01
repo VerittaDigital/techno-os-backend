@@ -15,10 +15,11 @@ Endpoint POST /process:
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 
 from app.agentic_pipeline import run_agentic_action
 from app.auth import detect_auth_mode
@@ -27,6 +28,7 @@ from app.action_matrix import get_action_matrix
 from app.audit_log import log_decision
 from app.tracing import init_tracing, observed_span
 from app.audit_log import AuditLogError
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from app.contracts.gate_v1 import GateDecision, GateInput
 from app.decision_record import DecisionRecord, make_input_digest
 from app.digests import sha256_json_or_none
@@ -38,7 +40,15 @@ from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
 from app.api.admin import router as admin_router
 
-app = FastAPI(title="Techno OS API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize tracing on app startup (F8.6.1 fail-closed)."""
+    init_tracing(service_name="techno-os-backend")
+    logging.info("✅ Startup complete (tracing initialized)")
+    yield
+
+
+app = FastAPI(title="Techno OS API", version="0.1.0", lifespan=lifespan)
 
 # Register admin API router
 app.include_router(admin_router)
@@ -50,17 +60,16 @@ app.add_middleware(TraceCorrelationMiddleware)
 register_error_handlers(app)
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize tracing on app startup (F8.6.1 fail-closed)."""
-    init_tracing(service_name="techno-os-backend")
-    logging.info("✅ Startup complete (tracing initialized)")
-
-
 @app.get("/health", tags=["health"])
 def health():
     """Lightweight health check used by orchestration and tests."""
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 async def gate_request(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:

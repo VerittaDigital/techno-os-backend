@@ -12,6 +12,7 @@ from app.contracts.gate_v1 import (
 )
 from app.gate_artifacts import profiles_fingerprint_sha256
 from app.gate_profiles import PolicyProfile, get_profile
+from app.tracing import observed_span
 
 FORBIDDEN_ADMIN_KEYS_BASELINE: Set[str] = {
     "admin_signal",
@@ -148,35 +149,38 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
         )
 
     try:
-        for rule in rules:
-            ok, r_reasons, r_keys = rule.fn(inp, profile)
+        with observed_span("gate.evaluate", attributes={"action": inp.action, "allow_external": inp.allow_external, "deny_unknown_fields": inp.deny_unknown_fields, "request_id": inp.request_id, "profile_hash": profile_hash}):
+            for rule in rules:
+                ok, r_reasons, r_keys = rule.fn(inp, profile)
 
-            for k in r_keys:
-                if k not in evaluated_keys:
-                    evaluated_keys.append(k)
+                for k in r_keys:
+                    if k not in evaluated_keys:
+                        evaluated_keys.append(k)
 
-            if not ok:
-                # P1.5: Track which rule caused denial
-                matched_rules.append(rule.name)
-                reasons.extend(r_reasons)
-                return GateResult(
-                    decision=GateDecision.DENY,
-                    reasons=reasons,
-                    action=inp.action,
-                    evaluated_keys=evaluated_keys,
-                    profile_hash=profile_hash,
-                    matched_rules=matched_rules,
-                )
+                if not ok:
+                    # P1.5: Track which rule caused denial
+                    matched_rules.append(rule.name)
+                    reasons.extend(r_reasons)
+                    with observed_span("gate.decision", attributes={"decision": "DENY", "profile_hash": profile_hash, "action": inp.action}):
+                        return GateResult(
+                            decision=GateDecision.DENY,
+                            reasons=reasons,
+                            action=inp.action,
+                            evaluated_keys=evaluated_keys,
+                            profile_hash=profile_hash,
+                            matched_rules=matched_rules,
+                        )
 
         reasons.append(GateReason(code=GateReasonCode.OK, message="Gate passed.", evidence={"action": inp.action, "profile": profile.name}))
-        return GateResult(
-            decision=GateDecision.ALLOW,
-            reasons=reasons,
-            action=inp.action,
-            evaluated_keys=evaluated_keys,
-            profile_hash=profile_hash,
-            matched_rules=matched_rules,  # ← Empty for ALLOW (no rules blocked)
-        )
+        with observed_span("gate.decision", attributes={"decision": "ALLOW", "profile_hash": profile_hash, "action": inp.action}):
+            return GateResult(
+                decision=GateDecision.ALLOW,
+                reasons=reasons,
+                action=inp.action,
+                evaluated_keys=evaluated_keys,
+                profile_hash=profile_hash,
+                matched_rules=matched_rules,  # ← Empty for ALLOW (no rules blocked)
+            )
 
     except Exception as exc:
         reasons.extend(
@@ -187,12 +191,13 @@ def evaluate_gate(inp: GateInput, rules: Iterable[Rule] = DEFAULT_RULES) -> Gate
             )
         )
         matched_rules.append("RULE_EXCEPTION")  # ← P1.5: Mark exception as matched reason
-        return GateResult(
-            decision=GateDecision.DENY,
-            reasons=reasons,
-            action=inp.action,
-            evaluated_keys=evaluated_keys,
-            profile_hash=profile_hash,
-            matched_rules=matched_rules,
-        )
+        with observed_span("gate.decision", attributes={"decision": "DENY", "profile_hash": profile_hash, "action": inp.action}):
+            return GateResult(
+                decision=GateDecision.DENY,
+                reasons=reasons,
+                action=inp.action,
+                evaluated_keys=evaluated_keys,
+                profile_hash=profile_hash,
+                matched_rules=matched_rules,
+            )
 
