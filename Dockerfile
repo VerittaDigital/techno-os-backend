@@ -1,18 +1,4 @@
-# Multi-stage Dockerfile — Python 3.12 LTS
-# Stage 1: Builder (install deps)
-FROM python:3.12-slim as builder
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
-
-# Stage 2: Runtime (minimal image)
+# Runtime image
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -23,8 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /root/.local
+# Copy requirements and install Python packages globally
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
@@ -32,8 +19,7 @@ COPY tests/ ./tests/
 COPY pytest.ini .
 
 # Set environment variables
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
