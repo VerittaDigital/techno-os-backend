@@ -1,10 +1,8 @@
 """Test pre-audit logging before executor execution (B3 blocker fix)."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import uuid
 
 from app.agentic_pipeline import run_agentic_action
-from app.action_audit_log import log_action_result
 
 
 class TestPreAuditLogging:
@@ -29,7 +27,6 @@ class TestPreAuditLogging:
         ))
 
         # Mock action registry
-        from app.action_registry import get_action_registry
 
         mock_registry = MagicMock()
         mock_registry.actions = {

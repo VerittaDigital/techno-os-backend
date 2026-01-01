@@ -5,8 +5,7 @@ Tests ensure that audit logging failures result in BLOCKED status,
 never silent SUCCESS.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import uuid
 
 from app.agentic_pipeline import run_agentic_action

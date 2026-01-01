@@ -4,10 +4,10 @@ import uuid
 import pytest
 from app.action_contracts import ActionRequest
 from app.executors.llm_executor_v1 import LLMExecutorV1
-from app.executors.composite_executor_v1 import CompositeExecutorV1
 from app.executors.noop_executor_v1 import NoopExecutorV1
 from app.llm.fake_client import FakeLLMClient
 from app.tracing import init_tracing, get_tracer
+from conftest import tracing_available
 
 
 class TestExecutorTracingGovernance:
@@ -39,6 +39,7 @@ class TestExecutorTracingGovernance:
         assert result is not None
         assert "text" in result
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_llm_executor_with_tracing_enabled_works(self, monkeypatch):
         """LLM executor works with TRACING_ENABLED=1."""
         # Enable tracing
@@ -95,6 +96,7 @@ class TestExecutorTracingGovernance:
         # Should return None (noop has no output)
         assert result is None
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_noop_executor_with_tracing_enabled_works(self, monkeypatch):
         """Noop executor works with TRACING_ENABLED=1."""
         # Enable tracing
@@ -198,6 +200,7 @@ class TestExecutorSemanticInvariance:
 class TestExecutorSpanHierarchy:
     """Test span hierarchy in executors (observability validation)."""
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_llm_executor_creates_span_when_enabled(self, monkeypatch):
         """LLM executor creates span with TRACING_ENABLED=1."""
         # Enable tracing
@@ -227,6 +230,7 @@ class TestExecutorSpanHierarchy:
         # Functional assertion: executor completed
         assert result is not None
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_noop_executor_creates_span_when_enabled(self, monkeypatch):
         """Noop executor creates span with TRACING_ENABLED=1."""
         # Enable tracing

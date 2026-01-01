@@ -197,7 +197,7 @@ class OrphanReconciler:
         return results
     
     @staticmethod
-    def _parse_ts(ts_str: str) -> datetime:
+    def _parse_ts(ts_str: str) -> Optional[datetime]:
         """
         Parse ISO 8601 / RFC 3339 timestamp to datetime (UTC) using stdlib.
 

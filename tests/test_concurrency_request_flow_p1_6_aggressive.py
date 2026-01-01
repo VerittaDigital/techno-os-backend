@@ -15,17 +15,14 @@ Test Coverage:
   D) Audit failure under concurrency must be fail-closed
   E) Combined matrix toggle + audit fail (stress test)
 """
-import json
-import logging
 import threading
 from queue import Queue
-from typing import Any, Dict, List
-from unittest.mock import patch
+from typing import Any, Dict
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.action_matrix import get_action_matrix, reset_action_matrix, set_action_matrix
+from app.action_matrix import reset_action_matrix, set_action_matrix
 from app.main import app
 
 

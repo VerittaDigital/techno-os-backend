@@ -6,9 +6,7 @@ Tests ensure that DecisionRecord properly captures:
 - matched_rules: List of rules that triggered the decision
 """
 
-import pytest
-from unittest.mock import patch
-from app.contracts.gate_v1 import GateDecision, GateResult
+from app.contracts.gate_v1 import GateDecision
 from app.decision_record import DecisionRecord
 from app.gate_artifacts import profiles_fingerprint_sha256
 from app.gate_engine import evaluate_gate

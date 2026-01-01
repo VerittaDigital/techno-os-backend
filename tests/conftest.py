@@ -9,6 +9,29 @@ from sqlalchemy.orm import sessionmaker
 from app.action_matrix import reset_action_matrix
 
 
+def tracing_available():
+    """Check if tracing dependencies are available.
+    
+    Returns True if:
+    - TRACING_ENABLED == "1"
+    - Jaeger exporter can be imported
+    
+    Used to skip tracing tests when dependencies are not available.
+    """
+    if os.getenv("TRACING_ENABLED") != "1":
+        return False
+    
+    try:
+        return True
+    except ImportError:
+        return False
+
+
+# ============================================================================
+# Session Setup: Configure test environment
+# ============================================================================
+
+
 # ============================================================================
 # Session Setup: Configure test environment
 # ============================================================================

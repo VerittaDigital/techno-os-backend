@@ -12,12 +12,8 @@ import json
 import logging
 import uuid
 
-import pytest
-
 from app.agentic_pipeline import run_agentic_action
-from app.action_audit_log import log_action_result
-from app.action_contracts import ActionResult
-from app.executors.registry import get_executor, UnknownExecutorError
+from app.executors.registry import get_executor
 
 
 class TestNoopExecutorRegistry:

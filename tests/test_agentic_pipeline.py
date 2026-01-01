@@ -7,7 +7,6 @@ import json
 import logging
 import uuid
 
-import pytest
 
 from app.agentic_pipeline import run_agentic_action
 from app.executors.base import ExecutorLimits

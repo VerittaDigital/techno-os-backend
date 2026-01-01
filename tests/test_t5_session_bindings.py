@@ -1,6 +1,5 @@
 """Tests for SessionStore and UserBindings (T5)."""
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from app.session_store import (
     SessionRecord,
@@ -9,7 +8,7 @@ from app.session_store import (
     seed_session,
     get_session_store,
 )
-from app.f23_bindings import UserBindings, get_bindings
+from app.f23_bindings import UserBindings
 
 
 class TestSessionRecord:

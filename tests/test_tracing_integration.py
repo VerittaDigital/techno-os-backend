@@ -1,9 +1,9 @@
 """Integration tests for tracing in FastAPI endpoints (F8.6.1)."""
 
-import os
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from conftest import tracing_available
 
 
 class TestTracingIntegrationFailClosed:
@@ -26,6 +26,7 @@ class TestTracingIntegrationFailClosed:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_process_with_tracing_enabled_works(self, monkeypatch):
         """Process endpoint works with TRACING_ENABLED=1."""
         # Enable tracing
@@ -119,6 +120,7 @@ class TestTracingStartupEvent:
         response = client.get("/health")
         assert response.status_code == 200
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_startup_event_with_tracing_enabled(self, monkeypatch):
         """Startup event initializes tracing with TRACING_ENABLED=1."""
         monkeypatch.setenv("TRACING_ENABLED", "1")

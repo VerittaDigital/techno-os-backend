@@ -7,7 +7,6 @@ These tests verify:
 3. Valid X-API-Key → endpoint executes (not 401)
 """
 
-import os
 import pytest
 from fastapi.testclient import TestClient
 

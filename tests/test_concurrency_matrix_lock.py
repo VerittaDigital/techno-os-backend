@@ -6,7 +6,6 @@ with no corruption or inconsistent state visible to readers.
 """
 
 import threading
-import pytest
 from app.action_matrix import (
     get_action_matrix,
     set_action_matrix,

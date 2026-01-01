@@ -3,7 +3,7 @@
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 
@@ -20,7 +20,7 @@ class AuditParser:
     def summarize(
         days: int = 1,
         limit: int = 10000,
-        event_type: str = None,  # None = all, else "decision_audit" or "action_audit"
+        event_type: Optional[str] = None,  # None = all, else "decision_audit" or "action_audit"
     ) -> Dict[str, Any]:
         """
         Read audit.log and aggregate summary statistics.

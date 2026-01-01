@@ -2,7 +2,6 @@ import json
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.action_audit_log import log_action_result

@@ -8,7 +8,6 @@ Ensure that payload digests follow canonical rule:
 Gate and Pipeline use the same canonical function.
 """
 
-import pytest
 from app.decision_record import make_input_digest
 from app.agentic_pipeline import _compute_input_digest, _compute_output_digest
 from app.digests import sha256_json_or_none

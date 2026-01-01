@@ -1,6 +1,6 @@
 """Gate F2.3 (Bearer Token + Session) with DB persistence."""
 
-from typing import Optional
+from typing import Optional, Dict, Any
 import hashlib
 from sqlalchemy.orm import Session
 
@@ -33,7 +33,7 @@ class GateF23SessionDB:
         user_id_header: Optional[str],
         api_key_hash: str,
         trace_id: str,
-        input_payload: dict = None,
+        input_payload: Optional[Dict[Any, Any]] = None,
     ) -> DecisionRecord:
         """
         Evaluate F2.3 Bearer Token gate with DB session lookup.

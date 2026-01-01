@@ -1,10 +1,8 @@
-import json
 import uuid
 from app.agentic_pipeline import run_agentic_action
 from app.executors.registry import _EXECUTORS
 from app.executors.composite_executor_v1 import CompositeExecutorV1
 from app.executors.llm_executor_v1 import LLMExecutorV1
-from app.llm.fake_client import FakeLLMClient
 
 
 def _trace_id():

@@ -4,12 +4,9 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 import uuid
 
-import pytest
-from fastapi.testclient import TestClient
 
 from app.audit_log import log_decision
 from app.decision_record import DecisionRecord
-from app.main import app
 # NOTE: client fixture comes from conftest.py
 
 

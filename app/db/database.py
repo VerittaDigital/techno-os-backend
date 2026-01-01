@@ -1,6 +1,7 @@
 """Database configuration and SQLAlchemy setup."""
 
 import os
+from typing import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
@@ -35,7 +36,7 @@ else:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def get_db() -> Session:
+def get_db() -> Generator[Session, None, None]:
     """Dependency for FastAPI to get DB session."""
     db = SessionLocal()
     try:

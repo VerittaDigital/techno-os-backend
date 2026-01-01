@@ -1,12 +1,8 @@
 import json
-import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
-
-from app.action_registry import get_action_registry
 from app.agentic_pipeline import run_agentic_action
 from app.digests import sha256_json_or_none
 from app.executors.llm_executor_v1 import LLMExecutorV1

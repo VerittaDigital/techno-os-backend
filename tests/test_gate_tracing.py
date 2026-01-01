@@ -5,7 +5,6 @@ Testes de tracing para o gate_engine (FASE 4).
 """
 import pytest
 from app.gate_engine import evaluate_gate, GateInput, GateResult, DEFAULT_RULES
-from app.tracing import is_tracing_enabled
 import os
 
 @pytest.fixture(autouse=True)

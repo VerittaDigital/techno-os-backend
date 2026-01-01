@@ -4,6 +4,7 @@ import uuid
 import pytest
 from app.agentic_pipeline import run_agentic_action
 from app.tracing import init_tracing, get_tracer
+from conftest import tracing_available
 
 
 class TestAgenticPipelineTracingGovernance:
@@ -32,6 +33,7 @@ class TestAgenticPipelineTracingGovernance:
         # trace_id should be a valid UUID
         uuid.UUID(result.trace_id)  # Raises if invalid
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_pipeline_with_tracing_enabled_works(self, monkeypatch):
         """Pipeline works with TRACING_ENABLED=1."""
         # Enable tracing
@@ -140,6 +142,7 @@ class TestAgenticPipelineSemanticInvariance:
 class TestAgenticPipelineSpanHierarchy:
     """Test span hierarchy in agentic pipeline (observability validation)."""
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_pipeline_creates_spans_when_enabled(self, monkeypatch):
         """Pipeline creates hierarchical spans with TRACING_ENABLED=1."""
         # Enable tracing

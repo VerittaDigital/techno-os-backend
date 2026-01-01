@@ -1,8 +1,8 @@
 """Tests for OpenTelemetry tracing module (F8.6.1)."""
 
-import os
 import pytest
 from app.tracing import init_tracing, get_tracer, observed_span, is_tracing_enabled
+from conftest import tracing_available
 
 
 class TestTracingGovernance:
@@ -22,6 +22,7 @@ class TestTracingGovernance:
         tracer = init_tracing()
         assert tracer is None
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_tracing_enabled_via_env(self, monkeypatch):
         """TRACING_ENABLED=1 enables tracing."""
         # Reset state
@@ -39,6 +40,7 @@ class TestTracingGovernance:
 class TestTracingInitialization:
     """Test tracing initialization (fail-closed)."""
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_init_tracing_idempotent(self, monkeypatch):
         """Calling init_tracing() multiple times is safe."""
         monkeypatch.setenv("TRACING_ENABLED", "1")
@@ -65,6 +67,7 @@ class TestTracingInitialization:
 class TestObservedSpan:
     """Test observed_span wrapper (wrapper-only, fail-closed)."""
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_observed_span_with_tracer(self, monkeypatch):
         """observed_span() returns context manager when tracer available."""
         monkeypatch.setenv("TRACING_ENABLED", "1")
@@ -92,6 +95,7 @@ class TestObservedSpan:
         with observed_span("test_span"):
             pass
     
+    @pytest.mark.skipif(not tracing_available(), reason="Tracing dependencies not available")
     def test_observed_span_preserves_semantics(self, monkeypatch):
         """observed_span() does NOT alter function semantics."""
         monkeypatch.setenv("TRACING_ENABLED", "1")

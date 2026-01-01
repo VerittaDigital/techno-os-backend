@@ -8,11 +8,10 @@ Verify:
 """
 
 import time
-import pytest
 from unittest.mock import Mock, patch, MagicMock
 import uuid
 
-from app.action_contracts import ActionRequest, ActionResult
+from app.action_contracts import ActionRequest
 from app.agentic_pipeline import run_agentic_action
 
 

@@ -2,7 +2,7 @@
 import threading
 import pytest
 
-from app.executors.registry import get_executor, _EXECUTORS, _EXECUTORS_LOCK, UnknownExecutorError
+from app.executors.registry import get_executor, _EXECUTORS_LOCK, UnknownExecutorError
 
 
 class TestExecutorRegistryThreadSafety:

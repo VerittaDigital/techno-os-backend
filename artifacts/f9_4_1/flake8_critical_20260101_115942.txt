@@ -1,0 +1,5 @@
+app/action_matrix.py:36:5: F824 `global _global_matrix` is unused: name is never assigned in scope
+    global _global_matrix
+    ^
+1     F824 `global _global_matrix` is unused: name is never assigned in scope
+1

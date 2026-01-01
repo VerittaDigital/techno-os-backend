@@ -6,8 +6,6 @@ THESE TESTS MUST FAIL if AG-03 breaks retrocompat (CRITICAL).
 """
 import json
 import logging
-import pytest
-from app.main import app
 import uuid
 
 

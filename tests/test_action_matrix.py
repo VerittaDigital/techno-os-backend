@@ -1,5 +1,4 @@
 """Tests for action profile matrix."""
-import pytest
 from app.action_matrix import ActionMatrix, get_action_matrix, is_action_allowed_in_profile
 
 

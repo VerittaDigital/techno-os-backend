@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Dict, List
 
 from app.decision_record import DecisionRecord
 from app.audit_log import log_decision
@@ -22,7 +22,7 @@ class AdminRateLimit:
     PROFILE_ID = "ADMIN_G10"
     
     # In-memory store: {admin_key: [(timestamp, count), ...]}
-    _requests = {}
+    _requests: Dict[str, List[datetime]] = {}
     
     @classmethod
     def check(cls, admin_key: str, trace_id: str) -> tuple[bool, Optional[str], Optional[DecisionRecord]]:

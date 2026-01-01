@@ -1,5 +1,4 @@
 """Tests for action registry and fingerprinting."""
-import pytest
 from app.action_registry import ActionRegistry, get_action_registry, compute_registry_fingerprint
 
 

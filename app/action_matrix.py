@@ -33,8 +33,6 @@ def get_action_matrix() -> ActionMatrix:
     
     Thread-safe: acquires _global_matrix_lock for consistent read.
     """
-    global _global_matrix
-    
     with _global_matrix_lock:
         if _global_matrix is not None:
             return _global_matrix

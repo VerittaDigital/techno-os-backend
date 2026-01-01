@@ -1,6 +1,5 @@
 """Tests for F2.3 gate chain (T4) - Bearer token auth with sessions."""
 
-import pytest
 from fastapi.testclient import TestClient
 from datetime import datetime, timedelta, timezone
 

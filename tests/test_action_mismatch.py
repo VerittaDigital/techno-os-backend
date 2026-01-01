@@ -1,7 +1,6 @@
 """Tests for profile-action mismatch in pipeline."""
 import json
 import uuid
-import pytest
 from app.action_contracts import ActionResult
 
 

@@ -12,9 +12,7 @@ Note: Fail-closed behavior (audit failure -> BLOCKED) is already tested in:
 """
 
 import json
-import os
 import pytest
-from pathlib import Path
 from fastapi.testclient import TestClient
 
 

@@ -1,15 +1,12 @@
 """Tests for Admin API (TASK A2)."""
 
 import pytest
-import json
-from datetime import datetime, timezone
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
-from app.db.database import get_db, SessionLocal
+from app.db.database import get_db
 from app.db.session_repository import SessionRepository
 from app.models.session import SessionModel
 

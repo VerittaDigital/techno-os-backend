@@ -1,8 +1,5 @@
 """Tests for F2.1 gate chain (T3)."""
 
-import pytest
-import os
-from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 from app.main import app

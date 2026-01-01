@@ -11,9 +11,7 @@ Casos:
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-import pytest
 
 from app.tools.orphan_reconciler import OrphanReconciler, analyze_audit_log
 
