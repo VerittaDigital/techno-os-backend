@@ -1,0 +1,12 @@
+total 36
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  1 12:09 .
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  1 12:24 ..
+-rwxrwxrwx 1 vinicius vinicius 2401 Jan  1 11:21 contract_obs.sh
+-rwxrwxrwx 1 vinicius vinicius 2033 Jan  1 11:21 contract_sec.sh
+-rwxrwxrwx 1 vinicius vinicius 7175 Jan  1 08:01 f8_8_obs_contract.sh
+-rwxrwxrwx 1 vinicius vinicius 1406 Dec 30 22:33 generate_profiles_fingerprint_lock.py
+-rwxrwxrwx 1 vinicius vinicius  855 Jan  1 08:18 rollback_f9_1.sh
+-rwxrwxrwx 1 vinicius vinicius  904 Jan  1 09:23 rollback_f9_2.sh
+-rwxrwxrwx 1 vinicius vinicius  562 Jan  1 11:05 rollback_f9_3.sh
+-rwxrwxrwx 1 vinicius vinicius  740 Jan  1 12:17 rollback_f9_4_1.sh
+-rwxrwxrwx 1 vinicius vinicius 1770 Jan  1 11:21 smoke_https.sh

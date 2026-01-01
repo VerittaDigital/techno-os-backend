@@ -1,0 +1,29 @@
+🚀 Iniciando Smoke Tests HTTPS (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: /health via HTTPS
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0   1187      0 --:--:-- --:--:-- --:--:--  1250
+{"status":"ok"}✅ /health OK
+Teste 2: Endpoint raiz sem auth
+HTTP/2 401 
+server: nginx/1.29.4
+date: Thu, 01 Jan 2026 15:26:21 GMT
+content-type: text/html
+content-length: 179
+www-authenticate: Basic realm="Techno OS API"
+strict-transport-security: max-age=31536000; includeSubDomains
+x-frame-options: SAMEORIGIN
+x-content-type-options: nosniff
+
+✅ Endpoint protegido (401/403 esperado)
+Teste 3: Endpoint raiz com auth
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0    925      0 --:--:-- --:--:-- --:--:--   937
+{"status":"ok"}✅ Auth OK
+Teste 4: Grafana HTTPS e login
+✅ Grafana requer login (redirect/401)
+🎉 Smoke Tests HTTPS PASS (todos testes OK)
+Logs salvos em: smoke_https_20260101_122621.log
