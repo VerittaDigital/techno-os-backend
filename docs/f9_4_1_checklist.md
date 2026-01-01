@@ -51,7 +51,7 @@
 
 ## Relatório Final
 - Hash baseline: 0ca2bdff2542160e59fd0ab3dfdabe37bacdbe60
-- Hash final: [a ser preenchido]
+- Hash final: 30ba49ea1a0c7dd711e9a737463968f75a9ac46c
 - Pytest: PASS (362 passed, 12 skipped)
 - Flake8 crítico: PASS (0)
 - Mypy: 4 bugs reais corrigidos (73 restantes)

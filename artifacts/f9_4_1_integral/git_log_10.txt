@@ -1,0 +1,10 @@
+30ba49e F9.4.1: Harden tests & QA gate - tracing optional, flake8 critical fixed, mypy bugs corrected
+0ca2bdf Consolidate pending changes for F9.4.1 readiness - F9.4 PASS local with BASE_URL fixes
+e93f495 chore(obs): add F8.8 observability contract runbook (CI-friendly, fail-closed)
+25c7dce Merge branch 'chore/pre-phase4-hygiene' into main (F8.7 observability)
+4b3ed3b chore(obs): F8.7 mode governance + stability (reload by ENV) and observability contract
+8b2134a feat(obs): complete F8.3-F8.5 observability stack
+d4cc0f2 feat(obs): expose /metrics endpoint for Prometheus scrape (F8.3 unblock)
+2ac092a chore(deps): add postgres driver for staging runtime
+9592b12 feat(f8.6.1): FASE 4 - instrumentação segura do gate_engine (bordas only)
+4a02751 chore: remove venv from git tracking
