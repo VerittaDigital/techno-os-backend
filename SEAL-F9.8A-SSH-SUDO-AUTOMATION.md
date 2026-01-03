@@ -1,4 +1,4 @@
-# 🔒 SEAL — F9.8A: SSH Key + Sudo Non-Interactive Automation
+r# 🔒 SEAL — F9.8A: SSH Key + Sudo Non-Interactive Automation
 
 **Fase:** F9.8A — Deploy Automation (Prerequisite for F9.9-B)  
 **Objetivo:** Eliminar prompts de senha em deploy (SSH + sudo)  
