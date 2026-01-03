@@ -1,6 +1,6 @@
-"""OpenAI client adapter for Techno OS (V-COF governed).
+"""DeepSeek client adapter for Techno OS (V-COF governed).
 
-Integra SDK oficial OpenAI com governança V-COF:
+Integra DeepSeek API (OpenAI-compatible) com governança V-COF:
 - Timeout configurável (fail-closed)
 - Rate limit respeitado
 - Erros normalizados
@@ -15,13 +15,13 @@ from typing import Dict
 from .client import LLMClient
 
 
-class OpenAIClient(LLMClient):
-    """OpenAI GPT adapter (gpt-4, gpt-3.5-turbo, etc)."""
+class DeepSeekClient(LLMClient):
+    """DeepSeek adapter (deepseek-chat, deepseek-coder, etc)."""
 
     def __init__(self, api_key: str, *, default_timeout_s: float = 10.0):
         """
         Args:
-            api_key: OpenAI API key (OPENAI_API_KEY)
+            api_key: DeepSeek API key (DEEPSEEK_API_KEY)
             default_timeout_s: Timeout padrão para chamadas
         """
         try:
@@ -29,19 +29,24 @@ class OpenAIClient(LLMClient):
         except ImportError:
             raise RuntimeError("MISSING_DEPENDENCY: pip install openai")
 
-        self._client = OpenAI(api_key=api_key, timeout=default_timeout_s)
+        # DeepSeek usa API compatível com OpenAI, mas com base_url customizada
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com/v1",  # Endpoint DeepSeek
+            timeout=default_timeout_s,
+        )
         self._default_timeout_s = default_timeout_s
 
     def generate(
         self, *, prompt: str, model: str, temperature: float, max_tokens: int, timeout_s: float
     ) -> Dict:
-        """Chama OpenAI Chat Completions API."""
+        """Chama DeepSeek API (OpenAI-compatible)."""
         t = timeout_s or self._default_timeout_s
         start = time.perf_counter()
 
         try:
             response = self._client.chat.completions.create(
-                model=model,  # e.g., "gpt-4", "gpt-3.5-turbo"
+                model=model,  # e.g., "deepseek-chat", "deepseek-coder"
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -50,7 +55,7 @@ class OpenAIClient(LLMClient):
 
             latency_ms = int((time.perf_counter() - start) * 1000)
 
-            # Normalizar resposta
+            # Normalizar resposta (idêntico ao OpenAI)
             text = response.choices[0].message.content
             usage = {
                 "prompt": response.usage.prompt_tokens,

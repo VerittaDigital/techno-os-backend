@@ -6,9 +6,15 @@ httpx
 packaging
 sqlalchemy
 psycopg2-binary
+
 # F8.6.1 - OpenTelemetry Distributed Tracing
 opentelemetry-api==1.23.0
 opentelemetry-sdk==1.23.0
 opentelemetry-exporter-jaeger==1.21.0
 opentelemetry-instrumentation==0.44b0
 prometheus-client
+
+# LLM Providers (opcionais - instalar conforme necessidade)
+# openai                    # OpenAI GPT, Grok (xAI), DeepSeek
+# anthropic                 # Anthropic Claude
+# google-generativeai       # Google Gemini

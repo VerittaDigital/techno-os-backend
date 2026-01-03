@@ -1,6 +1,6 @@
-"""OpenAI client adapter for Techno OS (V-COF governed).
+"""Anthropic Claude client adapter for Techno OS (V-COF governed).
 
-Integra SDK oficial OpenAI com governança V-COF:
+Integra SDK oficial Anthropic com governança V-COF:
 - Timeout configurável (fail-closed)
 - Rate limit respeitado
 - Erros normalizados
@@ -15,47 +15,47 @@ from typing import Dict
 from .client import LLMClient
 
 
-class OpenAIClient(LLMClient):
-    """OpenAI GPT adapter (gpt-4, gpt-3.5-turbo, etc)."""
+class AnthropicClient(LLMClient):
+    """Anthropic Claude adapter (claude-3-opus, claude-3-sonnet, etc)."""
 
     def __init__(self, api_key: str, *, default_timeout_s: float = 10.0):
         """
         Args:
-            api_key: OpenAI API key (OPENAI_API_KEY)
+            api_key: Anthropic API key (ANTHROPIC_API_KEY)
             default_timeout_s: Timeout padrão para chamadas
         """
         try:
-            from openai import OpenAI
+            from anthropic import Anthropic
         except ImportError:
-            raise RuntimeError("MISSING_DEPENDENCY: pip install openai")
+            raise RuntimeError("MISSING_DEPENDENCY: pip install anthropic")
 
-        self._client = OpenAI(api_key=api_key, timeout=default_timeout_s)
+        self._client = Anthropic(api_key=api_key, timeout=default_timeout_s)
         self._default_timeout_s = default_timeout_s
 
     def generate(
         self, *, prompt: str, model: str, temperature: float, max_tokens: int, timeout_s: float
     ) -> Dict:
-        """Chama OpenAI Chat Completions API."""
+        """Chama Anthropic Messages API."""
         t = timeout_s or self._default_timeout_s
         start = time.perf_counter()
 
         try:
-            response = self._client.chat.completions.create(
-                model=model,  # e.g., "gpt-4", "gpt-3.5-turbo"
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
+            response = self._client.messages.create(
+                model=model,  # e.g., "claude-3-opus-20240229", "claude-3-sonnet-20240229"
                 max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}],
                 timeout=t,
             )
 
             latency_ms = int((time.perf_counter() - start) * 1000)
 
             # Normalizar resposta
-            text = response.choices[0].message.content
+            text = response.content[0].text
             usage = {
-                "prompt": response.usage.prompt_tokens,
-                "completion": response.usage.completion_tokens,
-                "total": response.usage.total_tokens,
+                "prompt": response.usage.input_tokens,
+                "completion": response.usage.output_tokens,
+                "total": response.usage.input_tokens + response.usage.output_tokens,
             }
 
             return {"text": text, "usage": usage, "model": model, "latency_ms": latency_ms}
