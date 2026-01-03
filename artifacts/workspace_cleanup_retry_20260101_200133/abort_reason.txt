@@ -1,0 +1,2 @@
+ABORT: branch exists but is NOT anchored to canonical tag.
+Suggested actions: reset --hard to tag OR rename branch (human decision required).

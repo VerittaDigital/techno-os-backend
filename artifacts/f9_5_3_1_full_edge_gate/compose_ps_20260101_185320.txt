@@ -1,0 +1,6 @@
+NAME                   IMAGE                    COMMAND                     SERVICE      CREATED       STATUS                 PORTS
+techno-os-api          techno-os-backend-api    "sh -c '\n  if [ \"\" =…"   api          3 hours ago   Up 3 hours (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+techno-os-db           postgres:15-alpine       "docker-entrypoint.s…"      postgres     3 hours ago   Up 3 hours (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+techno_os_grafana      grafana/grafana:latest   "/run.sh"                   grafana      2 hours ago   Up 2 hours             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+techno_os_prometheus   prom/prometheus:latest   "/bin/prometheus --c…"      prometheus   2 hours ago   Up 2 hours (healthy)   9090/tcp
+techno_os_proxy        nginx:alpine             "/docker-entrypoint.…"      proxy        2 hours ago   Up 2 hours             0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp

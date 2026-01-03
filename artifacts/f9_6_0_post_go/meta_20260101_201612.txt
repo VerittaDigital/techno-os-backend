@@ -1,0 +1,4 @@
+TS=20260101_201612
+PWD=/mnt/d/Projects/techno-os-backend
+BRANCH=stage/f9.6.1-cicd-minimal
+HEAD=9394f4aa18a9b2e33f1511baeba19c1e28112823

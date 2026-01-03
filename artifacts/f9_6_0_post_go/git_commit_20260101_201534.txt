@@ -1,0 +1,2 @@
+On branch stage/f9.6.1-cicd-minimal
+nothing to commit, working tree clean

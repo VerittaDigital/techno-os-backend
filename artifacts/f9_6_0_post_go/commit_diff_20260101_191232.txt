@@ -1,0 +1,29 @@
+diff --git a/.gitignore b/.gitignore
+index fd6a3c4..db3e163 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -32,3 +32,5 @@ app.db.F8.*-audited-*
+ techno-os-F8.*-audited-*.bundle
+ checksums-F8.*-audited.txt
+ venv/
++# Evidence Policy: ignore heavy artifacts
++artifacts/
+diff --git a/docs/evidence_policy.md b/docs/evidence_policy.md
+new file mode 100644
+index 0000000..05514dd
+--- /dev/null
++++ b/docs/evidence_policy.md
+@@ -0,0 +1,13 @@
++# Evidence Policy
++
++## Canonical Light Evidence
++- Files committed to git: policies, scripts, configs that define the system.
++- Examples: docker-compose.yml, scripts/, docs/, .gitignore updates.
++
++## Heavy Artifacts
++- Runtime evidences: logs, probes, checksums, reports generated during execution.
++- Ignored in .gitignore under artifacts/
++
++## Rationale
++- Keep repo lean for CI/CD.
++- Heavy artifacts can be regenerated or stored externally if needed.
