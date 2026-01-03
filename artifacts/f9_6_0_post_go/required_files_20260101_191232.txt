@@ -1,0 +1,3 @@
+OK  docker-compose.yml
+OK  docker-compose.edge.yml
+OK  .gitignore
