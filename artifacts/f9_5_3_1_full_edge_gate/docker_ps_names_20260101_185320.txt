@@ -1,0 +1,5 @@
+techno_os_proxy
+techno_os_grafana
+techno_os_prometheus
+techno-os-api
+techno-os-db

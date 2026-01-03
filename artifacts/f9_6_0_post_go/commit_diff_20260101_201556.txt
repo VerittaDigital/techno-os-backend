@@ -1,0 +1,429 @@
+diff --git a/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_20260101_194047.md b/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_20260101_194047.md
+new file mode 100644
+index 0000000..a13c49a
+--- /dev/null
++++ b/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_20260101_194047.md
+@@ -0,0 +1,141 @@
++# SENIOR AUDIT PRE-HOUSEKEEPING
++
++**Timestamp:** 20260101_194047  
++**Branch:** work/F9_5_2_edge_stack  
++**HEAD:** 1cd08c48b0b080209cf8556364091bbbd0df36c7  
++**Tag Canônica:** v0.1.0-f9.6.0 (34225de)  
++**Disclaimer:** Foco em observação conservadora; LGPD-by-design (sem exposição de conteúdo sensível). Em caso de dúvida: “Classificação incerta — requer decisão humana.”
++
++## Contexto e Regras
++Auditoria sênior pré-housekeeping para TECHNO-OS Backend. Objetivo: preparar limpeza governada futura, garantindo coerência, mitigando riscos de commit acidental, validando itens ambíguos e verificando LGPD. Não-destrutiva; relatório versionado em docs/. Regras: não apagar/mover/editar; não expor sensível; auditorias permanecem em docs/.
++
++## Preflight Canônico (Branch/HEAD/Tag/Status)
++- Branch atual: work/F9_5_2_edge_stack
++- HEAD: 1cd08c48b0b080209cf8556364091bbbd0df36c7
++- Status: ?? scripts/f9_6_0_post_go_hardening.sh (untracked)
++- Tag points-at HEAD: (nenhuma)
++
++## Diff Tag vs HEAD (Name-Only)
++- docs/evidence_policy.md (alterado após tag)
++
++**Interpretação:** Tag v0.1.0-f9.6.0 não aponta para HEAD; diff mostra mudança em docs/ (canônica). PONTO CANÔNICO = TAG (qualquer limpeza futura deve ser guiada pela tag, não pelo branch work/*).
++
++## Logs Fora de Artifacts (Lista de Nomes) + Risco + Padrões Sugeridos de .gitignore
++**Lista (apenas nomes, sem conteúdo):**
++- ./ci_gate_20260101_125800.log
++- ./ci_gate_20260101_125915.log
++- ./contract_obs_20260101_111847.log
++- ./contract_obs_20260101_111858.log
++- ./contract_obs_20260101_112458.log
++- ./contract_obs_20260101_120838.log
++- ./contract_obs_20260101_122638.log
++- ./contract_obs_20260101_125638.log
++- ./contract_obs_20260101_125945.log
++- ./contract_obs_20260101_131339.log
++- ./contract_obs_20260101_162433.log
++- ./contract_obs_20260101_165813.log
++- ./contract_obs_20260101_165820.log
++- ./contract_obs_20260101_165831.log
++- ./contract_obs_20260101_170137.log
++- ./contract_obs_20260101_170203.log
++- ./contract_obs_20260101_170232.log
++- ./contract_obs_20260101_170351.log
++- ./contract_obs_20260101_184940.log
++- ./contract_obs_20260101_185014.log
++- ./contract_obs_20260101_185331.log
++- ./contract_obs_20260101_185353.log
++- ./contract_sec_20260101_111900.log
++- ./contract_sec_20260101_112025.log
++- ./contract_sec_20260101_112502.log
++- ./contract_sec_20260101_120841.log
++- ./contract_sec_20260101_122658.log
++- ./contract_sec_20260101_125735.log
++- ./contract_sec_20260101_125945.log
++- ./contract_sec_20260101_131339.log
++- ./contract_sec_20260101_170203.log
++- ./contract_sec_20260101_170232.log
++- ./contract_sec_20260101_170352.log
++- ./contract_sec_20260101_184940.log
++- ./contract_sec_20260101_185014.log
++- ./contract_sec_20260101_185331.log
++- ./contract_sec_20260101_185353.log
++- ./pytest-warnings-full.log
++- ./pytest-warnings.log
++- ./smoke_https_20260101_111009.log
++- ./smoke_https_20260101_111732.log
++- ./smoke_https_20260101_111757.log
++- ./smoke_https_20260101_111824.log
++- ./smoke_https_20260101_111831.log
++- ./smoke_https_20260101_111841.log
++- ./smoke_https_20260101_112455.log
++- ./smoke_https_20260101_120835.log
++- ./smoke_https_20260101_122621.log
++- ./smoke_https_20260101_125635.log
++- ./smoke_https_20260101_125945.log
++- ./smoke_https_20260101_131338.log
++- ./smoke_https_20260101_154720.log
++- ./smoke_https_20260101_154947.log
++- ./smoke_https_20260101_155030.log
++- ./smoke_https_20260101_162433.log
++- ./smoke_https_20260101_170203.log
++- ./smoke_https_20260101_170232.log
++- ./smoke_https_20260101_170351.log
++- ./smoke_https_20260101_185013.log
++- ./smoke_https_20260101_185353.log
++
++**Classificação:** B — Evidência pesada / regenerável (todos).
++
++**Risco de commit acidental:** SIM (não cobertos explicitamente por .gitignore; *.log cobre, mas não garante contra subpastas ou padrões específicos).
++
++**Padrões sugeridos para .gitignore (mínimo, sem executar):**
++- *.log
++- **/*.log
++- pytest-warnings*.log
++- ci_gate_*.log
++- contract_*.log
++- smoke_https_*.log
++
++**Observação:** Preferir ignorar logs globalmente, mantendo política de evidência pesada fora do Git. Logs devem ser “relocados” futuramente para artifacts/workspace_cleanup_<timestamp>/ (na fase de execução real).
++
++## actions_fingerprint.lock (Referências Encontradas ou Ausência) + Classificação
++**Referências encontradas:** Nenhuma (busca em .github, scripts, docs retornou vazio).
++
++**Classificação:** D — Ambíguo / risco (não assumir que é lixo; sem referência clara, requer decisão humana para confirmar função em CI/gate).
++
++## certs/ (Lista de Arquivos + Metadados File) + Classificação (Sem Conteúdo)
++**Lista de arquivos:**
++- certs/cert.pem
++- certs/key.pem
++- certs/nginx-selfsigned.crt
++- certs/nginx-selfsigned.key
++
++**Metadados file (tipos):**
++- cert.pem: PEM certificate
++- key.pem: ASCII text
++- nginx-selfsigned.crt: PEM certificate
++- nginx-selfsigned.key: ASCII text
++
++**Classificação:** D — Sensível (presença de .key e .pem indica chaves privadas/certificados; não expor conteúdo; requer decisão humana para retirada/placeholder).
++
++## Definição de Mudanças Canônicas vs Não-Canônicas
++**Mudança canônica (deve ser commitada):**
++- docs/ (incluindo auditorias sênior, SEALs, policies)
++- scripts/
++- configs e manifests (docker-compose*.yml, Dockerfile, .gitignore, .dockerignore, prometheus.yml, alert.rules.yml, etc.)
++- código e testes (app/, tests/, alembic/)
++
++**NÃO-canônico (não commitar):**
++- artifacts/
++- .venv/, caches (.mypy_cache/, .pytest_cache/)
++- *.log e outputs de execução
++- .env (somente local)
++- app.db (se for DB local de dev/test)
++
++## Riscos e Recomendações Observacionais
++- Divergência entre branch work/* e tag canônica → limpeza no ponto errado (recomendação: usar tag como base).
++- Logs soltos não ignorados → commit acidental → repo poluído (recomendação: adicionar padrões a .gitignore).
++- Criação de nova branch a partir do HEAD errado → conflitos e regressões (recomendação: checkout da tag).
++- Presença de material sensível em certs/ → risco de vazamento (recomendação: substituir por placeholders/docs).
++
++## Veredicto Final
++NÃO APTO para limpeza governada futura (ponto canônico divergente: tag != HEAD; faltam decisões humanas para certs/ e actions_fingerprint.lock).
+\ No newline at end of file
+diff --git a/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_FIXPLAN_20260101_194501.md b/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_FIXPLAN_20260101_194501.md
+new file mode 100644
+index 0000000..14c2b5f
+--- /dev/null
++++ b/docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_FIXPLAN_20260101_194501.md
+@@ -0,0 +1,62 @@
++# SENIOR AUDIT PRE-HOUSEKEEPING FIXPLAN
++
++**Timestamp:** 20260101_194501  
++**Disclaimer:** Foco em resolução conservadora; LGPD-by-design (sem exposição de conteúdo sensível). Em caso de dúvida: “Classificação incerta — requer decisão humana.”
++
++## Estado Canônico Atual (TAG vs HEAD)
++- Branch: work/F9_5_2_edge_stack
++- HEAD: 1cd08c48b0b080209cf8556364091bbbd0df36c7 (F9.6.0: Enhance evidence policy with enterprise-grade details)
++- Tag v0.1.0-f9.6.0: 34225de (F9.6.0 Post-GO Hardening Release)
++- Diff --name-status: M docs/evidence_policy.md
++- Status: ?? docs/SENIOR_AUDIT_PRE_HOUSEKEEPING_20260101_194047.md ?? scripts/f9_6_0_post_go_hardening.sh
++
++**DECISÃO HUMANA NECESSÁRIA (escolher uma):**
++(A) “O ponto canônico de limpeza deve ser a TAG v0.1.0-f9.6.0 e vamos criar branch a partir dela, ignorando o HEAD atual.”
++(B) “O HEAD atual contém correções legítimas e deve virar o novo canônico: criar nova tag v0.1.0-f9.6.0+hotfix (ou v0.1.1) após commit governado.”
++(C) “Reverter docs/evidence_policy.md do HEAD para ficar idêntico à TAG (sem criar nova tag).”
++
++## Lista de Logs Soltos + Proposta .gitignore
++**Contagem:** 50+ arquivos *.log fora de artifacts/.
++
++**Lista (apenas nomes, sem conteúdo):** [Mesma da auditoria anterior: ci_gate_*.log, contract_*.log, smoke_https_*.log, pytest-warnings*.log, etc.]
++
++**Proposta .gitignore (mínimo, sem executar ainda — aguardar [GITIGNORE AUTHORIZED]):**
++```
++# Evidence Policy — logs soltos
++*.log
++**/*.log
++pytest-warnings*.log
++ci_gate_*.log
++contract_*.log
++smoke_https_*.log
++```
++
++**Plano para fase destrutiva (não executar agora):** Criar artifacts/workspace_cleanup_<timestamp>/, mover logs soltos para lá, gerar manifesto + SHA256.
++
++## Status actions_fingerprint.lock
++**Referências encontradas:** Muitas em docs/archive/ (ex.: lock de ações governadas, fingerprinting para CI/CD, testes de drift). Função: lock de registry de ações, paralelo a profiles_fingerprint.lock.
++
++**Classificação:** A (Canônico Git) — tem função clara em governança/drift detection.
++
++**Pergunta de decisão humana:** “Devemos preservar este arquivo (A — canônico) até F9.6.1, ou isolá-lo em artifacts na limpeza?”
++
++## Status certs/ (Metadados Apenas)
++**Lista de arquivos:** certs/cert.pem, certs/key.pem, certs/nginx-selfsigned.crt, certs/nginx-selfsigned.key
++
++**Metadados file:** PEM certificate (cert.pem, nginx-selfsigned.crt), ASCII text (key.pem, nginx-selfsigned.key)
++
++**Classificação:** D — Sensível (presença de .key/.pem indica chaves privadas/certificados).
++
++**Perguntas obrigatórias de decisão humana:**
++“Esses certificados/chaves são apenas para DEV/LOCAL ou têm relação com produção?”
++“Podemos remover do repo e manter apenas placeholders + docs?”
++“Deseja mover o conteúdo real para armazenamento seguro fora do repo e manter no repo apenas: certs/README.md (instruções), placeholders (ex.: .pem.example)?”
++
++## Checklist do que Falta para Ficar “APTO”
++- [ ] Ponto canônico escolhido (A/B/C)
++- [ ] Logs protegidos por .gitignore (após autorização)
++- [ ] Decisão para certs/ (remover/placeholders)
++- [ ] Decisão para actions_fingerprint.lock (preservar/isolamento)
++
++## Veredicto Final
++NÃO APTO (decisões humanas pendentes para canônico, certs/ e lock).
+\ No newline at end of file
+diff --git a/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_20260101_195502.md b/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_20260101_195502.md
+new file mode 100644
+index 0000000..42c9cdb
+--- /dev/null
++++ b/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_20260101_195502.md
+@@ -0,0 +1,14 @@
++# SENIOR AUDIT WORKSPACE CLEANUP
++
++**Timestamp:** 20260101_195502  
++**Veredicto:** NÃO APTO (Abort devido a falha crítica)
++
++## Motivo do Abort
++Branch stage/f9.6.1-cicd-minimal already exists. Falha em git checkout -b.
++
++## Evidências
++- Abort reason: artifacts/workspace_cleanup_20260101_195502/abort_reason.txt
++- Preflight não completado devido a abort.
++
++## Recomendação
++Resolver conflito de branch antes de retentar limpeza. Verificar se branch já foi criado anteriormente.
+\ No newline at end of file
+diff --git a/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_RETRY_20260101_200216.md b/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_RETRY_20260101_200216.md
+new file mode 100644
+index 0000000..3c92937
+--- /dev/null
++++ b/docs/SENIOR_AUDIT_WORKSPACE_CLEANUP_RETRY_20260101_200216.md
+@@ -0,0 +1,14 @@
++# SENIOR AUDIT — WORKSPACE CLEANUP (RETRY)
++
++**Timestamp:** 20260101_200216  
++**Veredicto:** NÃO APTO (Abort devido a divergência canônica)
++
++## Motivo do Abort
++Branch stage/f9.6.1-cicd-minimal exists but HEAD (34225de) != TAG_HEAD (a4a80f8). Requires human decision (reset --hard to tag OR rename branch).
++
++## Evidências
++- Abort reason: artifacts/workspace_cleanup_retry_20260101_200216/abort_reason.txt
++- Preflight não completado devido a abort.
++
++## Recomendação
++Resolver divergência canônica antes de retentar. Verificar se tag está correta ou se branch foi modificada.
+\ No newline at end of file
+diff --git a/scripts/f9_6_0_post_go_hardening.sh b/scripts/f9_6_0_post_go_hardening.sh
+new file mode 100644
+index 0000000..d73b261
+--- /dev/null
++++ b/scripts/f9_6_0_post_go_hardening.sh
+@@ -0,0 +1,163 @@
++#!/bin/bash
++# F9.6.0 Post-GO Hardening Script with DRY_RUN support
++
++set -euo pipefail
++
++cd /mnt/d/Projects/techno-os-backend
++ART_DIR="artifacts/f9_6_0_post_go"
++TS="$(date +%Y%m%d_%H%M%S)"
++mkdir -p "$ART_DIR"
++
++: "${DRY_RUN:=0}"
++: "${PUSH_TAG:=0}"
++
++echo "TS=$TS" | tee "$ART_DIR/meta_${TS}.txt"
++echo "PWD=$(pwd)" | tee -a "$ART_DIR/meta_${TS}.txt"
++echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)" | tee -a "$ART_DIR/meta_${TS}.txt"
++echo "HEAD=$(git rev-parse HEAD)" | tee -a "$ART_DIR/meta_${TS}.txt"
++
++git status --porcelain | tee "$ART_DIR/git_status_pre_${TS}.txt"
++
++REQ_FILES=(
++  "docker-compose.yml"
++  "docker-compose.edge.yml"
++  ".gitignore"
++)
++MISSING=0
++for f in "${REQ_FILES[@]}"; do
++  test -f "$f" && echo "OK  $f" || { echo "MISS $f"; MISSING=1; }
++done | tee "$ART_DIR/required_files_${TS}.txt"
++[ "$MISSING" -eq 0 ] || { echo "ABORT: arquivos obrigatórios ausentes"; exit 1; }
++
++# Create evidence policy doc (if not exists)
++if [ ! -f docs/evidence_policy.md ]; then
++  mkdir -p docs
++  cat > docs/evidence_policy.md << 'EOP'
++# Evidence Policy
++
++## Canonical Light Evidence
++- Files committed to git: policies, scripts, configs that define the system.
++- Examples: docker-compose.yml, scripts/, docs/, .gitignore updates.
++
++## Heavy Artifacts
++- Runtime evidences: logs, probes, checksums, reports generated during execution.
++- Ignored in .gitignore under artifacts/
++
++## Storage and Retention for Heavy Artifacts
++- Heavy artifacts devem ser armazenados em storage externo ou CI artifacts (ex.: GitHub Actions artifacts, S3, ou similar).
++- Prazo de retenção: 30 dias ou conforme política de compliance/auditoria.
++- Regeneráveis via scripts; não versionar para manter repo enxuto.
++
++## PII and Redaction (LGPD Compliance)
++- Jamais commitar dados pessoais, tokens, dumps sensíveis ou informações identificáveis.
++- Redigir logs e reports: substituir PII por placeholders (ex.: [REDACTED]).
++- Verificar antes de commit: scripts devem evitar exposição acidental.
++
++## Naming Standards for Artifacts and Reports
++- Padrão: artifacts/{phase}/{type}_{timestamp}.{ext}
++- Exemplos: artifacts/f9_6_0_post_go/FINAL_REPORT_20260101_191232.md
++- Facilita auditoria e organização cronológica.
++
++## Rationale
++- Keep repo lean for CI/CD.
++- Heavy artifacts can be regenerated or stored externally if needed.
++- Enterprise-grade governance para compliance e auditabilidade.
++EOP
++  echo "Created docs/evidence_policy.md" | tee "$ART_DIR/evidence_policy_create_${TS}.txt"
++else
++  echo "docs/evidence_policy.md already exists" | tee "$ART_DIR/evidence_policy_create_${TS}.txt"
++fi
++
++# Update .gitignore
++if ! grep -q "Evidence Policy" .gitignore; then
++  cat >> .gitignore << 'EOG'
++# Evidence Policy: ignore heavy artifacts
++artifacts/
++EOG
++  echo "Updated .gitignore with evidence policy" | tee "$ART_DIR/gitignore_update_${TS}.txt"
++else
++  echo ".gitignore already has evidence policy" | tee "$ART_DIR/gitignore_update_${TS}.txt"
++fi
++
++if [ "$DRY_RUN" -eq 0 ]; then
++  # Add and commit changes
++  git add docs/evidence_policy.md .gitignore
++  if ! git diff --cached --quiet; then
++    git commit -m "F9.6.0: Implement evidence policy for lean git
++
++- Add docs/evidence_policy.md defining canonical light vs heavy evidence
++- Update .gitignore to ignore artifacts/ for heavy runtime evidences
++- Ensures repo hygiene for CI/CD pipelines" 2>&1 | tee "$ART_DIR/git_commit_${TS}.txt"
++  else
++    echo "No changes to commit for evidence policy" | tee "$ART_DIR/git_commit_${TS}.txt"
++  fi
++
++  # Create tag
++  TAG_NAME="v0.1.0-f9.6.0"
++  if ! git tag -l | grep -q "^${TAG_NAME}$"; then
++    git tag -a "$TAG_NAME" -m "F9.6.0 Post-GO Hardening Release
++
++- Evidence policy implemented
++- Repo hygiene ensured
++- Ready for production deployment" 2>&1 | tee "$ART_DIR/git_tag_${TS}.txt"
++  else
++    echo "Tag $TAG_NAME already exists" | tee "$ART_DIR/git_tag_${TS}.txt"
++  fi
++
++  if [ "$PUSH_TAG" -eq 1 ]; then
++    git push origin "$TAG_NAME" 2>&1 | tee "$ART_DIR/git_push_tag_${TS}.txt"
++  fi
++else
++  echo "DRY_RUN=1: Skipping commit and tag creation" | tee "$ART_DIR/dry_run_skip_${TS}.txt"
++fi
++
++git status --porcelain | tee "$ART_DIR/git_status_post_${TS}.txt"
++
++# Generate evidence
++if [ "$DRY_RUN" -eq 0 ]; then
++  git show --stat "$TAG_NAME" | tee "$ART_DIR/tag_show_${TS}.txt"
++  git diff HEAD~1 | tee "$ART_DIR/commit_diff_${TS}.txt"
++else
++  echo "DRY_RUN: No tag to show" | tee "$ART_DIR/tag_show_${TS}.txt"
++  echo "DRY_RUN: No diff to show" | tee "$ART_DIR/commit_diff_${TS}.txt"
++fi
++
++find "$ART_DIR" -type f -maxdepth 1 -print0 | xargs -0 sha256sum | tee "$ART_DIR/SHA256SUMS_${TS}.txt"
++
++DIRTY_POST="$(cat "$ART_DIR/git_status_post_${TS}.txt")"
++
++VERDICT="GO"
++[ -z "$DIRTY_POST" ] || VERDICT="NO-GO"
++
++{
++  echo "# F9.6.0 — POST-GO HARDENING — FINAL REPORT"
++  echo
++  echo "TS: $TS"
++  echo "BRANCH: $(cat "$ART_DIR/meta_${TS}.txt" | grep BRANCH | cut -d= -f2)"
++  echo "HEAD: $(cat "$ART_DIR/meta_${TS}.txt" | grep HEAD | cut -d= -f2)"
++  echo "TAG: ${TAG_NAME:-N/A (DRY_RUN)}"
++  echo "DRY_RUN: $DRY_RUN"
++  echo "PUSH_TAG: $PUSH_TAG"
++  echo
++  echo "## CHANGES"
++  echo "- Created/Updated docs/evidence_policy.md"
++  echo "- Updated .gitignore with artifacts/ ignore"
++  if [ "$DRY_RUN" -eq 0 ]; then
++    echo "- Committed changes"
++    echo "- Created tag $TAG_NAME"
++  else
++    echo "- DRY_RUN: No commit/tag"
++  fi
++  echo
++  echo "## WORKTREE POLICY"
++  echo "dirty_post:"
++  echo "$DIRTY_POST"
++  echo
++  echo "## VERDICT"
++  echo "$VERDICT"
++  echo
++  echo "## POINTERS"
++  echo "Full evidence folder: $ART_DIR/"
++} | tee "$ART_DIR/FINAL_REPORT_${TS}.md"
++
++echo "$VERDICT"
+\ No newline at end of file

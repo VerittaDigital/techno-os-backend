@@ -1,0 +1,1 @@
+ABORT: Branch stage/f9.6.1-cicd-minimal already exists. Falha em checkout.
