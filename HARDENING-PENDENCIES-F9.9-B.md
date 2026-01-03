@@ -14,9 +14,9 @@
 
 ---
 
-## 🚨 BLOQUEIOS CRÍTICOS (MUST-FIX ANTES DE INICIAR F9.9-B)
+## ✅ BLOQUEIOS RESOLVIDOS
 
-### RISK-2: Grafana Credenciais Default 🔴 **CRÍTICO — BLOCKING**
+### RISK-2: Grafana Credenciais Default ✅ **RESOLVIDO — 2026-01-03T23:35Z**
 
 **Descrição:**  
 Grafana inicializado com credenciais default `admin:admin` (ambiente production).
@@ -24,97 +24,52 @@ Grafana inicializado com credenciais default `admin:admin` (ambiente production)
 **Evidência Primária:**  
 - Container: `docker logs techno-os-grafana` não mostra `GF_SECURITY_ADMIN_PASSWORD` customizado
 - URL: https://grafana.verittadigital.com (acessível externamente via TLS)
-- Estado: Não testado login (mas comportamento padrão Grafana é manter admin:admin)
+- Estado: ~~Não testado login~~ → **Senha alterada manualmente**
 
 **Impacto:**  
-- Acesso não autorizado ao painel de monitoramento
-- Modificação de dashboards e alertas
-- Possível pivô para reconnaissance de infraestrutura
-- **VIOLAÇÃO LGPD**: Métricas podem conter informações sobre uso da API
+- ~~Acesso não autorizado ao painel de monitoramento~~
+- ~~Modificação de dashboards e alertas~~
+- ~~Possível pivô para reconnaissance de infraestrutura~~
+- ~~**VIOLAÇÃO LGPD**: Métricas podem conter informações sobre uso da API~~
 
-**Acceptance Criteria (para desbloquear F9.9-B):**  
-```bash
-# Teste de aceitação:
-curl -u admin:admin https://grafana.verittadigital.com/api/auth/keys
-# Deve retornar: 401 Unauthorized (senha alterada)
-```
+**Mitigação Executada (2026-01-03T23:35Z):**  
+1. ✅ Senha admin alterada via web interface
+2. ✅ Validado: `curl -u admin:admin https://grafana.verittadigital.com/api/auth/keys` → HTTP 401 "Invalid username or password"
+3. ✅ Grafana operacional: Health API respondendo (v12.3.1, database: ok)
+4. ✅ Autenticação bloqueando acessos não autorizados
 
-**Ação Obrigatória:**  
-```bash
-# 1. Login manual em https://grafana.verittadigital.com
-# 2. Alterar senha admin em Profile > Change Password
-# 3. Criar usuário viewer (read-only) para análise diária
-# 4. Documentar alteração:
-ssh deploy@72.61.219.157
-echo "$(date -u): Grafana admin password changed" >> /opt/techno-os/artifacts/hardening_f9_9_b.log
-```
+**Acceptance Criteria:** ✅ **ATENDIDO**
 
-**Prazo:** IMEDIATO (antes de qualquer deploy F9.9-B)
+**Status:** 🟢 **RISK-2 MITIGADO** — F9.9-B desbloqueado
 
 ---
 
 ## ⚠️ RISCOS RECOMENDADOS (SHOULD-FIX em F9.9-B)
 
-### RISK-1: Prometheus Exposto Sem Autenticação 🟡 **MÉDIO-ALTO**
+### RISK-1: Prometheus Exposto Sem Autenticação ✅ **RESOLVIDO — F9.8.1**
 
 **Descrição:**  
 Prometheus acessível publicamente via HTTPS sem Basic Auth ou IP allowlist.
 
 **Evidência Primária:**  
-- Teste externo: `curl -skI https://prometheus.verittadigital.com/-/healthy` → HTTP/2 200
-- Vhost: `/etc/nginx/sites-available/prometheus.verittadigital.com` sem diretiva `auth_basic`
-- Port bind: `ss -tlnp | grep :9090` → `LISTEN *:9090` (wildcard, não 127.0.0.1)
+- ~~Teste externo: `curl -skI https://prometheus.verittadigital.com/-/healthy` → HTTP/2 200~~
+- ~~Vhost: `/etc/nginx/sites-available/prometheus.verittadigital.com` sem diretiva `auth_basic`~~
+- ~~Port bind: `ss -tlnp | grep :9090` → `LISTEN *:9090` (wildcard, não 127.0.0.1)~~
 
 **Impacto:**  
-- Information disclosure (métricas de performance, não PII)
-- Reconhecimento de arquitetura (endpoints, services, latências)
-- Possível denial of service via queries pesadas
+- ~~Information disclosure (métricas de performance, não PII)~~
+- ~~Reconhecimento de arquitetura (endpoints, services, latências)~~
+- ~~Possível denial of service via queries pesadas~~
 
-**Acceptance Criteria:**  
-```bash
-# Teste de aceitação:
-curl -skI https://prometheus.verittadigital.com/-/healthy
-# Deve retornar: HTTP/2 401 (se Basic Auth implementado)
-# OU: HTTP/2 403 (se IP allowlist implementado)
-```
+**Mitigação Executada (F9.8.1 — commit e9907a8):**  
+1. ✅ Basic Auth implementado via Nginx htpasswd bcrypt
+2. ✅ Grafana datasource configurado com basicAuth: true
+3. ✅ Validado: HTTP 401 sem credenciais, HTTP 200 com credenciais
+4. ✅ 16 arquivos de evidência em `/opt/techno-os/artifacts/f9_8_1_risk1_20260103_141623/`
 
-**Opções de Mitigação (escolher 1):**
+**Referência:** [SEAL-F9.8.1-PROMETHEUS-AUTH.md](SEAL-F9.8.1-PROMETHEUS-AUTH.md)
 
-#### Opção A: Basic Auth (Recomendado — Baixo Risco Operacional)
-```nginx
-# /etc/nginx/sites-available/prometheus.verittadigital.com
-location / {
-    auth_basic "Prometheus";
-    auth_basic_user_file /etc/nginx/.htpasswd_prometheus;
-    proxy_pass http://127.0.0.1:9090;
-}
-```
-```bash
-# Gerar htpasswd:
-sudo apt install apache2-utils
-sudo htpasswd -c /etc/nginx/.htpasswd_prometheus prometheus_user
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-**Prós:** Simples, padrão industry, compatível com Grafana datasource  
-**Contras:** Credencial adicional para gerenciar
-
-#### Opção B: IP Allowlist (Segurança Máxima — Risco Operacional Médio)
-```nginx
-# /etc/nginx/sites-available/prometheus.verittadigital.com
-location / {
-    allow 72.61.219.157; # VPS próprio
-    allow <IP_ESCRITORIO>;
-    deny all;
-    proxy_pass http://127.0.0.1:9090;
-}
-```
-
-**Prós:** Sem credenciais, mais seguro  
-**Contras:** Equipe remota precisa VPN/IP fixo
-
-**Decisão Necessária:** Tech Lead deve escolher Opção A ou B  
-**Prazo:** Recomendado em F9.9-B
+**Status:** 🟢 **RISK-1 MITIGADO** — Prometheus protegido
 
 ---
 
