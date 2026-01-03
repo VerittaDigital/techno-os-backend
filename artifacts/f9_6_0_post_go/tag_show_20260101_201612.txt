@@ -1,0 +1,23 @@
+tag v0.1.0-f9.6.0
+Tagger: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Thu Jan 1 19:12:34 2026 -0300
+
+F9.6.0 Post-GO Hardening Release
+
+- Evidence policy implemented
+- Repo hygiene ensured
+- Ready for production deployment
+
+commit 34225de38a0d7f9345c3891baa93756d85f77af6
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Thu Jan 1 19:12:33 2026 -0300
+
+    F9.6.0: Implement evidence policy for lean git
+    
+    - Add docs/evidence_policy.md defining canonical light vs heavy evidence
+    - Update .gitignore to ignore artifacts/ for heavy runtime evidences
+    - Ensures repo hygiene for CI/CD pipelines
+
+ .gitignore              |  2 ++
+ docs/evidence_policy.md | 13 +++++++++++++
+ 2 files changed, 15 insertions(+)

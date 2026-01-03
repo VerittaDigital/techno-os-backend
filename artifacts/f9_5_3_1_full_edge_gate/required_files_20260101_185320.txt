@@ -1,0 +1,7 @@
+OK  docker-compose.yml
+OK  docker-compose.edge.yml
+OK  scripts/ci_gate.sh
+OK  scripts/contract_sec.sh
+OK  scripts/contract_obs.sh
+OK  scripts/smoke_https.sh
+OK  .venv/bin/activate

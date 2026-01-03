@@ -1,0 +1,111 @@
+2026-01-01 18:53:31 - 🚀 Iniciando CI Gate F9.5 - TECHNO OS BACKEND
+2026-01-01 18:53:31 - BASE_URL: https://localhost
+2026-01-01 18:53:31 - ARTIFACTS_DIR: artifacts/f9_5
+2026-01-01 18:53:31 - REQUIRE_HEALTHCHECK: 1
+2026-01-01 18:53:31 - CURL_INSECURE: 1
+2026-01-01 18:53:31 - Timestamp: 20260101_185331
+2026-01-01 18:53:31 - Log file: artifacts/f9_5/ci_gate_20260101_185331.log
+2026-01-01 18:53:31 - 🔍 Precheck: Conectividade https://localhost/health (timeout: 10s)
+[0;32m✅ Precheck OK[0m
+2026-01-01 18:53:31 - 🧪 Executando pytest...
+........................................................................ [ 19%]
+.........................s..s........................................... [ 38%]
+.....................s.s..ss............................................ [ 57%]
+........................................................................ [ 77%]
+........................................................................ [ 96%]
+..ss.s.s.s...s                                                           [100%]
+=============================== warnings summary ===============================
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_result_identical_with_without_tracing
+tests/test_agentic_pipeline_tracing.py::TestAgenticPipelineSemanticInvariance::test_pipeline_blocked_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_llm_executor_result_identical_with_without_tracing
+tests/test_executor_tracing.py::TestExecutorSemanticInvariance::test_noop_executor_result_identical_with_without_tracing
+  /mnt/d/Projects/techno-os-backend/app/tracing.py:59: DeprecationWarning: Call to deprecated method __init__. (Since v1.35, the Jaeger supports OTLP natively. Please use the OTLP exporter instead. Support for this exporter will end July 2023.) -- Deprecated since version 1.16.0.
+    jaeger_exporter = JaegerExporter(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:36: Tracing dependencies not available
+SKIPPED [1] tests/test_agentic_pipeline_tracing.py:145: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:42: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:99: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:203: Tracing dependencies not available
+SKIPPED [1] tests/test_executor_tracing.py:233: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:25: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:43: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:70: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing.py:98: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:29: Tracing dependencies not available
+SKIPPED [1] tests/test_tracing_integration.py:123: Tracing dependencies not available
+362 passed, 12 skipped, 4 warnings in 8.46s
+[0;32m✅ Pytest OK[0m
+2026-01-01 18:53:45 - 🔍 Executando flake8 (críticos)...
+[0;32m✅ Flake8 OK[0m
+2026-01-01 18:53:46 - 🔍 Executando mypy (baseline check)...
+[0;32m✅ Mypy OK (73 erros, baseline: 73)[0m
+2026-01-01 18:53:53 - 🚀 Executando smoke HTTPS...
+🚀 Iniciando Smoke Tests HTTPS (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: /health via HTTPS
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0   2194      0 --:--:-- --:--:-- --:--:--  2500
+{"status":"ok"}✅ /health OK
+Teste 2: Endpoint raiz sem auth
+HTTP/1.1 404 Not Found
+Server: nginx/1.29.4
+Date: Thu, 01 Jan 2026 21:53:53 GMT
+Content-Type: application/json
+Content-Length: 22
+Connection: keep-alive
+x-trace-id: trc_2b7241465e726d68
+X-Frame-Options: SAMEORIGIN
+X-Content-Type-Options: nosniff
+
+✅ Endpoint protegido (401/403 esperado)
+Teste 3: Endpoint raiz com auth
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100    15  100    15    0     0   1807      0 --:--:-- --:--:-- --:--:--  1875
+{"status":"ok"}✅ Auth OK
+Teste 4: Grafana HTTPS e login
+✅ Grafana requer login (redirect/401)
+🎉 Smoke Tests HTTPS PASS (todos testes OK)
+Logs salvos em: smoke_https_20260101_185353.log
+[0;32m✅ Smoke HTTPS OK[0m
+2026-01-01 18:53:53 - 🔍 Executando contract observabilidade...
+🔍 Iniciando Contract Tests Observabilidade (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: Prometheus targets UP
+✅ Targets essenciais UP
+Teste 2: Prometheus rules OK
+✅ Rules carregadas sem erro
+Teste 3: Alerting rules presentes
+✅ Alerting rules presentes (0)
+Teste 4: Grafana datasource
+✅ Grafana datasource acessível (requer auth)
+🎉 Contract Tests Observabilidade PASS
+Logs salvos em: contract_obs_20260101_185353.log
+[0;32m✅ Contract Observabilidade OK[0m
+2026-01-01 18:53:53 - 🔒 Executando contract segurança...
+🔒 Iniciando Contract Tests Segurança (BASE_URL: https://localhost)...
+Precheck: Conectividade https://localhost/health
+✅ Precheck OK
+Teste 1: HTTP redireciona para HTTPS
+✅ HTTP redireciona para HTTPS
+Teste 2: Backend via proxy
+✅ Backend acessível via proxy
+Teste 3: /metrics acesso controlado
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  1914  100  1914    0     0   235k      0 --:--:-- --:--:-- --:--:--  267k
+✅ /metrics acessível via proxy
+Teste 4: Endpoints sensíveis protegidos
+✅ Endpoints protegidos (contrato F9.2)
+🎉 Contract Tests Segurança PASS
+Logs salvos em: contract_sec_20260101_185353.log
+[0;32m✅ Contract Segurança OK[0m
+2026-01-01 18:53:54 - 🎉 CI GATE F9.5 PASS - TODOS TESTES OK
+2026-01-01 18:53:54 - Logs salvos em: artifacts/f9_5/ci_gate_20260101_185331.log
+[0;32m🎉 CI GATE F9.5 PASS[0m

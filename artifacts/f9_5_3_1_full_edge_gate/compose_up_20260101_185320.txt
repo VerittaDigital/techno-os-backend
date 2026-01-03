@@ -1,0 +1,9 @@
+time="2026-01-01T18:53:21-03:00" level=warning msg="The \"ENV\" variable is not set. Defaulting to a blank string."
+time="2026-01-01T18:53:21-03:00" level=warning msg="The \"ENV\" variable is not set. Defaulting to a blank string."
+ Container techno_os_prometheus  Running
+ Container techno-os-db  Running
+ Container techno_os_grafana  Running
+ Container techno-os-api  Running
+ Container techno_os_proxy  Running
+ Container techno-os-db  Waiting
+ Container techno-os-db  Healthy
