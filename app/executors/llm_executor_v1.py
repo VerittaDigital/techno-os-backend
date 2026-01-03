@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
 from app.llm.client import LLMClient
-from app.llm.fake_client import FakeLLMClient
+from app.llm.factory import create_llm_client
 from app.llm.policy import Policy
 from app.tracing import observed_span
 
@@ -30,8 +30,8 @@ class LLMExecutorV1(Executor):
             max_depth=10,
             max_list_items=100,
         )
-        # Default to FakeLLMClient when not injected
-        self._client = client if client is not None else FakeLLMClient()
+        # Usar factory se client não injetado (respeita LLM_PROVIDER env)
+        self._client = client if client is not None else create_llm_client()
 
     def execute(self, req: ActionRequest) -> Any:
         # F8.6.1 FASE 3: Instrument executor at boundaries (fail-closed, wrapper-only)
