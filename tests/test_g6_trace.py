@@ -46,13 +46,14 @@ def test_process_with_valid_body_returns_trace_header(client):
 
 
 def test_inbound_trace_id_preserved(client):
-    """If inbound X-TRACE-ID is valid, it should be preserved in response."""
-    inbound_trace_id = "test_trace_12345"
+    """If inbound X-TRACE-ID is valid UUID, it should be preserved in response."""
+    import uuid
+    inbound_trace_id = str(uuid.uuid4())
     response = client.get(
         "/health",
         headers={"X-TRACE-ID": inbound_trace_id},
     )
-    # Middleware should validate and preserve valid trace_id
+    # Middleware should validate and preserve valid UUID trace_id
     assert response.headers["X-TRACE-ID"] == inbound_trace_id
 
 
