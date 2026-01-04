@@ -30,6 +30,10 @@ services:
       - ENV=${ENV}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - VERITTA_BETA_API_KEY=${VERITTA_BETA_API_KEY}
+      - VERITTA_PROFILES_FINGERPRINT=${VERITTA_PROFILES_FINGERPRINT}
+      - VERITTA_HOST=${VERITTA_HOST:-0.0.0.0}
+      - VERITTA_PORT=${VERITTA_PORT:-8000}
     depends_on:
       postgres:
         condition: service_healthy
