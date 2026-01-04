@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -9,6 +10,13 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
+# Override sqlalchemy.url from environment variable if set
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    # Replace 'postgres:5432' with 'localhost:5432' for local execution
+    database_url = database_url.replace("postgres:5432", "localhost:5432")
+    config.set_main_option("sqlalchemy.url", database_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
@@ -18,6 +26,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # Import models para autogenerate detectar schema
 from app.models.session import SessionModel
+from app.models.user_preference import UserPreferenceModel
 target_metadata = SessionModel.metadata
 
 # other values from the config, defined by the needs of env.py,

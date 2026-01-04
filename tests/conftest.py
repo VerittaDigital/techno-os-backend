@@ -41,10 +41,14 @@ def configure_test_environment():
 @pytest.fixture
 def test_db_engine():
     """Create an in-memory SQLite engine for tests."""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},  # Allow TestClient threading
+    )
     
-    # Initialize schema
+    # Initialize schema (import models to ensure all tables are registered)
     from app.models.session import Base
+    from app.models.user_preference import UserPreferenceModel  # F9.9-A
     Base.metadata.create_all(bind=engine)
     
     yield engine
