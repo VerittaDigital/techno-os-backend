@@ -25,8 +25,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser
+# Create non-root user and set permissions
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/logs && \
+    chown -R appuser:appuser /app
 USER appuser
 
 # Expose port

@@ -15,9 +15,9 @@ def get_audit_log_path() -> str:
     Get audit log file path from environment variable.
     
     Returns:
-        Path from VERITTA_AUDIT_LOG_PATH env var, or "./audit.log" if not set.
+        Path from VERITTA_AUDIT_LOG_PATH env var, or "/app/logs/audit.log" if not set.
     """
-    return os.environ.get("VERITTA_AUDIT_LOG_PATH", "./audit.log")
+    return os.environ.get("VERITTA_AUDIT_LOG_PATH", "/app/logs/audit.log")
 
 
 def append_audit_record(record: Dict[str, Any]) -> None:
