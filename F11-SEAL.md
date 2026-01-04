@@ -1,10 +1,11 @@
 # F11-SEAL — Gate Engine Consolidation
 
 **Feature**: F11 Gate Engine Consolidation  
-**Status**: ✅ SEALED  
+**Status**: ✅ SEALED FOR PRODUCTION  
 **Date**: 2026-01-04  
-**Tag**: F11-SEALED-v1.0  
-**Branch**: stage/f11-gate-consolidation
+**Tag**: F11-PROD-v1.0  
+**Branch**: main  
+**Hotfix**: F11-SEALED-v1.0-hotfix2 (VPS audit fix)
 
 ---
 
@@ -16,7 +17,64 @@ F11 consolidates the gate engine architecture by introducing:
 3. **G8_UNKNOWN_ACTION audit** for 404/405 errors
 4. **UUID v4 trace_id format** (Pydantic compliance)
 
-All 387 tests passing. Zero regressions. Audit trail complete.
+**Local Validation**: All 387 tests passing. Zero regressions.  
+**VPS Validation**: CP-11.3 smoke tests 6/6 PASS (hotfix2).  
+**Audit Trail**: Complete with governance compliance.
+
+---
+
+## Production Deployment Evidence (VPS)
+
+### VPS Environment
+- **Host**: srv1241381.hstgr.cloud (Hostinger)
+- **OS**: Ubuntu 24.04.3 LTS
+- **Docker**: Docker Compose with volume mounts
+- **Tag Deployed**: F11-SEALED-v1.0-hotfix2
+- **Commit**: dce921c (merge to main: be97438)
+
+### CP-11.3: VPS Smoke Tests (2026-01-04 23:16:04 UTC)
+
+**Result**: ✅ **6/6 PASS** (APPROVED)
+
+| Test | Scenario | Result | Evidence |
+|------|----------|--------|----------|
+| 1 | Valid POST /process | ✅ PASS | HTTP 200, status=SUCCESS, trace_id UUID |
+| 2 | POST /unknown-route (404) | ✅ PASS | HTTP 404 with UUID trace_id |
+| 3 | GET /process (405) | ✅ PASS | HTTP 405 with UUID trace_id |
+| 4 | Malformed JSON | ✅ PASS | HTTP 422 (G10_BODY_PARSE_ERROR) |
+| 5 | GET /health | ✅ PASS | HTTP 200, status=ok |
+| 6 | Audit Log Verification | ✅ PASS | 3 entries: ALLOW + 2 ACTION_AUDIT |
+
+### Audit Log Sample
+```json
+{"decision":"ALLOW","profile_id":"F2.1","reason_codes":[],"input_digest":"7f7739f268fcc6d62585733d352d487c0dfafc5514f44b3b70cdd726e97b19df","trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.527034Z","event_type":"decision_audit"}
+{"action":"process","executor_id":"text_process_v1","executor_version":"1.0.0","status":"PENDING","reason_codes":["EXECUTION_ATTEMPT"],"trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.528512Z","event_type":"action_audit"}
+{"action":"process","executor_id":"text_process_v1","executor_version":"1.0.0","status":"SUCCESS","reason_codes":[],"trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.529352Z","event_type":"action_audit"}
+```
+
+### Hotfix Root Causes & Fixes
+
+**Issue 1: FileNotFoundError on audit.log**
+- **Root Cause**: Container did not have volume mount to `/var/log/veritta` on host
+- **Fix (docker-compose.yml)**:
+```yaml
+volumes:
+  - ./app:/app/app
+  - ./tests:/app/tests
+  - /var/log/veritta:/var/log/veritta  # ← Added
+```
+
+**Issue 2: mkdir fails on audit path creation**
+- **Root Cause**: audit_sink.py did not ensure directory exists
+- **Fix (app/audit_sink.py)**:
+```python
+import os
+os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+```
+
+**Issue 3: Missing python-dotenv dependency**
+- **Root Cause**: app/env.py imports dotenv but not in requirements.txt
+- **Fix**: Added `python-dotenv` to requirements.txt
 
 ---
 
