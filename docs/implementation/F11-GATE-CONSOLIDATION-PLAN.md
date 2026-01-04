@@ -118,35 +118,95 @@ GARANTIA: action detection canônica (função única)
 
 #### 3.3.1 `app/gate_engine/action_detector.py`
 ```python
-"""Canonical action detection from HTTP request."""
-from fastapi import Request
+"""Canonical action detection from HTTP request.
 
+Implementa detecção canônica baseada em templates de path com:
+- Normalização de prefixo (/api/v1 removido)
+- Colapso de parâmetros dinâmicos para templates
+- Mapeamento explícito (path_template, method) → action
+
+Correção C1: Contempla paths reais com parâmetros (ex: /preferences/{user_id})
+Correção C2: Formaliza lógica "auto-detect" já existente em módulo canônico
+"""
+from fastapi import Request
+import re
+
+# Template-based action mapping (path normalizado, method) → action
 ACTION_MAP = {
     ("/process", "POST"): "process",
-    ("/preferences", "GET"): "preferences.get",
-    ("/preferences", "PUT"): "preferences.put",
-    ("/preferences", "DELETE"): "preferences.delete",
+    ("/preferences/{user_id}", "GET"): "preferences.get",
+    ("/preferences/{user_id}", "PUT"): "preferences.put",
+    ("/preferences/{user_id}", "DELETE"): "preferences.delete",
     # Futuro: ("/plan", "POST"): "plan.create", etc.
 }
 
+
+def normalize_path(raw_path: str) -> str:
+    """Normalize request path for action detection.
+    
+    Rules:
+    1. Remove /api/v1 prefix (standard API prefix)
+    2. Collapse dynamic parameters to {param_name} template
+       - UUID-like segments → {user_id}, {operation_id}, etc.
+       - Preserve path structure for matching
+    
+    Examples:
+        /api/v1/preferences/test-user-f99a → /preferences/{user_id}
+        /api/v1/process → /process
+        /preferences/abc123 → /preferences/{user_id}
+    
+    Returns:
+        normalized_path (str): template path for ACTION_MAP lookup
+    """
+    # Remove /api/v1 prefix
+    path = raw_path
+    if path.startswith("/api/v1"):
+        path = path[7:]  # len("/api/v1") = 7
+    
+    # Collapse dynamic segments to templates
+    # Pattern: /preferences/<qualquer-coisa> → /preferences/{user_id}
+    # Pattern: /operation/<uuid> → /operation/{operation_id}
+    
+    if path.startswith("/preferences/"):
+        # Qualquer /preferences/<algo> vira /preferences/{user_id}
+        return "/preferences/{user_id}"
+    
+    # Outros patterns futuros aqui
+    # if path.startswith("/operation/"):
+    #     return "/operation/{operation_id}"
+    
+    # Path sem parâmetros dinâmicos (ex: /process)
+    return path
+
+
 def detect_action(request: Request) -> str:
     """Detect action from request path and method.
+    
+    Process:
+    1. Normalize path (remove /api/v1, collapse params)
+    2. Lookup in ACTION_MAP by (normalized_path, method)
+    3. If not found, raise GateError(G8_UNKNOWN_ACTION)
     
     Returns:
         action_id (str): canonical action identifier
     
     Raises:
         GateError: if no mapping found (G8_UNKNOWN_ACTION)
+    
+    Resposta R3 (Arquiteto): G8 retorna 500 (bug interno) pois gate roda
+    antes do roteamento. Se path chegou até o gate, deveria ter mapping.
+    404 seria para "rota não existe" (fora do gate).
     """
-    key = (request.url.path, request.method)
+    normalized_path = normalize_path(request.url.path)
+    key = (normalized_path, request.method)
     action = ACTION_MAP.get(key)
     
     if action is None:
         from app.gate_errors import GateError, ReasonCode
         raise GateError(
             reason_code=ReasonCode.G8_UNKNOWN_ACTION,
-            message=f"No action mapping for {request.method} {request.url.path}",
-            http_status=404
+            message=f"No action mapping for {request.method} {request.url.path} (normalized: {normalized_path})",
+            http_status=500  # Bug interno (gate deveria ter mapping)
         )
     
     return action
@@ -160,43 +220,74 @@ def detect_action(request: Request) -> str:
 
 #### 3.3.2 `app/gate_engine/body_parser.py`
 ```python
-"""HTTP body parsing by method (fail-closed)."""
-from fastapi import Request, HTTPException
+"""HTTP body parsing by method (fail-closed).
+
+Correção C4: Lançar GateError com reason_code estável (G10_BODY_PARSE_ERROR)
+para garantir audit trail consistente.
+
+Resposta Q2 (Arquiteto): GET/DELETE ignoram body (tolerante), mas registram
+warning leve em audit se Content-Length > 0 (não mascara totalmente).
+"""
+from fastapi import Request
 from typing import Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 async def parse_body_by_method(request: Request) -> Dict[str, Any]:
     """Parse request body according to HTTP method.
     
     Rules:
-    - GET/DELETE: body is optional, return {}
+    - GET/DELETE: body is optional, return {} (ignore body if present)
+      - Se Content-Length > 0, registra warning em audit (não deny)
     - POST/PUT/PATCH: body is required, parse JSON
+      - Se ausente ou inválido: GateError(G10_BODY_PARSE_ERROR, 422)
+    - OPTIONS/HEAD: return {} (skip parsing)
     
     Returns:
         dict: parsed body or empty dict
     
     Raises:
-        HTTPException(422): if required body is missing/invalid
+        GateError(G10_BODY_PARSE_ERROR): if required body is missing/invalid
     """
+    from app.gate_errors import GateError, ReasonCode
+    
     if request.method in ("GET", "DELETE"):
-        # Body optional for GET/DELETE
+        # Body opcional para GET/DELETE (tolerante)
+        # Warning se body presente (não mascara bug de client)
+        content_length = request.headers.get("content-length", "0")
+        if content_length != "0":
+            logger.warning(
+                f"GET/DELETE request with non-empty body (Content-Length: {content_length}). "
+                f"Body ignored. Path: {request.url.path}, Method: {request.method}"
+            )
         return {}
     
     if request.method in ("POST", "PUT", "PATCH"):
+        # Body obrigatório para métodos de escrita
         try:
             body = await request.json()
             if not isinstance(body, dict):
-                raise HTTPException(
-                    status_code=422,
-                    detail="Body must be a JSON object"
+                raise GateError(
+                    reason_code=ReasonCode.G10_BODY_PARSE_ERROR,
+                    message="Body must be a JSON object",
+                    http_status=422
                 )
             return body
+        except GateError:
+            # Re-raise GateError (já tem reason_code)
+            raise
         except Exception as e:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid JSON body: {str(e)}"
+            # JSON parse error ou body ausente
+            raise GateError(
+                reason_code=ReasonCode.G10_BODY_PARSE_ERROR,
+                message=f"Invalid or missing JSON body: {str(e)}",
+                http_status=422
             )
     
     # Métodos não suportados (OPTIONS, HEAD, etc.)
+    # Retornar {} e seguir (não gerar erro)
     return {}
 ```
 
@@ -223,15 +314,22 @@ class ReasonCode(str, Enum):
 class GateError(HTTPException):
     """Exception for gate failures (fail-closed).
     
+    Correção C5: reason_code padronizado em detail["reason_code"]
+    para garantir que audit logger consome sempre da mesma fonte.
+    
     Attributes:
         reason_code: canonical reason code (for audit)
         message: human-readable message
         http_status: HTTP status code to return
     """
     def __init__(self, reason_code: ReasonCode, message: str, http_status: int = 403):
+        # Armazenar reason_code como atributo (compatibilidade)
         self.reason_code = reason_code
+        
+        # CRÍTICO: reason_code deve estar em detail["reason_code"]
+        # para ser consumido pelo audit logger (fonte canônica)
         super().__init__(status_code=http_status, detail={
-            "reason_code": reason_code.value,
+            "reason_code": reason_code.value,  # Fonte canônica para audit
             "message": message,
             "type": "gate_error"
         })
@@ -404,79 +502,142 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
 
 ```python
 # tests/test_gate_engine.py
+# Correção C6: Usar Starlette TestClient para Request real
+
+import pytest
+from fastapi import Request
+from starlette.datastructures import URL
+from io import BytesIO
+
+
+def create_test_request(path: str, method: str, body: str = None) -> Request:
+    """Helper para criar Request real do Starlette para testes.
+    
+    Compatível com .url.path, .method, .json() usado pelo gate_engine.
+    """
+    from starlette.requests import Request as StarletteRequest
+    from starlette.datastructures import Headers
+    
+    headers = {"content-type": "application/json"} if body else {}
+    if body:
+        headers["content-length"] = str(len(body))
+    
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "query_string": b"",
+        "headers": [(k.encode(), v.encode()) for k, v in headers.items()],
+    }
+    
+    receive_data = body.encode() if body else b""
+    
+    async def receive():
+        return {"type": "http.request", "body": receive_data}
+    
+    return StarletteRequest(scope, receive)
+
 
 def test_detect_action_valid_routes():
-    """Valida detecção de todas as rotas ativas."""
+    """Valida detecção de todas as rotas ativas (com normalização)."""
     from app.gate_engine.action_detector import detect_action
-    from fastapi import Request
     
+    # Cases: (raw_path, method, expected_action)
     cases = [
-        ("/process", "POST", "process"),
-        ("/preferences", "GET", "preferences.get"),
-        ("/preferences", "PUT", "preferences.put"),
-        ("/preferences", "DELETE", "preferences.delete"),
+        ("/api/v1/process", "POST", "process"),
+        ("/api/v1/preferences/test-user-f99a", "GET", "preferences.get"),
+        ("/api/v1/preferences/abc-123", "PUT", "preferences.put"),
+        ("/api/v1/preferences/xyz", "DELETE", "preferences.delete"),
     ]
     
     for path, method, expected_action in cases:
-        request = mock_request(path=path, method=method)
-        assert detect_action(request) == expected_action
+        request = create_test_request(path=path, method=method)
+        action = detect_action(request)
+        assert action == expected_action, (
+            f"Path {path} {method} esperava '{expected_action}', obteve '{action}'"
+        )
 
 
 def test_detect_action_unknown_route():
-    """Rota não mapeada deve lançar GateError(G8)."""
+    """Rota não mapeada deve lançar GateError(G8_UNKNOWN_ACTION)."""
     from app.gate_engine.action_detector import detect_action
     from app.gate_errors import GateError, ReasonCode
     
-    request = mock_request(path="/unknown", method="POST")
+    request = create_test_request(path="/api/v1/unknown", method="POST")
     
     with pytest.raises(GateError) as exc_info:
         detect_action(request)
     
     assert exc_info.value.reason_code == ReasonCode.G8_UNKNOWN_ACTION
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.status_code == 500  # Bug interno (gate deveria ter mapping)
 
 
-def test_parse_body_get_returns_empty():
+@pytest.mark.asyncio
+async def test_parse_body_get_returns_empty():
     """GET sem body deve retornar {} sem erro."""
     from app.gate_engine.body_parser import parse_body_by_method
     
-    request = mock_request(method="GET", body=None)
+    request = create_test_request(path="/api/v1/preferences/test", method="GET")
     body = await parse_body_by_method(request)
     
     assert body == {}
 
 
-def test_parse_body_delete_returns_empty():
+@pytest.mark.asyncio
+async def test_parse_body_delete_returns_empty():
     """DELETE sem body deve retornar {} sem erro."""
     from app.gate_engine.body_parser import parse_body_by_method
     
-    request = mock_request(method="DELETE", body=None)
+    request = create_test_request(path="/api/v1/preferences/test", method="DELETE")
     body = await parse_body_by_method(request)
     
     assert body == {}
 
 
-def test_parse_body_post_valid_json():
+@pytest.mark.asyncio
+async def test_parse_body_post_valid_json():
     """POST com JSON válido deve retornar dict."""
     from app.gate_engine.body_parser import parse_body_by_method
     
-    request = mock_request(method="POST", body='{"text": "hello"}')
+    request = create_test_request(
+        path="/api/v1/process",
+        method="POST",
+        body='{"text": "hello"}'
+    )
     body = await parse_body_by_method(request)
     
     assert body == {"text": "hello"}
 
 
-def test_parse_body_post_missing_body():
-    """POST sem body deve lançar HTTPException(422)."""
+@pytest.mark.asyncio
+async def test_parse_body_post_missing_body():
+    """POST sem body deve lançar GateError(G10_BODY_PARSE_ERROR, 422)."""
     from app.gate_engine.body_parser import parse_body_by_method
-    from fastapi import HTTPException
+    from app.gate_errors import GateError, ReasonCode
     
-    request = mock_request(method="POST", body=None)
+    request = create_test_request(path="/api/v1/process", method="POST")
     
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(GateError) as exc_info:
         await parse_body_by_method(request)
     
+    assert exc_info.value.reason_code == ReasonCode.G10_BODY_PARSE_ERROR
     assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_parse_body_get_with_body_ignored():
+    """GET com body presente deve ignorar e retornar {} (tolerante)."""
+    from app.gate_engine.body_parser import parse_body_by_method
+    
+    request = create_test_request(
+        path="/api/v1/preferences/test",
+        method="GET",
+        body='{"ignored": "data"}'
+    )
+    body = await parse_body_by_method(request)
+    
+    assert body == {}  # Body ignorado
+    # Nota: warning deve aparecer em log (validar manualmente)
 ```
 
 ### 5.2 Integration Test (1:1 Mapping)
@@ -485,59 +646,99 @@ def test_parse_body_post_missing_body():
 # tests/test_gate_integrity.py
 
 def test_action_matrix_and_profiles_are_1_to_1():
-    """Valida que action_matrix e gate_profiles são 1:1."""
+    """Valida que action_matrix e gate_profiles são 1:1 (apenas PUBLIC_ACTIONS).
+    
+    Correção C7: Comparar apenas actions públicas (expostas por rotas HTTP).
+    DEFAULT_PROFILES pode conter profiles internas, versões, não-públicos.
+    
+    Escopo:
+    - PUBLIC_ACTIONS (do action_matrix) devem ter profile correspondente
+    - Cada profile em PUBLIC_ACTIONS deve estar no action_matrix
+    - Não comparar universo inteiro se sistema suporta profiles internas
+    """
     from app.action_matrix import get_action_matrix
-    from app.gate_profiles import get_profile, DEFAULT_PROFILES
+    from app.gate_profiles import get_profile
     
     matrix = get_action_matrix()
-    matrix_actions = set(matrix.allowed_actions)
-    profile_actions = set(DEFAULT_PROFILES.keys())
+    public_actions = set(matrix.allowed_actions)  # Actions expostas via HTTP
     
-    # Validar que todo action no matrix tem profile
-    missing_profiles = matrix_actions - profile_actions
-    assert not missing_profiles, f"Actions sem profile: {missing_profiles}"
+    # Validar que todo action público tem profile
+    missing_profiles = []
+    for action in public_actions:
+        profile = get_profile(action)
+        if profile is None:
+            missing_profiles.append(action)
     
-    # Validar que todo profile tem action no matrix
-    orphaned_profiles = profile_actions - matrix_actions
-    assert not orphaned_profiles, f"Profiles sem action: {orphaned_profiles}"
+    assert not missing_profiles, (
+        f"PUBLIC_ACTIONS sem profile: {missing_profiles}. "
+        f"Toda action no action_matrix deve ter profile correspondente."
+    )
     
-    # Validar que get_profile() funciona para todos
-    for action in matrix_actions:
+    # Validar que get_profile() retorna PolicyProfile válido
+    for action in public_actions:
         profile = get_profile(action)
         assert profile is not None, f"get_profile('{action}') retornou None"
+        assert hasattr(profile, 'name'), f"Profile de '{action}' inválido (sem 'name')"
+        assert hasattr(profile, 'allowlist'), f"Profile de '{action}' inválido (sem 'allowlist')"
+    
+    # Sucesso: 1:1 mapping garantido para PUBLIC_ACTIONS
 ```
 
 ### 5.3 Smoke Tests (VPS Production)
 
 ```bash
 # smoke_test_gate.sh
+# Correção C3: Paths reais validados no deployment F9.9-A
+# Base URL: http://localhost:8000 (local) ou https://srv1241381.hstgr.cloud (VPS)
+# Prefixo: /api/v1 (padrão do backend)
 
-# 1. Rota mapeada: deve funcionar
-curl -X GET https://techno-os.veritta.digital/preferences \
-  -H "X-API-KEY: $API_KEY" \
-  -H "X-VERITTA-USER-ID: test-user"
-# Esperado: 200 ou 404 (user não existe), não 500 ou G8
+BASE_URL="http://localhost:8000"
+API_KEY="${VERITTA_BETA_API_KEY}"
+USER_ID="test-user-f99a"
 
-# 2. Rota não mapeada: deve retornar 404 + G8_UNKNOWN_ACTION
-curl -X GET https://techno-os.veritta.digital/unknown \
-  -H "X-API-KEY: $API_KEY"
-# Esperado: 404 + {"reason_code": "G8_UNKNOWN_ACTION"}
+# 1. GET preferences (rota mapeada com parâmetro): deve funcionar
+curl -X GET "${BASE_URL}/api/v1/preferences/${USER_ID}" \
+  -H "X-API-KEY: ${API_KEY}" \
+  -H "X-VERITTA-USER-ID: ${USER_ID}"
+# Esperado: 200 + JSON preferences, ou 404 (user não existe)
+# NÃO esperado: 500, G8_UNKNOWN_ACTION, body parse error
 
-# 3. GET sem body: deve funcionar
-curl -X GET https://techno-os.veritta.digital/process \
-  -H "X-API-KEY: $API_KEY"
-# Esperado: 400 ou 422 (por outras razões), não body parse error
+# 2. PUT preferences (atualizar): deve funcionar
+curl -X PUT "${BASE_URL}/api/v1/preferences/${USER_ID}" \
+  -H "X-API-KEY: ${API_KEY}" \
+  -H "X-VERITTA-USER-ID: ${USER_ID}" \
+  -H "Content-Type: application/json" \
+  -d '{"tone_preference": "institutional", "output_format": "text", "language": "pt-BR"}'
+# Esperado: 200 + JSON preferences atualizadas
+# NÃO esperado: G8_UNKNOWN_ACTION, body parse error
 
-# 4. DELETE sem body: deve funcionar
-curl -X DELETE https://techno-os.veritta.digital/preferences \
-  -H "X-API-KEY: $API_KEY" \
-  -H "X-VERITTA-USER-ID: test-user"
-# Esperado: 204 ou 404, não body parse error
+# 3. DELETE preferences (sem body): deve funcionar
+curl -X DELETE "${BASE_URL}/api/v1/preferences/${USER_ID}" \
+  -H "X-API-KEY: ${API_KEY}" \
+  -H "X-VERITTA-USER-ID: ${USER_ID}"
+# Esperado: 204 No Content
+# NÃO esperado: body parse error (GET/DELETE ignoram body)
 
-# 5. POST sem body: deve retornar 422
-curl -X POST https://techno-os.veritta.digital/process \
-  -H "X-API-KEY: $API_KEY"
-# Esperado: 422 + mensagem clara sobre body obrigatório
+# 4. POST process (sem body): deve retornar 422 + G10_BODY_PARSE_ERROR
+curl -X POST "${BASE_URL}/api/v1/process" \
+  -H "X-API-KEY: ${API_KEY}"
+# Esperado: 422 + {"reason_code": "G10_BODY_PARSE_ERROR", "message": "Invalid or missing JSON body"}
+# NÃO esperado: exception não tratada, HTTPException genérica
+
+# 5. Rota não mapeada: deve retornar 500 + G8_UNKNOWN_ACTION
+curl -X GET "${BASE_URL}/api/v1/unknown-route" \
+  -H "X-API-KEY: ${API_KEY}"
+# Esperado: 500 + {"reason_code": "G8_UNKNOWN_ACTION"}
+# Nota: 500 porque gate roda antes do roteamento (bug interno se chegou até aqui)
+
+# 6. GET com body presente (edge case): deve ignorar body e retornar 200
+curl -X GET "${BASE_URL}/api/v1/preferences/${USER_ID}" \
+  -H "X-API-KEY: ${API_KEY}" \
+  -H "X-VERITTA-USER-ID: ${USER_ID}" \
+  -H "Content-Type: application/json" \
+  -d '{"ignored": "data"}'
+# Esperado: 200 (body ignorado, warning em log)
+# Validar audit.log: deve ter warning sobre body presente em GET
 ```
 
 ---
@@ -780,28 +981,103 @@ curl -X POST https://techno-os.veritta.digital/process \
 **Data:** 2026-01-04  
 **Status:** 🟡 AGUARDANDO REVISÃO CRÍTICA
 
-**Revisor (Arquiteto V-COF):** _____________  
-**Data da Revisão:** _____________  
-**Decisão:** [ ] APROVADO [ ] APROVADO COM AJUSTES [ ] REJEITADO
+**Revisor (Arquiteto V-COF):** GPT-4 Custom V-COF (Arquiteto Samurai)  
+**Data da Revisão:** 2026-01-04  
+**Decisão:** [X] APROVADO COM AJUSTES CRÍTICOS (bloqueantes antes de implementação)
 
 **Comentários do Revisor:**
 
 ```
-(Espaço para crítica adversarial — questões, objeções, sugestões)
+✅ VEREDITO: APROVADO COM AJUSTES CRÍTICOS
 
-QUESTÃO 1 (Action Detection):
-RESPOSTA: 
+O plano está na direção certa (determinismo, canonicidade, fail-closed), mas
+do jeito que estava escrito ele ia falhar em produção por causa de incompatibilidades
+com o path real do FastAPI e testes irrealistas.
 
-QUESTÃO 2 (Body Parsing):
-RESPOSTA: 
+═══════════════════════════════════════════════════════════════════════════
+🔴 BLOQUEANTES CRÍTICOS (C1-C7) — CORRIGIDOS NO PLANO:
+═══════════════════════════════════════════════════════════════════════════
 
-QUESTÃO 3 (Profiles Mandatory):
-RESPOSTA: 
+✅ C1: detect_action() contempla paths reais com templates
+   - Implementado normalize_path() com remoção de /api/v1
+   - Colapso de parâmetros dinâmicos (/preferences/{user_id})
+   - ACTION_MAP agora usa templates, não literais
+
+✅ C2: Consolidação da lógica "auto-detect" existente
+   - F11 formaliza lógica já existente em módulo canônico
+   - Não introduz estratégia paralela concorrente
+
+✅ C3: Smoke tests com paths reais /api/v1/preferences/{user_id}
+   - Corrigidos para paths validados no deployment F9.9-A
+   - Base URL + prefixo /api/v1 + parâmetros dinâmicos
+
+✅ C4: Body parser lança GateError(G10_BODY_PARSE_ERROR, 422)
+   - Não usa HTTPException genérica
+   - reason_code estável para audit trail
+
+✅ C5: reason_code padronizado em detail["reason_code"]
+   - Audit logger consome sempre da mesma fonte
+   - Comentário explícito: "fonte canônica para audit"
+
+✅ C6: Testes usam Starlette TestClient (Request real)
+   - create_test_request() helper compatível com .url.path, .method, .json()
+   - Funções async com @pytest.mark.asyncio
+
+✅ C7: Teste 1:1 compara apenas PUBLIC_ACTIONS
+   - Não compara universo inteiro de profiles (frágil)
+   - Escopo: actions expostas via HTTP (action_matrix)
+
+═══════════════════════════════════════════════════════════════════════════
+🟡 RECOMENDAÇÕES (R1-R3) — INCORPORADAS:
+═══════════════════════════════════════════════════════════════════════════
+
+✅ R1: Path template mapping implementado (normalize_path)
+✅ R2: OPTIONS/HEAD retornam {} e seguem (não geram erro)
+✅ R3: G8_UNKNOWN_ACTION retorna 500 (bug interno), não 404
+
+═══════════════════════════════════════════════════════════════════════════
+📋 RESPOSTAS ÀS 4 QUESTÕES:
+═══════════════════════════════════════════════════════════════════════════
+
+QUESTÃO 1 (Action Detection Strategy):
+RESPOSTA: Aceito mapa estático, porém template-based.
+- Formato: (/api/v1/preferences/{user_id}, GET) → "preferences.get"
+- Normalização: remover /api/v1, colapsar parâmetros dinâmicos
+- Justificativa: Determinismo explícito > introspection (acoplamento interno)
+
+QUESTÃO 2 (Body Parsing — GET com body):
+RESPOSTA: Ignorar body em GET/DELETE (tolerante), mas registrar warning.
+- Se Content-Length > 0, logger.warning() sem DENY
+- Não mascara totalmente (warning em audit)
+- Não quebra clients mal comportados
+
+QUESTÃO 3 (Profiles — Mandatory vs Optional):
+RESPOSTA: Profile ausente → erro 500 (G9_MISSING_PROFILE).
+- Fail-closed: bug interno deve quebrar cedo
+- Força completude de profiles antes de deployment
+- APROVADO
 
 QUESTÃO 4 (Escopo de Testes):
-RESPOSTA: 
+RESPOSTA: Sem testes de carga em F11.
+- Performance/rate limit pertence à FASE 15
+- F11 foca em: determinismo, integridade 1:1, reason codes estáveis
+- Escopo atual suficiente para validar correção
+- APROVADO
 
-OUTRAS OBJEÇÕES:
+═══════════════════════════════════════════════════════════════════════════
+🎯 OBSERVAÇÃO FINAL:
+═══════════════════════════════════════════════════════════════════════════
+
+O objetivo está correto e a governança bem desenhada.
+Principal falha original: assumir que request.url.path é estático e curto.
+Com as correções aplicadas, F11 está PRONTA PARA IMPLEMENTAÇÃO.
+
+F11 corrigida evita repetição do incidente G8/GET-body e estabelece
+base sólida para FASE 15 (rate limit) e F9.9-B (LLM hardening).
+
+✅ AUTORIZADO PARA EXECUÇÃO (com correções aplicadas)
+
+— Arquiteto Samurai V-COF, 2026-01-04
 ```
 
 ---
