@@ -8,6 +8,9 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+# Load .env FIRST before importing any modules that read environment variables
+from app.env import *  # noqa: F401, F403
+
 from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
 from app.executors.noop_executor_v1 import NoopExecutorV1
