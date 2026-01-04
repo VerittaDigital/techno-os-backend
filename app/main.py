@@ -168,7 +168,16 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             reason_codes=reason_codes,
         ))
     
-    action = "process"
+    # T3.5: Extract action from request path
+    # Default to "process" for backward compatibility
+    # Map /api/v1/preferences/* → preferences.{method}
+    path = request.url.path
+    method = request.method.lower()
+    
+    if path.startswith("/api/v1/preferences"):
+        action = f"preferences.{method}"
+    else:
+        action = "process"
     
     # Compute input digest using canonical rule (None for non-JSON, privacy-first)
     input_digest = sha256_json_or_none(body)

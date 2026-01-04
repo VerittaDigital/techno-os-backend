@@ -41,7 +41,12 @@ def get_action_matrix() -> ActionMatrix:
         
         return ActionMatrix(
             profile="default",
-            allowed_actions=["process"],
+            allowed_actions=[
+                "process",
+                "preferences.get",
+                "preferences.put",
+                "preferences.delete",
+            ],
         )
 
 
