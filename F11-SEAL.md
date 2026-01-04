@@ -30,24 +30,33 @@ F11 consolidates the gate engine architecture by introducing:
 - **OS**: Ubuntu 24.04.3 LTS
 - **Docker**: Docker Compose with volume mounts
 - **Tag Deployed**: F11-SEALED-v1.0-hotfix2
-- **Commit**: dce921c (merge to main: be97438)
+- **Commit**: dce921c (merged to main as be97438)
+- **Revalidation**: 2026-01-04 23:28:47 UTC (after git pull + redeploy)
 
-### CP-11.3: VPS Smoke Tests (2026-01-04 23:16:04 UTC)
+### CP-11.3: VPS Smoke Tests
 
-**Result**: ✅ **6/6 PASS** (APPROVED)
+**Latest Run**: 2026-01-04 23:28:47 UTC  
+**Result**: ✅ **6/6 PASS** (APPROVED FOR PRODUCTION)
 
 | Test | Scenario | Result | Evidence |
 |------|----------|--------|----------|
-| 1 | Valid POST /process | ✅ PASS | HTTP 200, status=SUCCESS, trace_id UUID |
-| 2 | POST /unknown-route (404) | ✅ PASS | HTTP 404 with UUID trace_id |
-| 3 | GET /process (405) | ✅ PASS | HTTP 405 with UUID trace_id |
+| 1 | POST /process (valid) | ✅ PASS | HTTP 200, trace_id: 0029a132-57e0-41d4-969c-f175fd72d59e |
+| 2 | GET /nonexistent (404) | ✅ PASS | HTTP 404, trace_id: 2b0f4adf-529b-436e-8e28-af656394ec6e |
+| 3 | DELETE /process (405) | ✅ PASS | HTTP 405, trace_id: 0ef83e4c-9dad-4a30-9ac6-426b3af000c4 |
 | 4 | Malformed JSON | ✅ PASS | HTTP 422 (G10_BODY_PARSE_ERROR) |
 | 5 | GET /health | ✅ PASS | HTTP 200, status=ok |
-| 6 | Audit Log Verification | ✅ PASS | 3 entries: ALLOW + 2 ACTION_AUDIT |
+| 6 | Audit Log (22 entries) | ✅ PASS | Sample: 09d61610-d4a0-4c10-8b82-9c6c3c071859 |
 
-### Audit Log Sample
+### Audit Log Sample (Latest Entry)
 ```json
-{"decision":"ALLOW","profile_id":"F2.1","reason_codes":[],"input_digest":"7f7739f268fcc6d62585733d352d487c0dfafc5514f44b3b70cdd726e97b19df","trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.527034Z","event_type":"decision_audit"}
+{"decision":"ALLOW","trace_id":"09d61610-d4a0-4c10-8b82-9c6c3c071859","event_type":"decision_audit","ts_utc":"2026-01-04T23:28:47.401246Z"}
+```
+
+### Hotfix2 Root Causes & Resolutions
+1. **Missing VERITTA_AUDIT_LOG_PATH**: Added `env_file: /opt/techno-os/env/.env.prod` to docker-compose.yml
+2. **Audit log FileNotFoundError**: Added volume mount `/var/log/veritta:/var/log/veritta` to docker-compose.yml
+3. **mkdir Permission denied**: Added `os.makedirs(..., exist_ok=True)` in audit_sink.py before file write
+4. **VPS git behind**: Executed `git pull origin main` to sync all hotfix commits (14 commits behind initially)
 {"action":"process","executor_id":"text_process_v1","executor_version":"1.0.0","status":"PENDING","reason_codes":["EXECUTION_ATTEMPT"],"trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.528512Z","event_type":"action_audit"}
 {"action":"process","executor_id":"text_process_v1","executor_version":"1.0.0","status":"SUCCESS","reason_codes":[],"trace_id":"68304163-022e-419f-838b-dbeab7264e79","ts_utc":"2026-01-04T23:16:04.529352Z","event_type":"action_audit"}
 ```
