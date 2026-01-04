@@ -73,6 +73,43 @@ Prometheus acessível publicamente via HTTPS sem Basic Auth ou IP allowlist.
 
 ---
 
+### RISK-SSH: SSH Hardening via Reload ✅ **RESOLVIDO — STEP 10.2 (2026-01-04)**
+
+**Descrição:**  
+Validação governada (fail-closed) de SSH reload para confirmar runtime efetivo de passwordauthentication=no.
+
+**Evidência Primária:**  
+- ✅ Baseline PRÉ-reload: `sudo sshd -T` → `passwordauthentication no, pubkeyauthentication yes`
+- ✅ Reload executado: `sudo systemctl reload ssh.service` (exit 0, sem erros)
+- ✅ Runtime PÓS-reload: `sudo sshd -T` → `passwordauthentication no, pubkeyauthentication yes`
+- ✅ Nova conexão SSH: testada e funcional (2026-01-04T02:53:24+00:00)
+
+**Mitigação Executada (STEP 10.2 — 2026-01-04T02:53Z):**  
+1. ✅ Pré-requisitos resolvidos:
+   - Acesso SSH restaurado via Hostinger console (2 chaves autorizadas)
+   - `/etc/sudoers.d/deploy` criado (221B, 440 perms, NOPASSWD para sshd -T e systemctl reload)
+2. ✅ Protocolo fail-closed aplicado:
+   - 2 sessões SSH simultâneas obrigatórias (pts/0 e pts/1)
+   - Checkpoint humano antes de reload
+3. ✅ Evidências preservadas:
+   - 8 arquivos em `/opt/techno-os/artifacts/step10_2_ssh_reload_20260104T025258Z/` (24KB)
+   - SEAL timestamp: 2026-01-04T02:53:48+00:00
+
+**Resposta à Crítica Samurai:**  
+- ✅ Crítica 1 (SSH runtime): VALIDADA via sshd -T
+- ✅ Crítica 2 (cloud-init): REFUTADA (50-cloud-init.conf MISSING, 99-disable EXISTS)
+- ✅ Crítica 3 (Grafana secrets): REFUTADA (sem credenciais em Git)
+- ✅ Crítica 4 (sudoers): CORRIGIDA (arquivo criado e validado)
+- ⚠️ Crítica 5 (script location): IMPRECISA (f9_8_deploy.sh existe, nomenclatura genérica)
+- ✅ Crítica 6 (merge 137): VALIDADA
+- **Score**: 5/6 críticas validadas/refutadas/corrigidas
+
+**Referência:** [sessions/step-10.2/SEAL-STEP-10.2-SSH-RELOAD.md](../sessions/step-10.2/SEAL-STEP-10.2-SSH-RELOAD.md)
+
+**Status:** 🟢 **RISK-SSH MITIGADO** — SSH hardening validado e reload governado aplicado
+
+---
+
 ### RISK-6: Alert Rules Ausentes 🟡 **MÉDIO**
 
 **Descrição:**  
