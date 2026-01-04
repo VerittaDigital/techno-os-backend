@@ -6,8 +6,8 @@ Implements G6: Ensures every request/response carries X-TRACE-ID header.
 - Injects into response headers
 """
 
-import secrets
 import re
+from uuid import uuid4
 from typing import Callable
 
 from fastapi import Request
@@ -18,19 +18,19 @@ from starlette.responses import Response
 def _validate_and_normalize_trace_id(trace_id_str: str) -> str:
     """Validate trace_id format. If invalid, return None (will generate new).
     
-    Valid format: alphanumeric + underscore, length 8-64 chars.
+    Valid format: UUID (with or without hyphens).
     """
     if not isinstance(trace_id_str, str):
         return None
-    if not re.match(r"^[a-zA-Z0-9_-]{8,64}$", trace_id_str):
+    # Accept UUID format with or without hyphens
+    if not re.match(r"^[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$", trace_id_str.lower()):
         return None
     return trace_id_str
 
 
 def _generate_trace_id() -> str:
-    """Generate new trace_id: 'trc_' + 16 random hex chars."""
-    random_hex = secrets.token_hex(8)  # 16 hex chars
-    return f"trc_{random_hex}"
+    """Generate new trace_id as UUID v4."""
+    return str(uuid4())
 
 
 class TraceCorrelationMiddleware(BaseHTTPMiddleware):
