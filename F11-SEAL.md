@@ -3,9 +3,10 @@
 **Feature**: F11 Gate Engine Consolidation  
 **Status**: ✅ SEALED FOR PRODUCTION  
 **Date**: 2026-01-04  
-**Tag**: F11-PROD-v1.0  
+**Tag (Imutável)**: F11-PROD-v1.0.1 ← **Use este tag em operações**  
+**Tag (Histórico)**: F11-PROD-v1.0 (reescrito durante hotfix — não usar)  
 **Branch**: main  
-**Hotfix**: F11-SEALED-v1.0-hotfix2 (VPS audit fix)
+**Hotfix Chain**: F11-SEALED-v1.0 → hotfix1 → hotfix2 → F11-PROD-v1.0.1 (IMUTÁVEL)
 
 ---
 
@@ -22,6 +23,32 @@ F11 consolidates the gate engine architecture by introducing:
 **Audit Trail**: Complete with governance compliance.
 
 ---
+
+## Governance & Immutability Policy
+
+### Tag Chain (Immutable Record)
+```
+F11-SEALED-v1.0             ← Original seal (hotfix1 integrated)
+F11-SEALED-v1.0-hotfix1     ← env_file + docker-compose.yml fix
+F11-SEALED-v1.0-hotfix2     ← Volume mount + mkdir in audit_sink (commit dce921c)
+F11-PROD-v1.0               ← DEPRECATED (force-pushed once, now historical only)
+F11-PROD-v1.0.1 ⭐ CURRENT  ← Immutable production tag (commit 404ef09)
+```
+
+### Policy (Samurai Compliance)
+- ✅ **No force-push on release tags** going forward
+- ✅ **New tag per deployment** (v1.0.2, v1.0.3, etc.) if hotfix needed
+- ✅ **Evidence pack** stored in [docs/F11-EVIDENCE-PACK.md](docs/F11-EVIDENCE-PACK.md)
+- ✅ **Audit log** persisted at `/var/log/veritta/audit.log` (volume mounted)
+- ✅ **Rollback procedure** documented (max 15 minutes to previous tag)
+
+### 24h Operational Checkpoints
+- ⏱️ Monitor: `/process` returns 200 OK, audit log grows
+- 🚨 Rollback trigger: 500 error, missing audit entry, malformed trace_id
+- 📊 Evidence: git tag + smoke tests + audit sample preserved
+
+---
+
 
 ## Production Deployment Evidence (VPS)
 
