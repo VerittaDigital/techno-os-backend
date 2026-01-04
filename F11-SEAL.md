@@ -74,13 +74,13 @@ Failed:       0
 All smoke tests passed successfully.
 ```
 
-Test scenarios:
+Test scenarios (6 scenarios, 8 checks total):
 1. ✅ Valid POST /process (200 SUCCESS)
 2. ✅ POST /unknown-route (404 with trace_id)
 3. ✅ GET /process (405 with trace_id)
 4. ✅ Malformed JSON (422 G10_BODY_PARSE_ERROR)
 5. ✅ GET /health (200 public endpoint)
-6. ✅ Audit log verification (G8=2, G10=1)
+6. ✅ Audit log verification (2 checks: G8 entries + G10 entries)
 
 ---
 
