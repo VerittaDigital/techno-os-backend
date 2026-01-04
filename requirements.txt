@@ -7,6 +7,12 @@ packaging
 sqlalchemy
 psycopg2-binary
 
+# F9.9-A - Development Tooling (migrations, testing, linting)
+alembic==1.17.2
+pytest-cov==6.0.0
+coverage==7.6.9
+flake8==7.1.1
+
 # F8.6.1 - OpenTelemetry Distributed Tracing
 opentelemetry-api==1.23.0
 opentelemetry-sdk==1.23.0
