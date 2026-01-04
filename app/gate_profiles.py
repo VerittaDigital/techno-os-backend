@@ -24,6 +24,9 @@ class PolicyProfile:
 ACTION_AGENT_RUN = "AGENT.RUN"
 ACTION_ARCONTE_SIGNAL = "ARCONTE.SIGNAL"
 ACTION_PROCESS = "process"
+ACTION_PREFERENCES_GET = "preferences.get"
+ACTION_PREFERENCES_PUT = "preferences.put"
+ACTION_PREFERENCES_DELETE = "preferences.delete"
 
 DEFAULT_PROFILES: Dict[str, PolicyProfile] = {
     ACTION_AGENT_RUN: PolicyProfile(
@@ -44,6 +47,27 @@ DEFAULT_PROFILES: Dict[str, PolicyProfile] = {
         name="process.v1",
         allowlist=frozenset({"text"}),
         deny_unknown_fields=True,
+        allow_external=False,
+        forbidden_keys=frozenset(),
+    ),
+    ACTION_PREFERENCES_GET: PolicyProfile(
+        name="preferences.get.v1",
+        allowlist=frozenset(),  # GET não tem payload
+        deny_unknown_fields=False,
+        allow_external=False,
+        forbidden_keys=frozenset(),
+    ),
+    ACTION_PREFERENCES_PUT: PolicyProfile(
+        name="preferences.put.v1",
+        allowlist=frozenset({"tone_preference", "output_format", "language"}),
+        deny_unknown_fields=True,
+        allow_external=False,
+        forbidden_keys=frozenset(),
+    ),
+    ACTION_PREFERENCES_DELETE: PolicyProfile(
+        name="preferences.delete.v1",
+        allowlist=frozenset(),  # DELETE não tem payload
+        deny_unknown_fields=False,
         allow_external=False,
         forbidden_keys=frozenset(),
     ),
