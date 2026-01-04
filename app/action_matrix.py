@@ -39,9 +39,15 @@ def get_action_matrix() -> ActionMatrix:
         if _global_matrix is not None:
             return _global_matrix
         
+        # FASE 11: Actions consolidadas (process + preferences)
         return ActionMatrix(
             profile="default",
-            allowed_actions=["process"],
+            allowed_actions=[
+                "process",
+                "preferences.delete",
+                "preferences.get",
+                "preferences.put",
+            ],
         )
 
 

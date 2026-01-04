@@ -225,9 +225,9 @@ class TestGateEnforcementHTTP:
             },
         )
 
-        # Gate handles malformed JSON by returning 400
+        # Gate handles malformed JSON by returning 422 (F11 body_parser)
         # Pipeline is not executed
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_input_digest_computed_for_empty_payload(self, client, caplog):
         """Even empty payloads get input_digest computed."""

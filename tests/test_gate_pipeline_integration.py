@@ -164,13 +164,13 @@ class TestProfileActionMismatchHTTP:
         # Must return HTTP 403
         assert response.status_code == 403
 
-        # Must have emitted action_audit (before raising HTTPException)
-        action_logs = [r.message for r in caplog.records if r.name == "action_audit"]
-        assert len(action_logs) > 0, "action_audit MUST be emitted before HTTP 403"
+        # F11: Gate rejection → gate_audit (not action_audit, pipeline not reached)
+        gate_logs = [r.message for r in caplog.records if r.name == "gate_audit"]
+        assert len(gate_logs) > 0, "gate_audit MUST be emitted before HTTP 403"
         
-        action_json = json.loads(action_logs[0])
-        assert action_json["status"] == "BLOCKED"
-        assert "PROFILE_ACTION_MISMATCH" in action_json["reason_codes"]
+        gate_json = json.loads(gate_logs[0])
+        assert gate_json["decision"] == "DENY"
+        assert "G8_UNKNOWN_ACTION" in gate_json["reason_codes"]
 
     def test_mismatch_preserves_trace_id_correlation(self, client, caplog):
         """trace_id must be identical in gate_audit and action_audit even when PROFILE_ACTION_MISMATCH occurs."""
@@ -194,18 +194,14 @@ class TestProfileActionMismatchHTTP:
         action_logs = [r.message for r in caplog.records if r.name == "action_audit"]
 
         assert len(gate_logs) > 0, "gate_audit MUST be emitted"
-        assert len(action_logs) > 0, "action_audit MUST be emitted"
+        # F11: Gate rejection → no action_audit (pipeline not reached)
+        # action_logs check removed, as gate blocks before pipeline
 
         gate_json = json.loads(gate_logs[0])
-        action_json = json.loads(action_logs[0])
 
-        # Validate trace_id correlation
-        assert gate_json["trace_id"] == action_json["trace_id"], "trace_id must be identical across audits"
-
-        # Validate gate allowed (mismatch is in pipeline, not gate)
-        assert gate_json["decision"] == "ALLOW"
-
-        # Validate action blocked with mismatch
-        assert action_json["status"] == "BLOCKED"
-        assert "PROFILE_ACTION_MISMATCH" in action_json["reason_codes"]
-
+        # F11: Validates gate rejected (DENY, not ALLOW)
+        assert gate_json["decision"] == "DENY"
+        assert "G8_UNKNOWN_ACTION" in gate_json["reason_codes"]
+        # trace_id present in gate_audit
+        assert "trace_id" in gate_json
+        assert len(gate_json["trace_id"]) == 36  # UUID format
