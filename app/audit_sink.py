@@ -32,6 +32,10 @@ def append_audit_record(record: Dict[str, Any]) -> None:
     """
     log_path = get_audit_log_path()
     
+    # Ensure directory exists (fail-closed: if mkdir fails, open will fail with clear error)
+    import os
+    os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+    
     # Serialize to compact JSON (no whitespace)
     json_line = json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n"
     

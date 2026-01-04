@@ -48,6 +48,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./tests:/app/tests
+      - /var/log/veritta:/var/log/veritta
     command: >
       sh -c '
         if [ "$ENV" = "development" ]; then
