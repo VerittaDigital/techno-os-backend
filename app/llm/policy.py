@@ -10,7 +10,11 @@ class Policy:
     TEMPERATURE: ClassVar[float] = 0.0
     MAX_PROMPT_CHARS: ClassVar[int] = 10000
     MAX_TOKENS_TOTAL: ClassVar[int] = 4096
-    TIMEOUT_S: ClassVar[float] = 10.0
+    TIMEOUT_S: ClassVar[float] = 30.0  # Aumentado de 10s para 30s (incluindo retries)
+    
+    # Retry policy (RISK-3)
+    MAX_RETRIES: ClassVar[int] = 2  # 2 tentativas adicionais após falha inicial
+    RETRY_BASE_DELAY_MS: ClassVar[int] = 100  # 100ms, 200ms, 400ms (exponential backoff)
 
     @classmethod
     def validate(cls, *, prompt: str, model: str, max_tokens: int, timeout_s: float) -> None:
