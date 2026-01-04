@@ -139,10 +139,14 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # Step 1: Read body (fail-closed on invalid JSON)
+    # Step 1: Read body (fail-closed on invalid JSON, allow empty body for GET/DELETE)
     from app.gate_artifacts import profiles_fingerprint_sha256
     try:
-        body = await request.json()
+        # Allow empty body for GET/DELETE methods
+        if request.method in ("GET", "DELETE"):
+            body = {}
+        else:
+            body = await request.json()
     except (json.JSONDecodeError, ValueError) as e:
         # Invalid JSON: log denial with profile_hash + reason code, then raise with envelope
         decision = "DENY"
