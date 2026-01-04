@@ -2,7 +2,7 @@
 
 **Projeto:** Techno OS Backend  
 **Governança:** V-COF · Fail-Closed · Human-in-the-Loop  
-**Última atualização:** 2026-01-03 (F9.8 em andamento)
+**Última atualização:** 2026-01-04 (F9.9-A concluída)
 
 ---
 
@@ -24,7 +24,7 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 | **F9.6.1** | ✅ SELADA | 2026-01-02 |
 | **F9.7** | ✅ SELADA | 2026-01-03 |
 | **F9.8** | 🔄 EM ANDAMENTO | - |
-| **F9.9-A** | 📅 PLANEJADA | - |
+| **F9.9-A** | ✅ SELADA | 2026-01-04 |
 | **F9.9-B** | 📅 PLANEJADA | - |
 | **F10** | 📅 PLANEJADA | - |
 
@@ -66,6 +66,32 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 
 ---
 
+### F9.9-A — Memória Persistente (User Preferences)
+**Selada:** 2026-01-04  
+**Escopo:**
+- Tabela `user_preferences` no PostgreSQL
+- Preferências explícitas (tom, formato, idioma)
+- API CRUD para preferências (/api/v1/preferences)
+- Gate F2.1 com profiles específicos
+- Anti-enumeration (user_id validation)
+- 12 unit tests + smoke tests VPS
+
+**Entregas:**
+- ✅ Model SQLAlchemy (UUID PK, UNIQUE user_id)
+- ✅ Schemas Pydantic v2 (regex validation)
+- ✅ Migration Alembic (52e2b2a85aec)
+- ✅ Endpoints GET/PUT/DELETE com anti-enumeration
+- ✅ Gate profiles para preferences.{get|put|delete}
+- ✅ 404 tests passing (392 baseline + 12 new)
+- ✅ Deployed to VPS com smoke tests validados
+- ✅ SEAL documentation (docs/SEAL-F9.9-A.md)
+
+**Commit canônico:** `3ee4e9e`  
+**Branch:** `feature/f9.9-a-user-preferences`  
+**SEAL:** docs/SEAL-F9.9-A.md
+
+---
+
 ## 🔄 FASE ATIVA
 
 ### F9.8 — Observabilidade Externa (Prometheus + Grafana)
@@ -90,30 +116,6 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 ---
 
 ## 📅 FASES PLANEJADAS
-
-### F9.9-A — Memória Persistente (User Preferences)
-**Status:** 📅 PLANEJADA  
-**Prioridade:** ALTA (bloqueante para F10)
-
-**Escopo:**
-- Tabela `user_preferences` no PostgreSQL
-- Preferências explícitas (tom, formato, idioma)
-- API CRUD para preferências
-- Sem inferência psicológica (conforme V-COF Princípio 5)
-
-**Entregas esperadas:**
-- Modelo SQLAlchemy para preferences
-- Endpoints `/preferences` (GET/PUT)
-- Testes de persistência
-- Migração de schema
-- Documentação de uso
-
-**Dependências:**
-- F9.8 concluída (observabilidade estável)
-
-**Estimativa:** 2-3 dias
-
----
 
 ### F9.9-B — LLM Hardening (Produção-Ready)
 **Status:** 📅 PLANEJADA  
