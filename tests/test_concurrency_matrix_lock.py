@@ -47,9 +47,9 @@ class TestConcurrentMatrixReads:
                     assert isinstance(matrix.profile, str)
                     assert isinstance(matrix.allowed_actions, list)
                     
-                    # Verify default values
+                    # Verify default values (F11: added 3 preferences actions)
                     assert matrix.profile == "default"
-                    assert matrix.allowed_actions == ["process"]
+                    assert matrix.allowed_actions == ["process", "preferences.delete", "preferences.get", "preferences.put"]
                     
                     with lock_for_results:
                         read_results.append({
@@ -80,7 +80,7 @@ class TestConcurrentMatrixReads:
         # Verify all reads had consistent values
         for result in read_results:
             assert result["profile"] == "default"
-            assert result["actions"] == 1  # ["process"]
+            assert result["actions"] == 4  # F11: ["process", "preferences.delete", "preferences.get", "preferences.put"]
 
     def test_concurrent_write_does_not_corrupt_reads(self):
         """

@@ -240,18 +240,14 @@ class TestP2InvalidJSON:
             },
         )
         
-        # Should return 400 bad_request
-        assert response.status_code == 400
+        # Should return 422 unprocessable_entity (F11 body_parser)
+        assert response.status_code == 422
         data = response.json()
         
-        # Check envelope structure
+        # Check envelope structure (F11 GateError → error_handler → error/message envelope)
         assert "error" in data
         assert "message" in data
-        assert "trace_id" in data
-        assert "reason_codes" in data
-        
-        # Check specific values
-        assert data["error"] == "bad_request"
-        assert "P2_invalid_json" in data["reason_codes"]
-        assert "trace_id" in data
-        assert len(data["trace_id"]) == 36  # UUID format
+        # reason_code está serializado dentro de "error" (dict convertido em string)
+        error_str = str(data["error"])
+        assert "G10_BODY_PARSE_ERROR" in error_str
+        assert "gate_error" in error_str

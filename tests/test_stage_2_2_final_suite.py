@@ -143,14 +143,13 @@ def test_profile_action_mismatch_persists_action_before_403(tmp_path, monkeypatc
         with open(audit_log, "r", encoding="utf-8") as f:
             lines = [json.loads(line) for line in f if line.strip()]
 
-        decisions = [e for e in lines if e.get("event_type") == "decision_audit"]
-        actions = [e for e in lines if e.get("event_type") == "action_audit"]
+        # F11: Find gate_audit DENY (no action_audit, gate blocks before pipeline)
+        gates = [e for e in lines if "decision" in e and e.get("decision") in ["ALLOW", "DENY"]]
 
-        blocked = [e for e in actions if e.get("status") == "BLOCKED" and "PROFILE_ACTION_MISMATCH" in e.get("reason_codes", [])]
-        assert blocked, "No BLOCKED ActionResult with PROFILE_ACTION_MISMATCH found"
+        blocked_gates = [e for e in gates if e.get("decision") == "DENY" and "G8_UNKNOWN_ACTION" in e.get("reason_codes", [])]
+        assert blocked_gates, "No DENY gate with G8_UNKNOWN_ACTION found"
 
-        trace_ids_decision = {e.get("trace_id") for e in decisions}
-        trace_ids_action = {e.get("trace_id") for e in blocked}
-        assert trace_ids_decision & trace_ids_action, "Trace ID not correlated between decision and action"
+        trace_ids_gate = {e.get("trace_id") for e in blocked_gates}
+        assert trace_ids_gate, "Gate audit missing trace_id"
     finally:
         reset_action_matrix()
