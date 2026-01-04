@@ -70,3 +70,29 @@ def create_llm_client(
         raise RuntimeError(f"Unknown LLM provider: {provider}")
     
     return client_class(api_key=api_key, default_timeout_s=timeout_s)
+
+
+# Circuit breaker registry (RISK-4)
+from .circuit_breaker import CircuitBreaker
+
+# Singleton global de circuit breakers por provider
+_circuit_breakers: dict[str, CircuitBreaker] = {}
+
+
+def get_circuit_breaker(provider: str) -> CircuitBreaker:
+    """
+    Retorna circuit breaker para provider (singleton por provider).
+    
+    Args:
+        provider: Nome do provider ("openai", "anthropic", etc.)
+    
+    Returns:
+        CircuitBreaker: Instância única para provider
+    """
+    if provider not in _circuit_breakers:
+        _circuit_breakers[provider] = CircuitBreaker(
+            failure_threshold=3,
+            timeout_s=60,
+            provider_name=provider
+        )
+    return _circuit_breakers[provider]

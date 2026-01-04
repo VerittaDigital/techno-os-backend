@@ -7,9 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.action_contracts import ActionRequest
 from app.executors.base import Executor, ExecutorLimits
 from app.llm.client import LLMClient
-from app.llm.factory import create_llm_client
+from app.llm.factory import create_llm_client, get_circuit_breaker
 from app.llm.policy import Policy
+from app.llm.rate_limiter import RateLimiter
+from app.llm.retry import retry_with_backoff
 from app.tracing import observed_span
+
+
+# Instância global de rate limiter (singleton)
+_rate_limiter = RateLimiter()
 
 
 class _Payload(BaseModel):
@@ -55,22 +61,40 @@ class LLMExecutorV1(Executor):
             except ValueError:
                 raise ValueError("POLICY_VIOLATION")
 
-            # Call client (must raise on errors)
-            try:
-                resp = self._client.generate(
-                    prompt=p.prompt,
-                    model=p.model,
-                    temperature=Policy.TEMPERATURE,
-                    max_tokens=p.max_tokens,
-                    timeout_s=Policy.TIMEOUT_S,
-                )
-            except TimeoutError:
-                raise
-            except RuntimeError:
-                raise
-            except Exception as e:
-                # Any unexpected errors should surface as runtime error
-                raise RuntimeError("PROVIDER_ERROR") from e
+            # Detectar provider do client atual
+            provider_name = getattr(self._client, "__class__.__name__", "unknown").replace("Client", "").lower()
+            if provider_name not in ["openai", "anthropic", "gemini", "grok", "deepseek", "fake"]:
+                provider_name = "unknown"
 
-            # Return only the allowed fields
-            return {"text": resp.get("text"), "model": resp.get("model"), "usage": resp.get("usage")}
+            # RISK-3, RISK-4, RISK-5, RISK-6: Retry + Circuit Breaker + Rate Limiting + Fail-closed
+            try:
+                # RISK-5: Rate limiting (bloqueia se necessário)
+                _rate_limiter.acquire(provider_name)
+
+                # RISK-4: Circuit breaker por provider
+                cb = get_circuit_breaker(provider_name)
+
+                # RISK-3 + RISK-4: Retry com circuit breaker
+                resp = cb.call(
+                    lambda: retry_with_backoff(
+                        func=lambda: self._client.generate(
+                            prompt=p.prompt,
+                            model=p.model,
+                            temperature=Policy.TEMPERATURE,
+                            max_tokens=p.max_tokens,
+                            timeout_s=Policy.TIMEOUT_S
+                        ),
+                        max_retries=Policy.MAX_RETRIES,
+                        base_delay_ms=Policy.RETRY_BASE_DELAY_MS,
+                        timeout_s=Policy.TIMEOUT_S
+                    )
+                )
+
+                # Return only the allowed fields
+                return {"text": resp.get("text"), "model": resp.get("model"), "usage": resp.get("usage")}
+
+            except (TimeoutError, RuntimeError) as e:
+                # RISK-6: Fail-closed enforcement
+                # NUNCA retornar data parcial ou "try anyway"
+                # Reraising para pipeline tratar como FAILED
+                raise
