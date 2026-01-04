@@ -35,6 +35,8 @@ from app.digests import sha256_json_or_none
 from app.error_handler import register_error_handlers
 from app.error_envelope import http_error_detail
 from app.gate_engine import evaluate_gate as evaluate_gate
+from app.gate_canonical import detect_action, parse_body_by_method
+from app.gate_errors import GateError
 from app.middleware_trace import TraceCorrelationMiddleware
 from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
@@ -135,36 +137,80 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # Step 1: Read body (fail-closed on invalid JSON)
-    from app.gate_artifacts import profiles_fingerprint_sha256
+    # FASE 11: Detectar action de forma canônica (com normalização de path)
     try:
-        body = await request.json()
-    except (json.JSONDecodeError, ValueError) as e:
-        # Invalid JSON: log denial with profile_hash + reason code, then raise with envelope
-        decision = "DENY"
-        reason_codes = ["P2_invalid_json"]
-        matched_rules = ["Request body is not valid JSON"]
-        
+        action = detect_action(request)
+    except GateError as e:
+        # G8_UNKNOWN_ACTION: log decisão antes de raise
         decision_record = DecisionRecord(
-            decision=decision,
-            profile_id="G7",
+            decision="DENY",
+            profile_id="G8",
             profile_hash=profiles_fingerprint_sha256(),
-            matched_rules=matched_rules,
-            reason_codes=reason_codes,
+            matched_rules=["No action mapping for path"],
+            reason_codes=[e.reason_code.value],
             input_digest=None,
             trace_id=trace_id,
-            ts_utc=datetime.now(timezone.utc),
         )
         log_decision(decision_record)
-        
-        raise HTTPException(status_code=400, detail=http_error_detail(
-            error="bad_request",
-            message="Request body is not valid JSON",
-            trace_id=trace_id,
-            reason_codes=reason_codes,
-        ))
+        raise  # Re-raise GateError (já tem detail formatado)
     
-    action = "process"
+    # FASE 11: Validar que action está no action_matrix
+    action_matrix = get_action_matrix()
+    if action not in action_matrix.allowed_actions:
+        from app.gate_errors import ReasonCode
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="G8",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=[f"Action '{action}' not in action matrix"],
+            reason_codes=[ReasonCode.G8_UNKNOWN_ACTION.value],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise GateError(
+            reason_code=ReasonCode.G8_UNKNOWN_ACTION,
+            message=f"Action '{action}' not in action matrix",
+            http_status=403
+        )
+    
+    # FASE 11: Validar que profile existe
+    from app.gate_profiles import get_profile
+    from app.gate_errors import ReasonCode
+    profile = get_profile(action)
+    if profile is None:
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="G9",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=[f"No profile defined for action '{action}'"],
+            reason_codes=[ReasonCode.G9_MISSING_PROFILE.value],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise GateError(
+            reason_code=ReasonCode.G9_MISSING_PROFILE,
+            message=f"No profile defined for action '{action}'",
+            http_status=500  # Internal error, not user fault
+        )
+    
+    # FASE 11: Parse body de forma determinística (GET/DELETE = {})
+    try:
+        body = await parse_body_by_method(request)
+    except GateError as e:
+        # G10_BODY_PARSE_ERROR: log decisão antes de raise
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="G10",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=["Body parsing failed"],
+            reason_codes=[e.reason_code.value],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise  # Re-raise GateError (já tem detail formatado)
     
     # Compute input digest using canonical rule (None for non-JSON, privacy-first)
     input_digest = sha256_json_or_none(body)

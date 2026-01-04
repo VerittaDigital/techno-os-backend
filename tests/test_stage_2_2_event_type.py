@@ -111,21 +111,20 @@ class TestProfileActionMismatchPersisted:
             assert response.status_code == 403, \
                 f"Expected 403 (policy mismatch), got {response.status_code}: {response.json()}"
             
-            # Read audit.log for ActionResult with PROFILE_ACTION_MISMATCH
+            # F11: Read audit.log for gate_audit DENY (no action_audit, gate blocks before pipeline)
             with open(audit_log, 'r') as f:
                 lines = f.readlines()
             
-            # Find action_audit entry with PROFILE_ACTION_MISMATCH
+            # Find gate_audit with DENY + G8_UNKNOWN_ACTION
             found = False
             for line in lines:
                 data = json.loads(line)
-                if data.get("event_type") == "action_audit" and "PROFILE_ACTION_MISMATCH" in data.get("reason_codes", []):
+                if "decision" in data and data["decision"] == "DENY" and "G8_UNKNOWN_ACTION" in data.get("reason_codes", []):
                     found = True
-                    assert data["status"] == "BLOCKED"
-                    assert data["action"] == "process"
+                    assert data["profile_id"] == "G8"
                     break
             
-            assert found, "PROFILE_ACTION_MISMATCH ActionResult not found in audit.log"
+            assert found, "Gate DENY with G8_UNKNOWN_ACTION not found in audit.log"
         finally:
             reset_action_matrix()
 
