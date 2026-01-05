@@ -10,7 +10,7 @@ class Policy:
     TEMPERATURE: ClassVar[float] = 0.0
     MAX_PROMPT_CHARS: ClassVar[int] = 10000
     MAX_TOKENS_TOTAL: ClassVar[int] = 4096
-    TIMEOUT_S: ClassVar[float] = 10.0
+    TIMEOUT_S: ClassVar[float] = 30.0  # F9.9-C: Alinhado com hardening (10.0 → 30.0)
 
     @classmethod
     def validate(cls, *, prompt: str, model: str, max_tokens: int, timeout_s: float) -> None:

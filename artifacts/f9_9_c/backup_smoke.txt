@@ -1,0 +1,2 @@
+Backup script exists and is executable
+-rwxrwxrwx 1 vinicius vinicius 1.9K Jan  4 22:46 scripts/backup_observability.sh
