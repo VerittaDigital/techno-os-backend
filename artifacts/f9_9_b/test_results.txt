@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /mnt/d/Projects/techno-os-backend
+configfile: pytest.ini
+plugins: cov-6.0.0, anyio-4.12.0
+collecting ... collected 17 items
+
+tests/test_f9_9_b_llm_hardening.py::test_factory_fail_closed_no_allowlist PASSED [  5%]
+tests/test_f9_9_b_llm_hardening.py::test_factory_fail_closed_empty_allowlist PASSED [ 11%]
+tests/test_f9_9_b_llm_hardening.py::test_factory_fail_closed_provider_not_allowed PASSED [ 17%]
+tests/test_f9_9_b_llm_hardening.py::test_factory_success_fake_in_allowlist PASSED [ 23%]
+tests/test_f9_9_b_llm_hardening.py::test_factory_timeout_default_30s PASSED [ 29%]
+tests/test_f9_9_b_llm_hardening.py::test_factory_missing_api_key PASSED  [ 35%]
+tests/test_f9_9_b_llm_hardening.py::test_retry_success_first_attempt PASSED [ 41%]
+tests/test_f9_9_b_llm_hardening.py::test_retry_fail_after_max_retries PASSED [ 47%]
+tests/test_f9_9_b_llm_hardening.py::test_retry_timeout_no_retry PASSED   [ 52%]
+tests/test_f9_9_b_llm_hardening.py::test_retry_non_retryable_error PASSED [ 58%]
+tests/test_f9_9_b_llm_hardening.py::test_retry_exponential_backoff PASSED [ 64%]
+tests/test_f9_9_b_llm_hardening.py::test_circuit_breaker_closed_by_default PASSED [ 70%]
+tests/test_f9_9_b_llm_hardening.py::test_circuit_breaker_open_after_threshold PASSED [ 76%]
+tests/test_f9_9_b_llm_hardening.py::test_circuit_breaker_blocks_when_open PASSED [ 82%]
+tests/test_f9_9_b_llm_hardening.py::test_circuit_breaker_half_open_after_timeout PASSED [ 88%]
+tests/test_f9_9_b_llm_hardening.py::test_circuit_breaker_success_resets_counter PASSED [ 94%]
+tests/test_f9_9_b_llm_hardening.py::test_metrics_registered PASSED       [100%]
+
+============================== 17 passed in 7.50s ==============================

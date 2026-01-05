@@ -1,0 +1,12 @@
+* ab04ef0 F9.9-A: Preferences persistence sealed (fail-closed, no-log, V-COF compliant)
+* 51752b5 feat(F9.9-A): Implement user preferences API with V-COF governance
+* b511e93 docs(audit): Parecer Samurai post-F11 hygiene + F9.9-B rebase validation
+| * 876b885 feat(llm-hardening): RISK-3..RISK-8 implementation
+|/  
+* c45570d chore(repo): workspace hygiene + compliance (post-F11)
+* 9c75dc7 security: remove .env.prod from git tracking; add .env.prod.example
+* 651d5de governance(f11): tag immutability policy + evidence pack (F11-PROD-v1.0.1 final)
+* 404ef09 docs(f11-seal): final VPS revalidation - CP-11.3 6/6 PASS after git pull
+* 0d16e87 docs(f11-seal): add VPS hotfix2 evidence and production approval
+*   be97438 merge(f11): Gate Engine Consolidation + VPS hotfix2 (6/6 smoke tests PASS)
+|\  
