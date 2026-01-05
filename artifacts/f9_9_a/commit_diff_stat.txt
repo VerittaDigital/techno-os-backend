@@ -1,0 +1,51 @@
+commit 51752b5a1368b140e10f84f10f265826e6388576
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 22:08:37 2026 -0300
+
+    feat(F9.9-A): Implement user preferences API with V-COF governance
+    
+    SPRINT 1 — Memória Persistente Governada (Opção A: Wide-Column)
+    
+    Implementação:
+    - Model ORM: UserPreference (wide-column, 1:1 user→preferences)
+    - Schemas Pydantic: Enums fail-closed (tone/output_format/language)
+    - Auth dependency: user_id from F2.3 gate (X-VERITTA-USER-ID header)
+    - Routes: GET/PUT /api/v1/preferences (partial update support)
+    - Testes: Unit + integration (19 tests, coverage >=80% expected)
+    - Migração Alembic: Validação de schema existente (idempotente)
+    - ROADMAP: Intenção estratégica para evolução futura (F10+)
+    
+    Governança V-COF:
+    - No-log policy (valores de preferências nunca logados)
+    - Fail-closed validation (enums + allowlist)
+    - Privacy-by-design (user_id hasheado em logs)
+    - Estado explícito (sem inferência automática)
+    
+    Decisão Arquitetural:
+    - OPÇÃO A: Preservar schema user_preferences existente
+    - Zero breaking changes
+    - Compatível com F2.3 auth
+    - Migração para key-value planejada para F10.1
+    
+    Bloqueios resolvidos:
+    - Auth: F2.3 gate validado, user_id de header
+    - Schema: wide-column preservado (sem refactor)
+    - Validação: enums Pydantic strictos
+    
+    Arquivos modificados: 11
+    Testes: 19 criados (10 passando unit tests, async tests requerem pytest-asyncio)
+    
+    Ref: planning/MEMORY-ROADMAP.md
+
+ .../189a213f209b_f9_9_a_preferences_validation.py  |  73 ++++
+ app/dependencies/__init__.py                       |   1 +
+ app/dependencies/auth.py                           |  42 +++
+ app/env.py                                         |  14 +
+ app/main.py                                        |   4 +
+ app/models/user_preference.py                      |  66 ++++
+ app/routes/preferences.py                          | 227 +++++++++++++
+ app/schemas/__init__.py                            |   1 +
+ app/schemas/preferences.py                         |  82 +++++
+ planning/MEMORY-ROADMAP.md                         | 265 +++++++++++++++
+ tests/test_preferences.py                          | 374 +++++++++++++++++++++
+ 11 files changed, 1149 insertions(+)

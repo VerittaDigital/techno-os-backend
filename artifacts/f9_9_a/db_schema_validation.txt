@@ -1,0 +1,14 @@
+                            Table "public.user_preferences"
+     Column      |           Type           | Collation | Nullable |      Default      
+-----------------+--------------------------+-----------+----------+-------------------
+ preference_id   | character varying(36)    |           | not null | 
+ user_id         | character varying(255)   |           | not null | 
+ tone_preference | character varying(50)    |           |          | 
+ output_format   | character varying(50)    |           |          | 
+ language        | character varying(10)    |           |          | 
+ created_at      | timestamp with time zone |           | not null | CURRENT_TIMESTAMP
+ updated_at      | timestamp with time zone |           |          | 
+Indexes:
+    "user_preferences_pkey" PRIMARY KEY, btree (preference_id)
+    "ix_user_preferences_user_id" UNIQUE, btree (user_id)
+
