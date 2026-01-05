@@ -1,0 +1,27 @@
+INFO:     127.0.0.1:44154 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41828 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45844 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:46894 - "OPTIONS / HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45574 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58166 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44348 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43210 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44028 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45756 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33500 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55444 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38368 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48960 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39162 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54586 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49250 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50900 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36818 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44828 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:44870 - "GET /health HTTP/1.1" 200 OK
+DEBUG: gate_result.decision = GateDecision.ALLOW
+DEBUG: ALLOW = GateDecision.ALLOW
+DEBUG: equal = True
+INFO:     172.18.0.1:60814 - "POST /process HTTP/1.1" 200 OK
+INFO:     172.18.0.1:60818 - "GET /metrics HTTP/1.1" 200 OK
