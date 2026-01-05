@@ -17,6 +17,57 @@
 
 ---
 
+## Repository Structure (Post-F11 Hygiene)
+
+```
+techno-os-backend/
+├── app/                      # Python application source code
+│   ├── main.py              # FastAPI entry point
+│   ├── gates_f21.py         # F2.1 chain (X-API-Key)
+│   ├── gates_f23.py         # F2.3 chain (Bearer token)
+│   ├── audit_log.py         # Decision audit sink
+│   └── ...
+├── tests/                    # Unit tests (pytest)
+│   ├── test_g6_trace.py
+│   ├── test_gate_canonical.py
+│   └── ...
+├── scripts/                  # Utility scripts
+│   ├── smoke_test_cp11_3.sh  # VPS smoke tests
+│   ├── f11_vps_manual.sh     # VPS deployment automation
+│   └── generate_profiles_fingerprint_lock.py
+├── ops/                      # Operations & infrastructure
+│   └── compose/              # Auxiliary docker-compose files
+│       ├── docker-compose.grafana.yml
+│       ├── docker-compose.metrics.yml
+│       └── docker-compose.nginx.yml
+├── docs/                     # Documentation
+│   ├── F11-SEAL.md          # Feature F11 seal & governance
+│   ├── F11-EVIDENCE-PACK.md # VPS validation evidence
+│   └── ...
+├── artifacts/                # Neutral build artifacts
+│   └── baseline_metrics.json
+├── logs/                     # Development logs (NOT versioned)
+│   └── (created locally as needed)
+├── docker-compose.yml        # Main orchestration (production)
+├── Dockerfile                # Container image
+├── requirements.txt          # Python dependencies
+├── .env.example              # Template (copy to .env)
+├── .env.prod.example         # Production template
+├── .gitignore                # Git exclusions
+└── README.md                 # This file
+```
+
+### Policy
+
+- **Source Code**: `/app/` and `/tests/` only (no generated files)
+- **Scripts**: All utility/deployment scripts in `/scripts/`
+- **Compose**: Main in root; variants in `/ops/compose/`
+- **Logs**: Dev logs in `/logs/` — **NOT versioned** (add to `.gitignore`)
+- **Secrets**: `.env` and `.env.prod` **NEVER versioned** — use `.env.example` / `.env.prod.example`
+- **Evidence**: Production validation results in `/docs/` (not root)
+
+---
+
 ## Quickstart (Local Development)
 
 ### 1. Clone & Install
@@ -74,8 +125,25 @@ curl -s http://localhost:8000/health | jq .
 pytest tests/ -v
 
 # Run smoke tests
-bash <(cat docs/RUNBOOK_SAMURAI.md | grep -A 50 "2.4 End-to-End")
+bash scripts/smoke_test_cp11_3.sh
 ```
+
+### 5. Development Logs
+
+Logs are created in `logs/` directory (not versioned):
+
+```bash
+# Create logs directory (first time)
+mkdir -p logs
+
+# View audit log
+tail -f logs/audit.log
+
+# View server log
+tail -f logs/uvicorn.log
+```
+
+**Important**: Logs in `logs/` are **git-ignored**. They persist locally for debugging but are not committed.
 
 ---
 
