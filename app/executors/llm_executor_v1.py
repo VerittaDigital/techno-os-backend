@@ -9,6 +9,8 @@ from app.executors.base import Executor, ExecutorLimits
 from app.llm.client import LLMClient
 from app.llm.factory import create_llm_client
 from app.llm.policy import Policy
+from app.llm.retry import with_retry
+from app.llm.circuit_breaker_singleton import get_circuit_breaker
 from app.tracing import observed_span
 
 
@@ -32,6 +34,8 @@ class LLMExecutorV1(Executor):
         )
         # Usar factory se client não injetado (respeita LLM_PROVIDER env)
         self._client = client if client is not None else create_llm_client()
+        # F9.9-C: Circuit breaker singleton
+        self._circuit_breaker = get_circuit_breaker()
 
     def execute(self, req: ActionRequest) -> Any:
         # F8.6.1 FASE 3: Instrument executor at boundaries (fail-closed, wrapper-only)
@@ -55,14 +59,14 @@ class LLMExecutorV1(Executor):
             except ValueError:
                 raise ValueError("POLICY_VIOLATION")
 
-            # Call client (must raise on errors)
+            # F9.9-C: Call client with retry + circuit breaker
             try:
-                resp = self._client.generate(
+                # Circuit breaker wrapper
+                resp = self._circuit_breaker.call(
+                    self._call_llm_with_retry,
                     prompt=p.prompt,
                     model=p.model,
-                    temperature=Policy.TEMPERATURE,
                     max_tokens=p.max_tokens,
-                    timeout_s=Policy.TIMEOUT_S,
                 )
             except TimeoutError:
                 raise
@@ -74,3 +78,18 @@ class LLMExecutorV1(Executor):
 
             # Return only the allowed fields
             return {"text": resp.get("text"), "model": resp.get("model"), "usage": resp.get("usage")}
+
+    @with_retry(max_retries=2)
+    def _call_llm_with_retry(self, *, prompt: str, model: str, max_tokens: int) -> Dict:
+        """Call LLM with retry decorator (F9.9-C).
+        
+        Retry automático para erros temporários (429, 5xx).
+        Max 2 retries conforme hardening F9.9-B.
+        """
+        return self._client.generate(
+            prompt=prompt,
+            model=model,
+            temperature=Policy.TEMPERATURE,
+            max_tokens=max_tokens,
+            timeout_s=Policy.TIMEOUT_S,
+        )

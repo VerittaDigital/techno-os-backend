@@ -13,6 +13,9 @@
 | **Error Envelope** | ✅ Canonical | Unified structure, reason codes, privacy-safe |
 | **Audit Trail** | ✅ JSONL sink | `decision_audit` + `action_audit` events |
 | **Profile Hash (P1.1)** | ✅ Non-empty invariant | Verified in all audit records |
+| **User Preferences (F9.9-A)** | ✅ Implemented | Wide-column, no-log, V-COF compliant |
+| **LLM Hardening (F9.9-B)** | ✅ Implemented | Factory fail-closed, retry, circuit breaker |
+| **Observability (F9.9-C)** | ✅ Partial | Executor integrated, Prometheus standalone |
 | **Tests** | ✅ 35/35 passing | Unit + smoke tests |
 
 ---
@@ -311,7 +314,84 @@ grep "550e8400-e29b-41d4-a716-446655440000" audit.log | jq .
 | [docs/ERROR_ENVELOPE.md](docs/ERROR_ENVELOPE.md) | Error response contract, reason codes, client patterns |
 | [docs/AUDIT_LOG_SPEC.md](docs/AUDIT_LOG_SPEC.md) | JSONL audit format, invariants, offline tools |
 | [docs/RUNBOOK_SAMURAI.md](docs/RUNBOOK_SAMURAI.md) | Executable smoke tests, diagnostics, incident response |
+| [docs/RUNBOOK_OBSERVABILITY.md](docs/RUNBOOK_OBSERVABILITY.md) | **F9.9-C**: Health checks, metrics, backup, circuit breaker |
 | [.env.example](.env.example) | Environment variable reference |
+
+---
+
+## Observability Stack (F9.9-C)
+
+### Prometheus (Standalone)
+
+**Metrics endpoint:** http://localhost:8000/metrics  
+**Prometheus UI:** http://localhost:9090 (se rodando)
+
+**Métricas LLM (F9.9-B/F9.9-C):**
+- `llm_request_latency_seconds` — Histogram de latência (p50, p95, p99)
+- `llm_tokens_total` — Counter de tokens consumidos (prompt, completion)
+- `llm_errors_total` — Counter de erros (timeout, provider_error, circuit_open)
+
+**Queries úteis:**
+```promql
+# p95 latency
+histogram_quantile(0.95, llm_request_latency_seconds{provider="openai"})
+
+# Total tokens por provider
+sum(llm_tokens_total) by (provider, type)
+
+# Rate de erros
+rate(llm_errors_total{error_type="provider_error"}[5m])
+```
+
+### Circuit Breaker (F9.9-C)
+
+**Estado:** Integrado no executor LLM  
+**Threshold:** 3 falhas consecutivas → OPEN (60s cooldown)  
+**Comportamento:**
+- CLOSED: operação normal
+- OPEN: bloqueia chamadas (erro `CIRCUIT_OPEN`)
+- HALF_OPEN: testa 1 chamada após cooldown
+
+**Diagnóstico:**
+```bash
+# Ver estado atual (via métricas)
+curl -s http://localhost:8000/metrics | grep llm_errors_total | grep circuit_open
+```
+
+Ver [docs/RUNBOOK_OBSERVABILITY.md](docs/RUNBOOK_OBSERVABILITY.md) para procedimentos completos.
+
+### Backup Automatizado
+
+**Script:** `scripts/backup_observability.sh`  
+**Retenção:** 7 dias  
+**Cron sugerido:**
+```bash
+# Backup diário às 2h
+0 2 * * * /opt/techno-os/scripts/backup_observability.sh >> /var/log/backup_obs.log 2>&1
+```
+
+**Restore:** Ver [docs/RUNBOOK_OBSERVABILITY.md § Backup e Restore](docs/RUNBOOK_OBSERVABILITY.md#-backup-e-restore)
+
+---
+
+## Variáveis ENV Obrigatórias (F9.9-B/C)
+
+### LLM Hardening
+
+```bash
+# Allowlist de providers (fail-closed)
+VERITTA_LLM_ALLOWED_PROVIDERS="fake,openai"
+
+# Provider padrão
+LLM_PROVIDER="fake"  # Dev: fake | Prod: openai
+
+# API keys (apenas para providers reais)
+OPENAI_API_KEY="sk-..."
+# ANTHROPIC_API_KEY="sk-ant-..."
+# GOOGLE_API_KEY="..."
+```
+
+**Fail-closed:** Se `VERITTA_LLM_ALLOWED_PROVIDERS` ausente ou provider bloqueado → `ConfigurationError`
 
 ---
 
