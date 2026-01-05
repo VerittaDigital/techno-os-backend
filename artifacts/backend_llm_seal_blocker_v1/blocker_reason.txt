@@ -1,0 +1,13 @@
+BLOCKER REASON: LLM call failed with 403 Forbidden "Action not allowed in profile" for action "llm_generate".
+
+Details:
+- Action "llm_generate" is defined in action_matrix.py allowed_actions.
+- Profile "llm_generate" is defined in gate_profiles.py.
+- Payload matches allowlist: {"prompt", "model", "max_tokens"}.
+- Possible causes:
+  - VPS running outdated code without "llm_generate" in matrix.
+  - Global matrix overridden in runtime.
+  - Bug in action check logic.
+- Evidence: process_llm_http.txt shows 403, not SUCCESS.
+
+Recommendation: Update VPS code to latest, verify matrix/profile definitions, debug gate logic.
