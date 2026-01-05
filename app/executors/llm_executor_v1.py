@@ -80,8 +80,11 @@ class LLMExecutorV1(Executor):
                 raise
             except Exception as e:
                 # Any unexpected errors should surface as runtime error
+                print(f"[LLM_EXECUTOR_ERROR] type={type(e).__name__} msg={str(e)[:200]}", flush=True)
+                import traceback
+                print("".join(traceback.format_exc().splitlines(True)[-20:]), flush=True)
                 logger = logging.getLogger(__name__)
-                logger.error(f"LLM provider error: {type(e).__name__}: {str(e)}")
+                logger.info(f"LLM provider error: {type(e).__name__}: {str(e)}")
                 print(f"LLM provider error: {type(e).__name__}: {str(e)}")
                 raise RuntimeError("PROVIDER_ERROR") from e
 
