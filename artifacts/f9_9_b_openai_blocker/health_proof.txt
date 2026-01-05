@@ -1,0 +1,15 @@
+HEALTH PROOF — APÓS ROLLBACK (2026-01-05)
+
+Comando executado:
+curl -s http://localhost:8000/health
+
+Resposta:
+{"status":"ok"}
+
+Timestamp: 2026-01-05 (rollback executado)
+
+Confirmação:
+- Sistema operacional com LLM_PROVIDER=fake
+- Startup completo sem ConfigurationError
+- Audit logging não testado (blocker conhecido)</content>
+<parameter name="filePath">/mnt/d/Projects/techno-os-backend/artifacts/f9_9_b_openai_blocker/health_proof.txt
