@@ -279,8 +279,8 @@ class TestP16ConcurrentE2EProcessFlow:
         - No deadlock occurs
         """
         # Force audit persistence failure with invalid path (deterministic)
-        invalid_audit_path = tmp_path / "no_such_dir" / "audit.log"
-        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_audit_path))
+        invalid_audit_path = "/invalid/path/audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", invalid_audit_path)
         
         N = 30
         barrier = threading.Barrier(N)
@@ -345,8 +345,8 @@ class TestP16ConcurrentE2EProcessFlow:
         from app.action_matrix import ActionMatrix
         
         # Force audit persistence failure with invalid path (deterministic)
-        invalid_audit_path = tmp_path / "no_such_dir" / "audit.log"
-        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_audit_path))
+        invalid_audit_path = "/invalid/path/audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", invalid_audit_path)
         
         N = 20
         barrier = threading.Barrier(N + 1)  # +1 for writer

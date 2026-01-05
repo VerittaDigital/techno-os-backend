@@ -1,0 +1,6 @@
+NAMES                    STATUS                    PORTS
+techno-os-api            Up 21 minutes (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+techno-os-db             Up 57 minutes (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+techno-os-grafana        Up 3 hours (healthy)      0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+techno-os-prometheus     Up 3 hours (healthy)      0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+techno-os-alertmanager   Up 3 hours (healthy)      0.0.0.0:9093->9093/tcp, [::]:9093->9093/tcp

@@ -1,0 +1,125 @@
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+.....................................................FFssss............. [ 49%]
+........................................................................ [ 65%]
+...............................................FFFFFFFF................. [ 82%]
+........................................................................ [ 98%]
+.......                                                                  [100%]
+=================================== FAILURES ===================================
+________________________ test_prometheus_containerized _________________________
+
+    def test_prometheus_containerized():
+        """Prometheus deve estar rodando como container."""
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "name=techno-os-prometheus", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        )
+>       assert "techno-os-prometheus" in result.stdout
+E       AssertionError: assert 'techno-os-prometheus' in ''
+E        +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-prometheus', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+
+tests/test_f9_10_observability.py:24: AssertionError
+_______________________ test_alertmanager_containerized ________________________
+
+    def test_alertmanager_containerized():
+        """Alertmanager deve estar rodando como container."""
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "name=techno-os-alertmanager", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        )
+>       assert "techno-os-alertmanager" in result.stdout
+E       AssertionError: assert 'techno-os-alertmanager' in ''
+E        +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-alertmanager', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+
+tests/test_f9_10_observability.py:34: AssertionError
+_______________________ test_get_user_from_gate_success ________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________________ test_get_user_from_gate_missing_header ____________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________________ test_get_preferences_not_found ________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________________ test_get_preferences_existing _________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________________ test_put_preferences_create __________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________________ test_put_preferences_update __________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________________ test_put_preferences_partial_update ______________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_put_preferences_reject_user_id_in_payload ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+=============================== warnings summary ===============================
+tests/test_agentic_pipeline_tracing.py: 4 warnings
+tests/test_executor_tracing.py: 6 warnings
+tests/test_tracing.py: 4 warnings
+tests/test_tracing_integration.py: 1 warning
+  /mnt/d/Projects/techno-os-backend/app/tracing.py:59: DeprecationWarning: Call to deprecated method __init__. (Since v1.35, the Jaeger supports OTLP natively. Please use the OTLP exporter instead. Support for this exporter will end July 2023.) -- Deprecated since version 1.16.0.
+    jaeger_exporter = JaegerExporter(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_f9_10_observability.py:43: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:54: Alertmanager não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:78: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:99: Grafana não acessível (containers não iniciados)
+FAILED tests/test_f9_10_observability.py::test_prometheus_containerized - Ass...
+FAILED tests/test_f9_10_observability.py::test_alertmanager_containerized - A...
+FAILED tests/test_preferences.py::test_get_user_from_gate_success - Failed: a...
+FAILED tests/test_preferences.py::test_get_user_from_gate_missing_header - Fa...
+FAILED tests/test_preferences.py::test_get_preferences_not_found - Failed: as...
+FAILED tests/test_preferences.py::test_get_preferences_existing - Failed: asy...
+FAILED tests/test_preferences.py::test_put_preferences_create - Failed: async...
+FAILED tests/test_preferences.py::test_put_preferences_update - Failed: async...
+FAILED tests/test_preferences.py::test_put_preferences_partial_update - Faile...
+FAILED tests/test_preferences.py::test_put_preferences_reject_user_id_in_payload
+10 failed, 425 passed, 4 skipped, 15 warnings in 19.31s
