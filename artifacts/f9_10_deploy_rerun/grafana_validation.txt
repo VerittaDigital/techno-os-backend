@@ -1,0 +1,51 @@
+GRAFANA_OK (listen/provision detected)
+logger=provisioning.dashboard t=2026-01-05T03:15:06.115374176Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:15:06.115520225Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:15:06.115531571Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:15:06.115541686Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:15:36.111614068Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[default TechnoOS]"
+logger=provisioning.dashboard t=2026-01-05T03:15:36.111808139Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[default TechnoOS]"
+logger=provisioning.dashboard t=2026-01-05T03:15:36.11181528Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:15:36.111830813Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:16:06.111520887Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:16:06.111594276Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:16:06.111601907Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:16:06.111606133Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:16:36.111720225Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:16:36.111910719Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:16:36.11191809Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:16:36.111922317Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:17:06.111124355Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:17:06.111190754Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:17:06.111201631Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:17:06.111205817Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=context userId=0 orgId=0 uname= t=2026-01-05T03:17:24.412660809Z level=info msg= error="[auth.unauthorized] cannot authenticate request" remote_addr=172.21.0.1 traceID=
+logger=context userId=0 orgId=0 uname= t=2026-01-05T03:17:24.412744715Z level=info msg="Request Completed" method=GET path=/api/datasources status=401 remote_addr=172.21.0.1 time_ms=0 duration=312.908µs size=102 referer= handler=/api/datasources/ status_source=server
+logger=provisioning.dashboard t=2026-01-05T03:17:36.111348209Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:17:36.111392285Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:17:36.111399366Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:17:36.111403682Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=cleanup t=2026-01-05T03:18:05.888163637Z level=info msg="Completed cleanup jobs" duration=13.197575ms
+logger=provisioning.dashboard t=2026-01-05T03:18:06.111167915Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:18:06.111207555Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:18:06.111216198Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:18:06.111220223Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=plugins.update.checker t=2026-01-05T03:18:06.269757712Z level=info msg="Update check succeeded" duration=156.849896ms
+logger=provisioning.dashboard t=2026-01-05T03:18:36.110956578Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:18:36.111125381Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:18:36.111138511Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:18:36.11114447Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=context userId=0 orgId=0 uname= t=2026-01-05T03:18:37.850086036Z level=info msg= error="[auth.unauthorized] cannot authenticate request" remote_addr=172.21.0.1 traceID=
+logger=context userId=0 orgId=0 uname= t=2026-01-05T03:18:37.850413906Z level=info msg="Request Completed" method=GET path=/api/datasources status=401 remote_addr=172.21.0.1 time_ms=0 duration=389.352µs size=102 referer= handler=/api/datasources/ status_source=server
+logger=provisioning.dashboard t=2026-01-05T03:19:06.111277368Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:19:06.111448223Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:19:06.111461983Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:19:06.11147294Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:19:36.112700583Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:19:36.112737679Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:19:36.112755115Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:19:36.112767513Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:20:06.111151666Z level=warn msg="the same UID is used more than once" orgId=1 uid=llm-metrics-f910 times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:20:06.111244134Z level=warn msg="the same UID is used more than once" orgId=1 uid=technoos-minimal times=2 providers="[TechnoOS default]"
+logger=provisioning.dashboard t=2026-01-05T03:20:06.111265095Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=TechnoOS orgId=1
+logger=provisioning.dashboard t=2026-01-05T03:20:06.111271284Z level=warn msg="dashboards provisioning provider has no database write permissions because of duplicates" provider=default orgId=1

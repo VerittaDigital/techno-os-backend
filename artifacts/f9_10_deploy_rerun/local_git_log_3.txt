@@ -1,0 +1,73 @@
+commit 96067d652ada8abad95bc70c42c5408800ee5993
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 23:25:18 2026 -0300
+
+    docs(F9.10): add DEPLOY SEAL + blocker evidence pack
+    
+    EIXO 0: Pré-flight local OK (branch+tag confirmados)
+    EIXO 1: Merge FF em main OK (bd967a8 publicado)
+    EIXO 2: Pré-flight VPS OK (SSH+path+backup dir)
+    EIXO 3: Deploy BLOQUEADO (git permission denied)
+    EIXO 4-7: SKIP (dependência EIXO 3)
+    EIXO 8: SEAL blocker report
+    
+    Blocker: /app/techno-os-backend ownership=root, user SSH sem write access
+    Evidências: artifacts/f9_10_deploy/ (7 files)
+    Resoluções: OPÇÕES A-D documentadas em SEAL
+    
+    Status: F9.10 código em main+tag, NÃO DEPLOYADO no VPS
+
+commit bd967a8d0701f016e9e4b531150270e225f579ad
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 23:14:32 2026 -0300
+
+    feat(F9.10): Observability containerization + alerting governado
+    
+    EIXO 0: Pre-flight (FRESH_INSTALL_MODE)
+    EIXO 1: Prometheus + Alertmanager containerization (docker-compose)
+    EIXO 2: 5 alert rules governadas (APIHighErrorRate removed per parecer)
+    EIXO 3: Backup automation (3 volumes: postgres, prometheus, grafana)
+    EIXO 4: Circuit breaker ENV config (VERITTA_CB_THRESHOLD, VERITTA_CB_TIMEOUT)
+    EIXO 5: Grafana dashboard (4 panels: latency p95, tokens, errors, circuit breaker)
+    EIXO 6: Tests suite + evidence artifacts
+    
+    Blocker F9.9-C resolvido: Prometheus agora containerizado.
+    Correção aplicada: APIHighErrorRate removida (métrica http_requests_total inexistente).
+    
+    Base: F9.9-C-SEALED (a44edcc)
+    Tag: F9.10-SEALED
+
+commit a44edccf8ca5647ba3d1a45ca09ac4a156d3aabd
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 22:51:32 2026 -0300
+
+    feat(F9.9-C): Integration + observability
+    
+    - EIXO 1: Integração retry + circuit breaker no executor LLM
+      - Circuit breaker singleton thread-safe (double-check locking)
+      - LLMExecutorV1 agora envolve chamadas em CB → Retry → Provider
+      - Policy.TIMEOUT_S atualizado para 30s (alinhamento hardening)
+    
+    - EIXO 2: Prometheus alerts BLOQUEADO
+      - Prometheus não está em docker-compose.yml (standalone)
+      - Blocker documentado para F9.10+
+    
+    - EIXO 3: Backup automation
+      - Script backup_observability.sh (postgres, 7-day retention)
+      - Fail-closed (set -e), executável
+    
+    - EIXO 4: Documentation
+      - RUNBOOK_OBSERVABILITY.md (352 linhas: health, metrics, CB diagnostics, backup/restore)
+      - README.md atualizado (Observability Stack, métricas PromQL, ENV vars)
+    
+    - EIXO 5: Tests
+      - test_f9_9_c_integration.py (8 cenários, 100% pass)
+      - Circuit breaker: 3 falhas → OPEN, bloqueio, HALF_OPEN cooldown
+      - Retry: 429 max 2 retries, timeout fail-fast
+      - Timeout policy: 30s efetivo
+    
+    Evidências: artifacts/f9_9_c/
+    SEAL: sessions/f9.9-c/SEAL-F9.9-C.md
+    
+    Base: F9.9-B-SEALED (7141cad)
+    Governança V-COF: fail-closed, human-in-the-loop, LGPD by design

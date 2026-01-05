@@ -1,0 +1,14 @@
+F9.10-D-HOTFIX RERUN SUMMARY
+===========================
+Date: 2026-01-05T00:20:33-03:00
+SSH_TARGET=veritta-vps
+VPS_APP_PATH=/app/techno-os-backend
+
+Artifacts:
+- artifacts/f9_10_deploy_rerun/run.log
+- artifacts/f9_10_deploy_rerun/vps_deploy_output.txt
+- artifacts/f9_10_deploy_rerun/runtime_validation.txt
+- artifacts/f9_10_deploy_rerun/grafana_validation.txt
+- artifacts/f9_10_deploy_rerun/pytest_vps.txt
+- artifacts/f9_10_deploy_rerun/backup_vps.txt
+- artifacts/f9_10_deploy_rerun/git_permission_test.txt

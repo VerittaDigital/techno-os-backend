@@ -1,0 +1,22 @@
+total 36
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  5  2026 .
+drwxrwxrwx 1 vinicius vinicius 4096 Jan  5 00:20 ..
+-rwxrwxrwx 1 vinicius vinicius    0 Jan  5  2026 _ls_la.txt
+-rwxrwxrwx 1 vinicius vinicius 1141 Jan  5 00:20 backup_vps.txt
+-rwxrwxrwx 1 vinicius vinicius   64 Jan  5 00:20 git_permission_test.txt
+-rwxrwxrwx 1 vinicius vinicius   20 Jan  5 00:20 git_pull_main.txt
+-rwxrwxrwx 1 vinicius vinicius 9486 Jan  5 00:20 grafana_validation.txt
+-rwxrwxrwx 1 vinicius vinicius   24 Jan  5 00:20 local_describe.txt
+-rwxrwxrwx 1 vinicius vinicius 3073 Jan  5 00:20 local_git_log_3.txt
+-rwxrwxrwx 1 vinicius vinicius 1352 Jan  5 00:20 local_tag_show.txt
+-rwxrwxrwx 1 vinicius vinicius 1244 Jan  5 00:20 pytest_vps.txt
+-rwxrwxrwx 1 vinicius vinicius  489 Jan  5 00:20 root_instructions.txt
+-rwxrwxrwx 1 vinicius vinicius 1020 Jan  5 00:20 run.log
+-rwxrwxrwx 1 vinicius vinicius   40 Jan  5 00:20 runtime_validation.txt
+-rwxrwxrwx 1 vinicius vinicius    7 Jan  5 00:20 ssh_group.txt
+-rwxrwxrwx 1 vinicius vinicius   39 Jan  5 00:20 ssh_ok.txt
+-rwxrwxrwx 1 vinicius vinicius    7 Jan  5 00:20 ssh_user.txt
+-rwxrwxrwx 1 vinicius vinicius  507 Jan  5 00:20 summary.txt
+-rwxrwxrwx 1 vinicius vinicius   13 Jan  5 00:20 tag_exists.txt
+-rwxrwxrwx 1 vinicius vinicius 1231 Jan  5 00:20 vps_deploy_output.txt
+-rwxrwxrwx 1 vinicius vinicius    8 Jan  5 00:20 vps_path_ok.txt
