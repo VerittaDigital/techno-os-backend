@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+date: Mon, 05 Jan 2026 14:59:01 GMT
+server: uvicorn
+content-length: 337
+content-type: application/json
+x-trace-id: 3c1987d7-e6b5-419b-aa1b-f1814fba308a
+
+{"status":"FAILED","action":"llm_generate","executor_id":"llm_executor_v1","executor_version":"1.0.0","reason_codes":["EXECUTOR_EXCEPTION"],"input_digest":"690f0a04243830e94320836795da77e43f7dfa85f035c3e3bc10f3c7971734a1","output_digest":null,"trace_id":"46abbb05-e37b-41a5-8a9e-1866309ab7e7","ts_utc":"2026-01-05T14:59:02.458347+00:00"}

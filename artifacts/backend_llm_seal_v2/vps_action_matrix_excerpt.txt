@@ -1,0 +1,77 @@
+15:    - allowed_actions: list of action_ids permitted in this profile
+16-    """
+17-
+18-    model_config = ConfigDict(extra="forbid", frozen=False)
+19-
+20-    profile: str
+21:    allowed_actions: List[str]
+22-
+23-
+24-_global_matrix = None
+25-_global_matrix_lock = threading.RLock()
+26-
+27-
+28-def get_action_matrix() -> ActionMatrix:
+29-    """Return the canonical action-profile matrix.
+30-    
+31-    Defines which actions can be executed within each governance profile.
+32-    In testing, allows dynamic addition of test actions via set_action_matrix().
+33-    
+34-    Thread-safe: acquires _global_matrix_lock for consistent read.
+35-    """
+36-    global _global_matrix
+37-    
+38-    with _global_matrix_lock:
+39-        if _global_matrix is not None:
+40-            return _global_matrix
+41-        
+42-        # FASE 11: Actions consolidadas (process + preferences)
+43-        return ActionMatrix(
+44-            profile="default",
+45:            allowed_actions=[
+46-                "process",
+47-                "preferences.delete",
+48-                "preferences.get",
+49-                "preferences.put",
+50-                "llm_generate",
+51-            ],
+52-        )
+53-
+54-
+55-def set_action_matrix(matrix: ActionMatrix) -> None:
+56-    """Override action matrix (for testing only).
+57-    
+58-    This is used in tests to temporarily add test actions to the allowed list.
+59-    
+60-    Thread-safe: acquires _global_matrix_lock for exclusive write.
+61-    """
+62-    global _global_matrix
+63-    
+64-    with _global_matrix_lock:
+65-        _global_matrix = matrix
+66-
+67-
+68-def reset_action_matrix() -> None:
+69-    """Reset action matrix to default (for testing cleanup).
+70-    
+71-    Thread-safe: acquires _global_matrix_lock for exclusive write.
+72-    """
+73-    global _global_matrix
+74-    
+75-    with _global_matrix_lock:
+76-        _global_matrix = None
+77-
+78-
+79-def is_action_allowed_in_profile(
+80-    action: str,
+81-    profile: str,
+82-    matrix: ActionMatrix,
+83-) -> bool:
+84-    """Check if action is allowed in profile according to matrix.
+85-    
+--
+92:        True if action is in matrix.allowed_actions for this profile, False otherwise
+93-    """
+94-    if matrix.profile != profile:
+95-        return False
+96:    return action in matrix.allowed_actions
