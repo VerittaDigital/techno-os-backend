@@ -1,0 +1,25 @@
+# F9.9-B OpenAI Cutover — LLM Path Discovery
+
+## Action que dispara LLM
+- Action: "llm_generate"
+- Router: app/action_router.py ACTION_REGISTRY["llm_generate"] = "llm_executor_v1"
+
+## Executor
+- Classe: LLMExecutorV1 (app/executors/llm_executor_v1.py)
+- Método: execute() → _Payload.model_validate(req.payload) → Policy.validate() → create_llm_client()
+
+## Factory
+- Função: create_llm_client() (app/llm/factory.py)
+- Lógica: if LLM_PROVIDER == "openai" → OpenAIClient()
+
+## Client
+- Classe: OpenAIClient (app/llm/client.py)
+- Método: generate() → openai.OpenAI().chat.completions.create()
+
+## Payload esperado
+- {"prompt": str, "model": str, "max_tokens": int}
+- Model permitido: "gpt-4o-mini"
+- Max tokens: <= 4096
+
+## Evidência
+- Testes em tests/test_a4_1_llm_executor_v1.py confirmam payload e action.
