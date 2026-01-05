@@ -1,0 +1,43 @@
+F9.10 ALERT RULES VALIDATION
+=============================
+
+CORREÇÃO APLICADA (conforme PARECER DE EXECUTABILIDADE):
+- APIHighErrorRate REMOVIDA (métrica http_requests_total inexistente)
+
+RULES FINAIS (5 total):
+------------------------
+
+GROUP: llm_health (4 rules)
+1. LLMHighLatency
+   - Condition: histogram_quantile(0.95, llm_request_latency_seconds_bucket) > 5
+   - Duration: 2m
+   - Severity: warning
+
+2. LLMErrorRateHigh
+   - Condition: rate(llm_errors_total[5m]) / rate(llm_request_latency_seconds_count[5m]) > 0.05
+   - Duration: 5m
+   - Severity: warning
+
+3. CircuitBreakerOpen
+   - Condition: rate(llm_errors_total{error_type="circuit_open"}[1m]) > 0
+   - Duration: 1m
+   - Severity: critical
+
+4. LLMProviderDown
+   - Condition: rate(llm_errors_total{error_type="provider_unavailable"}[30s]) > 0
+   - Duration: 30s
+   - Severity: critical
+
+GROUP: api_health (1 rule)
+5. APIDown
+   - Condition: up{job="techno-os-api"} == 0
+   - Duration: 1m
+   - Severity: critical
+
+MÉTRICAS VALIDADAS (todas existentes em F9.9-B):
+- llm_request_latency_seconds_bucket (histogram)
+- llm_request_latency_seconds_count (histogram counter)
+- llm_errors_total (counter com labels error_type, provider)
+- up (Prometheus built-in)
+
+STATUS: APTO (5/5 rules utilizam métricas existentes)

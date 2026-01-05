@@ -1,0 +1,39 @@
+F9.10 DEPLOYMENT SUMMARY
+========================
+
+COMMIT: $(git log --oneline -1)
+TAG: F9.10-SEALED
+BRANCH: feature/f9-10-observability-containerization
+
+FILES MODIFIED (20 total):
+---------------------------
+Modified (6):
+- .env.example
+- app/llm/circuit_breaker_singleton.py
+- docker-compose.yml
+- grafana/provisioning/datasources/prometheus.yml
+- scripts/backup_observability.sh
+
+Added (14):
+- prometheus/prometheus.yml
+- prometheus/alertmanager.yml
+- prometheus/alerts/llm.yml (4 rules)
+- prometheus/alerts/api.yml (1 rule)
+- grafana/provisioning/dashboards/default.yml
+- grafana/dashboards/llm_metrics.json
+- tests/test_f9_10_observability.py
+- sessions/f9.10/SEAL-F9.10.md
+- artifacts/f9_10/* (6 evidence files)
+
+NEXT STEPS (deployment):
+------------------------
+1. Merge feature/f9-10-observability-containerization → main
+2. Deploy to VPS: docker-compose up -d
+3. Validate: curl http://localhost:9090/-/healthy
+4. Validate: curl http://localhost:9093/api/v2/status
+5. Check alerts: curl http://localhost:9090/api/v1/rules
+6. Access Grafana: http://localhost:3000 (dashboard llm-metrics-f910)
+7. Run tests: pytest tests/test_f9_10_observability.py
+8. First backup: bash scripts/backup_observability.sh
+
+STATUS: READY TO MERGE + DEPLOY

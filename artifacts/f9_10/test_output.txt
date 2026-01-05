@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /mnt/d/Projects/techno-os-backend
+configfile: pytest.ini
+plugins: cov-6.0.0, anyio-4.12.0
+collecting ... collected 8 items
+
+tests/test_f9_10_observability.py::test_prometheus_containerized FAILED  [ 12%]
+tests/test_f9_10_observability.py::test_alertmanager_containerized FAILED [ 25%]
+tests/test_f9_10_observability.py::test_prometheus_healthy SKIPPED (...) [ 37%]
+tests/test_f9_10_observability.py::test_alertmanager_ready SKIPPED (...) [ 50%]
+tests/test_f9_10_observability.py::test_alert_rules_loaded SKIPPED (...) [ 62%]
+tests/test_f9_10_observability.py::test_grafana_datasource_prometheus SKIPPED [ 75%]
+tests/test_f9_10_observability.py::test_backup_script_exists PASSED      [ 87%]
+tests/test_f9_10_observability.py::test_env_circuit_breaker_config PASSED [100%]
+
+=================================== FAILURES ===================================
+________________________ test_prometheus_containerized _________________________
+tests/test_f9_10_observability.py:24: in test_prometheus_containerized
+    assert "techno-os-prometheus" in result.stdout
+E   AssertionError: assert 'techno-os-prometheus' in ''
+E    +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-prometheus', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+_______________________ test_alertmanager_containerized ________________________
+tests/test_f9_10_observability.py:34: in test_alertmanager_containerized
+    assert "techno-os-alertmanager" in result.stdout
+E   AssertionError: assert 'techno-os-alertmanager' in ''
+E    +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-alertmanager', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_f9_10_observability.py:43: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:54: Alertmanager não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:78: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:99: Grafana não acessível (containers não iniciados)
+FAILED tests/test_f9_10_observability.py::test_prometheus_containerized - Ass...
+FAILED tests/test_f9_10_observability.py::test_alertmanager_containerized - A...
+==================== 2 failed, 2 passed, 4 skipped in 2.37s ====================

@@ -1,0 +1,34 @@
+# Techno OS - F9.10 Prometheus Configuration (Containerizado)
+# Migração de standalone → docker-compose
+# Base: F9.9-C-SEALED (a44edcc)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'techno_os_prod'
+    environment: 'production'
+
+# F9.10: Alert rules governadas
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # Job: Backend Techno OS (métricas LLM F9.9-B + API)
+  - job_name: 'techno-os-api'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    static_configs:
+      - targets: ['api:8000']
+        labels:
+          service: 'backend'
+          phase: 'f9.10'
+    scrape_timeout: 10s
+    honor_timestamps: true

@@ -1,0 +1,1 @@
+techno-os-db	Up 12 hours (healthy)	0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp

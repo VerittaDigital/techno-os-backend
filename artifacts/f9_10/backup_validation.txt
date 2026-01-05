@@ -1,0 +1,17 @@
+BACKUP SCRIPT VALIDATION
+========================
+
+Script: scripts/backup_observability.sh
+
+TEST RESULT:
+- Script validado sintaticamente (bash -n)
+- Volumes declarados: postgres_data, prometheus_data, grafana_data
+- Modo fail-closed: set -euo pipefail
+- Retention: 7 dias (find -mtime +7 -delete)
+
+SMOKE TEST NOTE:
+- Execução direta requer permissões Docker elevadas
+- Validação estrutural: PASSED
+- Teste funcional deve ser executado em ambiente com Docker permissões
+
+STATUS: VÁLIDO (estrutura correta, executável)
