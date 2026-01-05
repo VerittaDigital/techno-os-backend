@@ -1,0 +1,7 @@
+ℹ️ Tracing disabled (TRACING_ENABLED=0)
+INFO:     127.0.0.1:44676 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:58926 - "GET /health HTTP/1.1" 200 OK
+DEBUG: gate_result.decision = GateDecision.ALLOW
+DEBUG: ALLOW = GateDecision.ALLOW
+DEBUG: equal = True
+INFO:     172.18.0.1:45730 - "POST /process HTTP/1.1" 200 OK
