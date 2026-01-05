@@ -41,6 +41,7 @@ from app.middleware_trace import TraceCorrelationMiddleware
 from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
 from app.api.admin import router as admin_router
+from app.routes.preferences import router as preferences_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +55,9 @@ app = FastAPI(title="Techno OS API", version="0.1.0", lifespan=lifespan)
 
 # Register admin API router
 app.include_router(admin_router)
+
+# Register preferences API router (F9.9-A)
+app.include_router(preferences_router)
 
 # Register middleware (T1: G6 trace correlation)
 app.add_middleware(TraceCorrelationMiddleware)
