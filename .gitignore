@@ -1,4 +1,4 @@
-# Logs
+# Logs (development + runtime)
 *.log
 test-*.txt
 audit.log
@@ -6,6 +6,12 @@ pytest*.log
 full-test-report.txt
 final_results.txt
 tmp_*.log
+uvicorn*.log
+server.log
+cp11_*.log
+vps_deployment*.log
+.uvicorn.pid
+logs/
 
 # Databases
 *.db

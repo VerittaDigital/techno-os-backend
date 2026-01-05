@@ -146,7 +146,7 @@ dce921c fix(f11-hotfix): add audit volume mount + mkdir in audit_sink
 docker compose down
 git checkout F11-PROD-v1.0  # Usar anterior
 docker compose up -d --build
-bash smoke_test_cp11_3.sh   # Validar
+bash scripts/smoke_test_cp11_3.sh   # Validar
 ```
 
 ---
