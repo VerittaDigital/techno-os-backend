@@ -141,9 +141,27 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
     # Store auth_mode in request state (for audit/logging downstream)
     request.state.auth_mode = auth_mode
     
-    # FASE 11: Detectar action de forma canônica (com normalização de path)
+    # FASE 11: Parse body de forma determinística (GET/DELETE = {})
     try:
-        action = detect_action(request)
+        body = await parse_body_by_method(request)
+    except GateError as e:
+        # G10_BODY_PARSE_ERROR: log decisão antes de raise
+        decision_record = DecisionRecord(
+            decision="DENY",
+            profile_id="G10",
+            profile_hash=profiles_fingerprint_sha256(),
+            matched_rules=["Body parsing failed"],
+            reason_codes=[e.reason_code.value],
+            input_digest=None,
+            trace_id=trace_id,
+        )
+        log_decision(decision_record)
+        raise  # Re-raise GateError (já tem detail formatado)
+    
+    # FASE 11: Detectar action de forma canônica (com normalização de path ou body)
+    try:
+        path_action = detect_action(request)
+        action = body.get("action", path_action) if isinstance(body, dict) else path_action
     except GateError as e:
         # G8_UNKNOWN_ACTION: log decisão antes de raise
         decision_record = DecisionRecord(
@@ -199,22 +217,7 @@ async def gate_request(request: Request, background_tasks: BackgroundTasks) -> D
             http_status=500  # Internal error, not user fault
         )
     
-    # FASE 11: Parse body de forma determinística (GET/DELETE = {})
-    try:
-        body = await parse_body_by_method(request)
-    except GateError as e:
-        # G10_BODY_PARSE_ERROR: log decisão antes de raise
-        decision_record = DecisionRecord(
-            decision="DENY",
-            profile_id="G10",
-            profile_hash=profiles_fingerprint_sha256(),
-            matched_rules=["Body parsing failed"],
-            reason_codes=[e.reason_code.value],
-            input_digest=None,
-            trace_id=trace_id,
-        )
-        log_decision(decision_record)
-        raise  # Re-raise GateError (já tem detail formatado)
+    # Body already parsed above
     
     # Compute input digest using canonical rule (None for non-JSON, privacy-first)
     input_digest = sha256_json_or_none(body)
@@ -315,7 +318,6 @@ async def process(
             action=action,
             payload=payload,
             trace_id=trace_id,
-            executor_id="text_process_v1",
         )
 
         # Return ActionResult JSON

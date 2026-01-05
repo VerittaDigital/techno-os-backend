@@ -26,7 +26,7 @@ services:
         PYTHON_VERSION: "3.12"
     container_name: techno-os-api
     env_file:
-      - /opt/techno-os/env/.env.prod
+      - ./.env.prod
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-techno_user}:${DB_PASSWORD:-change_me_in_production}@postgres:5432/techno_os
       - ENV=${ENV}
