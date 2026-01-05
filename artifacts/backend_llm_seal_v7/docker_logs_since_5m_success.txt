@@ -1,0 +1,9 @@
+ℹ️ Tracing disabled (TRACING_ENABLED=0)
+INFO:     127.0.0.1:44912 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:32788 - "GET /health HTTP/1.1" 200 OK
+DEBUG: gate_result.decision = GateDecision.ALLOW
+DEBUG: ALLOW = GateDecision.ALLOW
+DEBUG: equal = True
+[OPENAI_CLIENT] response type: <class 'openai.types.chat.chat_completion.ChatCompletion'>
+INFO:     172.18.0.1:49970 - "POST /process HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49974 - "GET /metrics HTTP/1.1" 200 OK

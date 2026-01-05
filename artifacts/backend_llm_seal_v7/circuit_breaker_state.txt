@@ -1,0 +1,3 @@
+CB_TYPE: <class 'app.llm.circuit_breaker.CircuitBreaker'>
+CB_KNOWN_ATTRS: {'_failure_count': 0, '_state': <CircuitState.CLOSED: 'closed'>, 'state': <CircuitState.CLOSED: 'closed'>}
+CB_DIR_HINT: ['__getstate__', '_failure_count', '_failure_threshold', '_last_failure_time', '_on_failure', '_state', 'state']

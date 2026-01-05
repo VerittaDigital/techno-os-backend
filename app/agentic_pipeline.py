@@ -15,6 +15,7 @@ Supports legacy actions for retrocompatibility while enforcing AG-03 for new act
 
 import hashlib
 import json
+import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -528,6 +529,9 @@ def run_agentic_action(
                 # Any other exception during execution
                 # Shutdown pool without waiting
                 pool.shutdown(wait=False)
+                
+                logger = logging.getLogger(__name__)
+                logger.exception("Executor exception during execution")
                 
                 status = "FAILED"
                 reason_codes = ["EXECUTOR_EXCEPTION"]
