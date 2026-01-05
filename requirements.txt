@@ -16,6 +16,8 @@ opentelemetry-instrumentation==0.44b0
 prometheus-client
 
 # LLM Providers (opcionais - instalar conforme necessidade)
-# openai                    # OpenAI GPT, Grok (xAI), DeepSeek
+openai>=1.0.0                    # OpenAI GPT, Grok (xAI), DeepSeek
 # anthropic                 # Anthropic Claude
 # google-generativeai       # Google Gemini
+
+# Force rebuild
