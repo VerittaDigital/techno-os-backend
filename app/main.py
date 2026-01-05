@@ -72,6 +72,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/meta", tags=["meta"])
+def meta():
+    """Metadata endpoint for version and environment info."""
+    return {"env": "production", "version": "v0.1.0", "service": "techno-os-api"}
+
+
 @app.get("/metrics")
 def metrics():
     """Prometheus metrics endpoint."""
