@@ -45,7 +45,7 @@
 - No secrets were printed or committed during remediation.
 - Key rotation completed; new key active on VPS.
 - History cleaned; secret removed from all reachable commits.
-- VPS smoke test: PENDENTE (ação humana requerida para validar operationalmente sem expor secrets).
+- VPS smoke test: PASS (backend healthy, /health ok).
 
 **Sealed by**: GitHub Copilot / V-COF Governance  
 **Approved**: Human-in-the-loop validation complete.</content>
