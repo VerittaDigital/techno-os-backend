@@ -1,0 +1,12 @@
+SUDO_MODE=sudo -n
+M	scripts/backup_observability.sh
+Your branch is up to date with 'origin/main'.
+Already up to date.
+F9.10-SEALED-1-g96067d6
+COMPOSE_CMD=docker compose
+NAME                     IMAGE                       COMMAND                    SERVICE        CREATED          STATUS                    PORTS
+techno-os-alertmanager   prom/alertmanager:v0.27.0   "/bin/alertmanager -…"     alertmanager   41 minutes ago   Up 41 minutes (healthy)   0.0.0.0:9093->9093/tcp, [::]:9093->9093/tcp
+techno-os-api            techno-os-backend-api       "sh -c '\n  if [ \"pro…"   api            4 hours ago      Up 4 hours (healthy)      0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+techno-os-db             postgres:15-alpine          "docker-entrypoint.s…"     postgres       4 hours ago      Up 4 hours (healthy)      0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+techno-os-grafana        grafana/grafana:11.3.1      "/run.sh"                  grafana        41 minutes ago   Up 22 minutes (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+techno-os-prometheus     prom/prometheus:v2.51.0     "/bin/prometheus --c…"     prometheus     41 minutes ago   Up 22 minutes (healthy)   0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp

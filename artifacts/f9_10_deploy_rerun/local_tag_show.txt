@@ -1,0 +1,35 @@
+tag F9.10-SEALED
+Tagger: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 23:22:21 2026 -0300
+
+F9.10 Observability Containerization — SEALED
+
+- Prometheus + Alertmanager containerized
+- 5 alert rules governadas (LLM + API health)
+- Backup automation (3 volumes)
+- Circuit breaker ENV config
+- Grafana dashboard (4 panels LLM metrics)
+- Tests suite (8 scenarios)
+
+Base: F9.9-C-SEALED (a44edcc)
+Blocker F9.9-C: RESOLVED
+
+commit bd967a8d0701f016e9e4b531150270e225f579ad
+Author: Vinícius Soares <0bolinhasports0@gmail.com>
+Date:   Sun Jan 4 23:14:32 2026 -0300
+
+    feat(F9.10): Observability containerization + alerting governado
+    
+    EIXO 0: Pre-flight (FRESH_INSTALL_MODE)
+    EIXO 1: Prometheus + Alertmanager containerization (docker-compose)
+    EIXO 2: 5 alert rules governadas (APIHighErrorRate removed per parecer)
+    EIXO 3: Backup automation (3 volumes: postgres, prometheus, grafana)
+    EIXO 4: Circuit breaker ENV config (VERITTA_CB_THRESHOLD, VERITTA_CB_TIMEOUT)
+    EIXO 5: Grafana dashboard (4 panels: latency p95, tokens, errors, circuit breaker)
+    EIXO 6: Tests suite + evidence artifacts
+    
+    Blocker F9.9-C resolvido: Prometheus agora containerizado.
+    Correção aplicada: APIHighErrorRate removida (métrica http_requests_total inexistente).
+    
+    Base: F9.9-C-SEALED (a44edcc)
+    Tag: F9.10-SEALED

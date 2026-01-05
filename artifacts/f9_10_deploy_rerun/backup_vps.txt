@@ -1,0 +1,16 @@
+=== F9.10 BACKUP OBSERVABILITY (3 volumes) ===
+Timestamp: 20260105_032030
+Backing up postgres_data...
+✅ PostgreSQL backup: postgres_20260105_032030.tar.gz
+Backing up prometheus_data...
+✅ Prometheus backup: prometheus_20260105_032030.tar.gz
+Backing up grafana_data...
+✅ Grafana backup: grafana_20260105_032030.tar.gz
+Applying 7-day retention policy...
+=== BACKUP COMPLETO (3 volumes) ===
+lrwxrwxrwx 1 deploy deploy 30 Jan  5 03:20 /opt/techno-os/backups/grafana_latest.tar.gz -> grafana_20260105_032030.tar.gz
+lrwxrwxrwx 1 deploy deploy 31 Jan  5 03:20 /opt/techno-os/backups/postgres_latest.tar.gz -> postgres_20260105_032030.tar.gz
+lrwxrwxrwx 1 deploy deploy 33 Jan  5 03:20 /opt/techno-os/backups/prometheus_latest.tar.gz -> prometheus_20260105_032030.tar.gz
+lrwxrwxrwx 1 deploy deploy 30 Jan  5 03:20 /opt/techno-os/backups/grafana_latest.tar.gz -> grafana_20260105_032030.tar.gz
+lrwxrwxrwx 1 deploy deploy 31 Jan  5 03:20 /opt/techno-os/backups/postgres_latest.tar.gz -> postgres_20260105_032030.tar.gz
+lrwxrwxrwx 1 deploy deploy 33 Jan  5 03:20 /opt/techno-os/backups/prometheus_latest.tar.gz -> prometheus_20260105_032030.tar.gz

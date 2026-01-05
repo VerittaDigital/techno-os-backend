@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /app/techno-os-backend/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app/techno-os-backend
+configfile: pytest.ini
+plugins: anyio-4.12.0
+collecting ... collected 8 items
+
+tests/test_f9_10_observability.py::test_prometheus_containerized PASSED  [ 12%]
+tests/test_f9_10_observability.py::test_alertmanager_containerized PASSED [ 25%]
+tests/test_f9_10_observability.py::test_prometheus_healthy PASSED        [ 37%]
+tests/test_f9_10_observability.py::test_alertmanager_ready PASSED        [ 50%]
+tests/test_f9_10_observability.py::test_alert_rules_loaded PASSED        [ 62%]
+tests/test_f9_10_observability.py::test_grafana_datasource_prometheus SKIPPED [ 75%]
+tests/test_f9_10_observability.py::test_backup_script_exists PASSED      [ 87%]
+tests/test_f9_10_observability.py::test_env_circuit_breaker_config PASSED [100%]
+
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_f9_10_observability.py:88: Grafana requer autenticação (configurar GRAFANA_ADMIN_PASSWORD)
+========================= 7 passed, 1 skipped in 0.14s =========================
