@@ -1,0 +1,8 @@
+HTTP/1.1 403 Forbidden
+date: Mon, 05 Jan 2026 14:57:21 GMT
+server: uvicorn
+content-length: 158
+content-type: application/json
+x-trace-id: 36ca8755-5e3e-45df-9b38-1345f196f56d
+
+{"error":"forbidden","message":"Action not allowed in profile","trace_id":"0b1cc280-4bef-49af-a5ef-8dc3b14e7dae","reason_codes":["G8_UNKNOWN_FIELDS_PRESENT"]}
