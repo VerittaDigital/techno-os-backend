@@ -1,0 +1,33 @@
+{
+    "name": "techno-os-console-clean",
+    "version": "0.1.0",
+    "description": "",
+    "directories": {
+        "doc": "docs"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/VerittaDigital/techno-os-console.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/VerittaDigital/techno-os-console/issues"
+    },
+    "homepage": "https://github.com/VerittaDigital/techno-os-console#readme",
+    "dependencies": {
+        "next": "^16.1.1",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+    },
+    "devDependencies": {
+        "swagger-cli": "^4.0.4"
+    }
+}

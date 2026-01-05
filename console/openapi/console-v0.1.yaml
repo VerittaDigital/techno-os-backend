@@ -1,0 +1,736 @@
+openapi: 3.0.0
+
+info:
+  title: Techno OS Console v0.1
+  version: 0.1.0
+  description: |
+    Production-minimum API contract for Techno OS console.
+    
+    **Status:** Evidence-based + Backend Parecer Integration
+    **Source:** Parecer do DEV SENIOR Backend (endpoints F2.1/F2.3 confirmed)
+    **Confidence:** HIGH (backend-verified endpoints)
+    **Status Code:** APTO PARA EXECUÇÃO (Parecer v1.0, 2026-01-04)
+    
+    All endpoint definitions are sourced from backend parecer (ab04ef0, 7141cad).
+    Console is thin client; no HTTP calls found in source code (docs/console-inventory.md).
+    
+    Auth Mechanisms:
+    - F2.1 (legacy): X-API-Key header (POST /process, admin routes)
+    - F2.3 (preferred): Bearer token + X-VERITTA-USER-ID header
+  
+  contact:
+    name: Techno OS Team
+  
+  x-documentation:
+    source: DEV SENIOR Backend Parecer v1.0
+    inventory-source: docs/console-inventory.md (Evidence-based scan)
+    generated-by: F-CONSOLE-0.1 Etapa 2 (2026-01-04)
+    backend-status: F9.9-A SELADA (ab04ef0), F9.9-B SELADA (7141cad)
+    requires-backend-confirmation: false
+
+servers:
+  - url: http://localhost:8000
+    description: Gated (local development)
+  - url: https://api.verittadigital.com
+    description: Production
+    x-note: Requires DNS resolution; gated env uses localhost
+
+security:
+  - ApiKeyHeader: []
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key for backend authentication
+
+  schemas:
+    StatusType:
+      type: string
+      enum:
+        - APPROVED
+        - BLOCKED
+        - EXPIRED
+        - WARNING
+        - NEUTRAL
+      x-source: inferred-from-compiled-code
+      x-requires-backend-confirmation: true
+      description: |
+        Normalized status returned by backend.
+        Unknown status values are mapped to 'BLOCKED' (fail-closed).
+
+    TraceId:
+      type: string
+      pattern: '^[a-z0-9\-]+$'
+      x-source: inferred-from-compiled-code
+      x-requires-backend-confirmation: true
+      example: api-200
+
+    ExecutionId:
+      type: string
+      pattern: '^[a-z0-9_]+$'
+      x-source: inferred-from-compiled-code
+      x-requires-backend-confirmation: true
+      example: exec_abc123xyz
+
+    AuditItem:
+      type: object
+      required:
+        - timestamp
+        - action
+        - result
+        - state
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          x-source: inferred-from-compiled-code
+          description: ISO 8601 timestamp
+        
+        action:
+          type: string
+          x-source: inferred-from-compiled-code
+          example: API_CALL
+          description: Action performed (inferred from client)
+        
+        result:
+          type: string
+          x-source: inferred-from-compiled-code
+          example: SUCCESS
+          description: Action result (inferred from client)
+        
+        state:
+          $ref: '#/components/schemas/StatusType'
+        
+        execution_id:
+          $ref: '#/components/schemas/ExecutionId'
+      
+      x-requires-backend-confirmation: true
+
+    ExecuteResponse:
+      type: object
+      required:
+        - status
+        - ts_utc
+        - trace_id
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusType'
+        
+        ts_utc:
+          type: string
+          format: date-time
+          x-source: inferred-from-compiled-code
+          description: ISO 8601 timestamp of execution
+        
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+        
+        reason_codes:
+          type: array
+          items:
+            type: string
+          x-source: inferred-from-compiled-code
+          example: ['API_BLOCKED', 'RATE_LIMITED']
+          description: Reason codes if status is BLOCKED
+      
+      x-requires-backend-confirmation: true
+
+    MemorySnapshot:
+      type: object
+      required:
+        - command
+        - output
+        - timestamp
+        - status
+      properties:
+        command:
+          type: string
+          x-source: inferred-from-compiled-code
+          example: GET_STATUS
+        
+        output:
+          type: string
+          x-source: inferred-from-compiled-code
+          description: Command output or result
+        
+        timestamp:
+          type: string
+          format: date-time
+          x-source: inferred-from-compiled-code
+        
+        status:
+          $ref: '#/components/schemas/StatusType'
+        
+        execution_id:
+          $ref: '#/components/schemas/ExecutionId'
+      
+      x-requires-backend-confirmation: true
+
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          x-source: inferred-from-compiled-code
+          example: Autenticacao falhou
+        
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+        
+        reason_codes:
+          type: array
+          items:
+            type: string
+          x-source: inferred-from-compiled-code
+
+paths:
+  /api/execute:
+    post:
+      summary: Execute a command
+      description: |
+        Executes a command on the backend with optional session context.
+        
+        **Fail-Closed Behavior:**
+        - Missing/invalid response → HTTP 0, status: BLOCKED
+        - Timeout (>15s) → HTTP 0, status: BLOCKED
+        - Network error → HTTP 0, status: BLOCKED
+      
+      operationId: executeCommand
+      x-source: inferred-from-compiled-code
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command
+              properties:
+                command:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                  pattern: '^[A-Z_]+$'
+                  x-source: inferred-from-compiled-code
+                  description: Command to execute (uppercase alphanumeric + underscore)
+                
+                session_id:
+                  type: string
+                  x-source: inferred-from-compiled-code
+                  description: Optional session identifier
+              
+              x-requires-backend-confirmation: true
+            
+            examples:
+              simple:
+                value:
+                  command: GET_STATUS
+              with_session:
+                value:
+                  command: VALIDATE_CONFIG
+                  session_id: sess_abc123
+
+      responses:
+        '200':
+          description: Command executed (may contain BLOCKED status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+              examples:
+                approved:
+                  value:
+                    status: APPROVED
+                    ts_utc: '2026-01-04T12:00:00Z'
+                    trace_id: api-200
+                blocked:
+                  value:
+                    status: BLOCKED
+                    ts_utc: '2026-01-04T12:00:01Z'
+                    trace_id: api-403
+                    reason_codes: ['API_BLOCKED']
+        
+        '500':
+          description: Network/timeout error (fail-closed to BLOCKED)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    enum: [BLOCKED]
+                  httpStatus:
+                    type: integer
+                  error:
+                    $ref: '#/components/schemas/ErrorResponse'
+
+  /api/audit:
+    get:
+      summary: Fetch audit log
+      description: |
+        Retrieves audit log with optional filtering.
+        
+        **Fallback Behavior:**
+        If this endpoint returns BLOCKED, client automatically retries with `/api/diagnostic/metrics`.
+        If both fail, returns empty array.
+      
+      operationId: fetchAuditLog
+      x-source: inferred-from-compiled-code
+      
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            default: all
+            x-source: inferred-from-compiled-code
+          description: Filter type (all, APPROVED, BLOCKED, EXPIRED, PENDING)
+        
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+            x-source: inferred-from-compiled-code
+          description: Maximum number of records to return
+
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditItem'
+              examples:
+                success:
+                  value:
+                    - timestamp: '2026-01-04T11:59:00Z'
+                      action: API_CALL
+                      result: SUCCESS
+                      state: APPROVED
+                      execution_id: exec_xyz789
+                empty:
+                  value: []
+        
+        '403':
+          description: Forbidden (authentication failed)
+
+  /api/diagnostic/metrics:
+    get:
+      summary: Fetch diagnostic metrics (fallback for audit)
+      description: |
+        Alternative endpoint for audit log. Used as fallback when `/api/audit` is blocked.
+        Response shape should match audit endpoint.
+      
+      operationId: fetchDiagnosticMetrics
+      x-source: inferred-from-compiled-code (fallback reference)
+      x-note: Client treats this as fallback; may not be independently callable
+      
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            default: all
+        
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+
+      responses:
+        '200':
+          description: Diagnostic/audit data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditItem'
+
+  /api/memory:
+    get:
+      summary: Fetch last execution snapshot
+      description: |
+        Returns the most recent command execution snapshot, or null if unavailable.
+        
+        **Fail-Closed Behavior:**
+        - BLOCKED response → return null
+        - Parse error → return null
+      
+      operationId: fetchMemory
+      x-source: inferred-from-compiled-code
+
+      responses:
+        '200':
+          description: Last execution snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemorySnapshot'
+              examples:
+                with_data:
+                  value:
+                    command: GET_STATUS
+                    output: 'Status: OK'
+                    timestamp: '2026-01-04T11:55:00Z'
+                    status: APPROVED
+                    execution_id: exec_abc123
+        
+        '204':
+          description: No snapshot available (empty response)
+
+  /process:
+    post:
+      summary: '[DEPRECATED] Legacy process endpoint'
+      description: |
+        Legacy endpoint for backward compatibility. New code should use `/api/execute`.
+        
+        **Status:** DEPRECATED — use `/api/execute` instead
+        **Auth:** F2.1 (X-API-Key)
+      
+      operationId: processRequestLegacy
+      x-source: inferred-from-compiled-code
+      x-deprecated: true
+      x-auth-mechanism: F2.1
+      deprecated: true
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                text:
+                  type: string
+                  x-source: inferred-from-compiled-code
+
+      responses:
+        '200':
+          description: Legacy response format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  httpStatus:
+                    type: integer
+                  data:
+                    type: object
+                  error:
+                    $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: Health check endpoint
+      description: |
+        Public health check endpoint. No authentication required.
+        
+        **Status:** Public
+        **Auth:** None
+      
+      operationId: getHealth
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: public
+      security: []
+
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /metrics:
+    get:
+      summary: Metrics endpoint
+      description: |
+        Public metrics endpoint. No authentication required.
+        
+        **Status:** Public
+        **Auth:** None
+      
+      operationId: getMetrics
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: public
+      security: []
+
+      responses:
+        '200':
+          description: Service metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/preferences:
+    get:
+      summary: Get user preferences
+      description: |
+        Retrieve user preferences. Requires authentication via F2.3 (Bearer + X-VERITTA-USER-ID).
+        
+        **Status:** Standard
+        **Auth:** F2.3 (Bearer token + X-VERITTA-USER-ID header)
+      
+      operationId: getUserPreferences
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.3
+      
+      parameters:
+        - name: X-VERITTA-USER-ID
+          in: header
+          required: true
+          schema:
+            type: string
+          description: User ID from Bearer token claims
+
+      responses:
+        '200':
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  preferences:
+                    type: object
+                    additionalProperties: true
+
+    put:
+      summary: Update user preferences
+      description: |
+        Update user preferences. Requires authentication via F2.3 (Bearer + X-VERITTA-USER-ID).
+        
+        **Status:** Standard
+        **Auth:** F2.3 (Bearer token + X-VERITTA-USER-ID header)
+      
+      operationId: updateUserPreferences
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.3
+      
+      parameters:
+        - name: X-VERITTA-USER-ID
+          in: header
+          required: true
+          schema:
+            type: string
+          description: User ID from Bearer token claims
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferences:
+                  type: object
+                  additionalProperties: true
+
+      responses:
+        '200':
+          description: Preferences updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  preferences:
+                    type: object
+
+  /api/admin/sessions/revoke:
+    post:
+      summary: Revoke session (admin only)
+      description: |
+        Admin endpoint to revoke user sessions. Requires authentication via F2.1 (X-API-Key).
+        
+        **Status:** Admin
+        **Auth:** F2.1 (X-API-Key)
+      
+      operationId: revokeSession
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.1
+      x-admin-only: true
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  description: Session ID to revoke
+
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                  revoked:
+                    type: boolean
+
+  /api/admin/sessions/{id}:
+    get:
+      summary: Get session details (admin only)
+      description: |
+        Admin endpoint to retrieve session details. Requires authentication via F2.1 (X-API-Key).
+        
+        **Status:** Admin
+        **Auth:** F2.1 (X-API-Key)
+      
+      operationId: getSessionDetails
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.1
+      x-admin-only: true
+      
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session ID
+
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  user_id:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  expires_at:
+                    type: string
+                    format: date-time
+
+  /api/admin/audit/summary:
+    get:
+      summary: Get audit summary (admin only)
+      description: |
+        Admin endpoint to retrieve audit summary. Requires authentication via F2.1 (X-API-Key).
+        
+        **Status:** Admin
+        **Auth:** F2.1 (X-API-Key)
+      
+      operationId: getAuditSummary
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.1
+      x-admin-only: true
+
+      responses:
+        '200':
+          description: Audit summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_events:
+                    type: integer
+                  events_by_type:
+                    type: object
+                    additionalProperties:
+                      type: integer
+
+  /api/admin/health:
+    get:
+      summary: Admin health check (admin only)
+      description: |
+        Admin endpoint for detailed health check. Requires authentication via F2.1 (X-API-Key).
+        
+        **Status:** Admin
+        **Auth:** F2.1 (X-API-Key)
+      
+      operationId: getAdminHealth
+      x-source: DEV SENIOR Backend Parecer v1.0
+      x-auth-mechanism: F2.1
+      x-admin-only: true
+
+      responses:
+        '200':
+          description: Detailed health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  components:
+                    type: object
+                    additionalProperties:
+                      type: string
+
+x-veritta-governance:
+  framework: F-CONSOLE-0.1
+  etapa: 2 (OpenAPI Contract)
+  
+  client-expectations:
+    - All endpoints must support X-API-Key authentication
+    - All responses must include trace_id (for debugging)
+    - Unknown status values must be normalized to BLOCKED
+    - Timeout threshold: 15 seconds (AbortController hardcoded in client)
+  
+  server-responsibilities:
+    - Return valid StatusType (APPROVED|BLOCKED|EXPIRED|WARNING|NEUTRAL)
+    - Include trace_id in all success responses (for audit trail)
+    - Return 401/403 for missing/invalid API key
+    - Provide consistent timestamp format (ISO 8601, UTC)
+  
+  required-backend-confirmation:
+    - All response schemas (marked with x-requires-backend-confirmation: true)
+    - Exact reason_codes semantics (when to include them)
+    - Fallback behavior of /api/diagnostic/metrics
+    - /api/memory null semantics (when/why to return null)
+
+tags:
+  - name: execution
+    description: Command execution
+  - name: audit
+    description: Audit and diagnostic data
+  - name: deprecated
+    description: Legacy endpoints (do not use in new code)

@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+.env
+.env.local
+.env*.local
+.venv
+logs/
+*.log
+.git
+README.md
+docs/
+backups/
