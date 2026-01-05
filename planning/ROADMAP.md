@@ -2,7 +2,7 @@
 
 **Projeto:** Techno OS Backend  
 **Governança:** V-COF · Fail-Closed · Human-in-the-Loop  
-**Última atualização:** 2026-01-03 (F9.8 em andamento)
+**Última atualização:** 2026-01-05 (F9.11 SEALED, F9.9-B revalidado)
 
 ---
 
@@ -17,16 +17,18 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 
 ---
 
-## 📊 STATUS ATUAL (2026-01-03)
+## 📊 STATUS ATUAL (2026-01-05)
 
-| Fase | Status | Data Conclusão |
-|------|--------|----------------|
-| **F9.6.1** | ✅ SELADA | 2026-01-02 |
-| **F9.7** | ✅ SELADA | 2026-01-03 |
-| **F9.8** | 🔄 EM ANDAMENTO | - |
-| **F9.9-A** | 📅 PLANEJADA | - |
-| **F9.9-B** | 📅 PLANEJADA | - |
-| **F10** | 📅 PLANEJADA | - |
+| Fase | Status | Data Conclusão | Tag |
+|------|--------|----------------|-----|
+| **F9.6.1** | ✅ SELADA | 2026-01-02 | F9.6.1-SEALED |
+| **F9.7** | ✅ SELADA | 2026-01-03 | - |
+| **F9.9-A** | ✅ SELADA | 2026-01-04 | F9.9-A-SEALED |
+| **F9.9-B** | ✅ SELADA | 2026-01-04 | F9.9-B-SEALED |
+| **F9.9-C** | ✅ SELADA | 2026-01-04 | F9.9-C-SEALED |
+| **F9.10** | ✅ SELADA | 2026-01-04 | F9.10-SEALED |
+| **F9.11** | ✅ SELADA | 2026-01-05 | F9.11-SEALED |
+| **F10** | 📅 PRÓXIMA | - | - |
 
 ---
 
@@ -66,34 +68,12 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 
 ---
 
-## 🔄 FASE ATIVA
-
-### F9.8 — Observabilidade Externa (Prometheus + Grafana)
-**Status:** 🔄 EM ANDAMENTO  
-**Branch:** `stage/f9.8-observability`
-
-**Escopo:**
-- Prometheus para métricas
-- Grafana para visualização
-- Alertas básicos (uptime, latência)
-- Dashboard governado
-
-**Critérios de conclusão:**
-- [ ] Prometheus scrapeando `/metrics`
-- [ ] Grafana dashboard funcional
-- [ ] Alertas configurados
-- [ ] Documentação de operação
-- [ ] SEAL formal (commit + tag)
-
-**Previsão:** 2-3 dias (dependente de configuração)
-
----
-
-## 📅 FASES PLANEJADAS
+## ✅ FASES RECÉM CONCLUÍDAS
 
 ### F9.9-A — Memória Persistente (User Preferences)
-**Status:** 📅 PLANEJADA  
-**Prioridade:** ALTA (bloqueante para F10)
+**Selada:** 2026-01-04  
+**Tag:** `F9.9-A-SEALED`  
+**Status:** ✅ CONCLUÍDA E OPERACIONAL
 
 **Escopo:**
 - Tabela `user_preferences` no PostgreSQL
@@ -116,79 +96,76 @@ Roadmap evolutiva do backend Techno OS, com foco em:
 ---
 
 ### F9.9-B — LLM Hardening (Produção-Ready)
-**Status:** 📅 PLANEJADA  
-**Prioridade:** CRÍTICA (segurança + governança)
+**Selada:** 2026-01-04  
+**Tag:** `F9.9-B-SEALED`  
+**Status:** ✅ CONCLUÍDA (17/17 testes PASS)
 
-**Contexto:**
-- Arquitetura LLM **já existe** (Protocol + executors + adapters)
-- Atualmente usa `FakeLLMClient` (mock para testes)
-- 5 providers prototipados: OpenAI, Anthropic, Gemini, Grok, DeepSeek
-- **NÃO ESTÁ HARDENED** para produção real
+**Implementado:**
+- Factory Pattern Fail-Closed com allowlist obrigatória
+- LLMResponse Pydantic normalizado (text, usage, model, latency_ms)
+- Retry automático (max 2, exponential backoff, apenas 429/5xx)
+- Circuit breaker thread-safe (CLOSED/OPEN/HALF_OPEN)
+- 3 métricas Prometheus (latency, tokens, errors)
+- Zero logs de PII (privacy by design)
 
-**Escopo:**
-1. **Factory Pattern Fail-Closed**
-   - Provider inválido → ABORT (não fallback silencioso)
-   - API key ausente → erro explícito
-   - Validação de configuração na inicialização
+### F9.9-C — Integration + Observability
+**Selada:** 2026-01-04  
+**Tag:** `F9.9-C-SEALED`  
+**Status:** ✅ CONCLUÍDA
 
-2. **Normalização de Contratos**
-   - Retorno obrigatório: `{"text", "usage", "model", "latency_ms"}`
-   - Validação Pydantic de respostas
-   - Erros normalizados (`PROVIDER_ERROR`, `TIMEOUT`, `AUTH_ERROR`)
-
-3. **Resiliência**
-   - Timeout obrigatório em todas as chamadas
-   - Retry apenas para erros transitórios (429, 5xx)
-   - Circuit breaker para providers instáveis
-   - Nenhum retry para 401/403 (auth)
-
-4. **Testes de Produção**
-   - Unit tests de factory com mock
-   - Integration tests de cada adapter (mock HTTP)
-   - Teste de timeout real
-   - Teste de erro de autenticação
-   - Smoke test com provider real (staging)
-
-5. **Segurança + Governança**
-   - Secrets exclusivamente via `.env`
-   - Allowlist explícita de providers habilitados
-   - Allowlist explícita de modelos permitidos
-   - Sem log de prompts (privacy by design)
-   - Rate limiting por provider
-
-6. **Observabilidade LLM**
-   - Métricas Prometheus:
-     - `llm_request_latency_seconds{provider, model}`
-     - `llm_tokens_total{provider, model, type=input|output}`
-     - `llm_errors_total{provider, error_type}`
-   - Dashboard Grafana dedicado
-   - Alertas de falha/latência
-
-**Entregas esperadas:**
-- `app/llm/factory.py` hardened
-- Testes completos (unit + integration)
-- Configuração de um provider padrão (OpenAI recomendado)
-- Documentação de deployment
-- Runbook de troubleshooting
-- SEAL formal
-
-**Dependências:**
-- F9.8 concluída (Prometheus disponível para métricas)
-- F9.9-A desejável mas não bloqueante
-
-**Riscos identificados:**
-- ⚠️ Provider downtime (mitigar com circuit breaker)
-- ⚠️ Rate limiting inesperado (mitigar com backoff exponencial)
-- ⚠️ Custos de API (mitigar com quotas configuráveis)
-- ⚠️ Latência variável (mitigar com timeout agressivo)
-
-**Estimativa:** 3-5 dias (inclui testes extensivos)
+**Implementado:**
+- Circuit breaker singleton integrado ao LLM executor
+- Retry policy aplicado a todas as chamadas LLM
+- Observabilidade de circuit breaker (estado, contadores)
+- Tests suite (8 cenários, 100% pass)
 
 ---
 
+### F9.10 — Observability Containerization
+**Selada:** 2026-01-04  
+**Tag:** `F9.10-SEALED`  
+**Status:** ✅ DEPLOYADA EM PRODUÇÃO
+
+**Implementado:**
+- Prometheus containerizado (docker-compose)
+- Alertmanager containerizado (console mode)
+- 5 alert rules governadas (LLM + API health)
+- Backup automation (3 volumes: postgres, prometheus, grafana)
+- Circuit breaker ENV configurável (VERITTA_CB_THRESHOLD, VERITTA_CB_TIMEOUT)
+- Dashboard Grafana (4 painéis LLM metrics)
+
+**Containers rodando no VPS:**
+- techno-os-prometheus:9090
+- techno-os-alertmanager:9093
+- techno-os-grafana:3000
+
+---
+
+### F9.11 — Alerting Governance
+**Selada:** 2026-01-05  
+**Tag:** `F9.11-SEALED`  
+**Status:** ✅ OPERACIONAL EM PRODUÇÃO
+
+**Implementado:**
+- Runbook operacional (docs/RUNBOOK_ALERTING.md)
+- Steady-state validation (5min, 0 FIRING alerts)
+- Test alert + silence (F9_11_TEST_ALERT)
+- Evidence pack completo (19 arquivos)
+- Remote validation via SSH (fail-closed)
+
+---
+
+## 📅 PRÓXIMAS FASES
+
 ### F10 — Console / UI (Frontend Integration)
-**Status:** 📅 PLANEJADA  
-**Prioridade:** MÉDIA (após backend estável)
+**Status:** 📅 PRÓXIMA FASE  
+**Prioridade:** ALTA (UX completa)
+
+**Dependências satisfeitas:**
+- ✅ F9.9-A (User Preferences) — API /preferences operacional
+- ✅ F9.9-B (LLM Hardening) — Factory fail-closed + retry + circuit breaker
+- ✅ F9.10 (Observability) — Métricas + alerts + dashboard
+- ✅ F9.11 (Alerting) — Runbook + steady-state
 
 **Escopo:**
 - Integrar Console (Next.js) com API
