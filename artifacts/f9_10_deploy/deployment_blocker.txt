@@ -1,0 +1,35 @@
+F9.10-D DEPLOYMENT BLOCKER
+==========================
+
+EIXO BLOQUEADO: EIXO 3 (Deploy no VPS)
+TIPO: Infraestrutura (permissões Git)
+
+DESCRIÇÃO:
+Diretório /app/techno-os-backend no VPS pertence a root.
+Usuário SSH atual (via alias veritta-vps) não possui:
+1. Permissões de escrita em /app/techno-os-backend/.git/
+2. Acesso sudo sem senha (NOPASSWD não configurado)
+3. Chave SSH para login direto como root
+
+COMANDOS FALHADOS:
+- git fetch --all --tags: "Permission denied" (.git/FETCH_HEAD)
+- sudo git: "password required"
+- ssh root@<IP>: "Permission denied (publickey)"
+
+RESOLUÇÃO NECESSÁRIA (escolher UMA):
+A) Configurar NOPASSWD sudo para usuário SSH atual
+B) Adicionar chave SSH pública ao /root/.ssh/authorized_keys
+C) Alterar ownership de /app/techno-os-backend para usuário SSH
+D) Executar deploy manualmente no VPS como root
+
+EIXOS AFETADOS (fail-closed):
+- EIXO 3: Deploy (git pull) — BLOQUEADO
+- EIXO 4: Runtime validation — IMPOSSÍVEL (código não atualizado)
+- EIXO 5: Grafana validation — IMPOSSÍVEL
+- EIXO 6: Testes VPS — IMPOSSÍVEL
+- EIXO 7: Backup — EXECUTÁVEL (independente de código)
+- EIXO 8: SEAL — EXECUTÁVEL (documentará bloqueio)
+
+PRÓXIMAS AÇÕES:
+1. Resolver permissões no VPS (manual)
+2. Re-executar F9.10-D após correção

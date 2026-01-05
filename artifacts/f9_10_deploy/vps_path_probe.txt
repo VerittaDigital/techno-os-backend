@@ -1,0 +1,22 @@
+SSH_TARGET=veritta-vps
+VPS_APP_PATH=/app/techno-os-backend
+total 356
+drwxr-xr-x 16 root root  4096 Jan  4 23:24 .
+drwxr-xr-x  3 root root  4096 Jan  4 22:49 ..
+-rw-r--r--  1 root root   637 Jan  4 22:49 .dockerignore
+-rw-------  1 root root   212 Jan  4 22:52 .env
+-rw-r--r--  1 root root  4144 Jan  4 22:49 .env.example
+-rw-r--r--  1 root root  4221 Jan  4 22:49 .env.prod
+drwxr-xr-x  8 root root  4096 Jan  4 23:24 .git
+drwxr-xr-x  3 root root  4096 Jan  4 22:49 .github
+-rw-r--r--  1 root root    90 Jan  4 22:49 .github backend.code-workspace
+-rw-r--r--  1 root root   381 Jan  4 22:49 .gitignore
+-rw-r--r--  1 root root  8993 Jan  4 22:49 ARCHITECTURE.md
+-rw-r--r--  1 root root  3294 Jan  4 22:49 CHANGELOG.md
+-rw-r--r--  1 root root  6958 Jan  4 22:49 CONTRIBUTING.md
+-rw-r--r--  1 root root   864 Jan  4 22:49 Dockerfile
+-rw-r--r--  1 root root 16224 Jan  4 23:24 EXECUTION_SEMANTICS_V1_NOTION_BACKEND.txt
+-rw-r--r--  1 root root 12719 Jan  4 23:24 F11-SEAL.md
+-rw-r--r--  1 root root  8360 Jan  4 22:49 README.md
+-rw-r--r--  1 root root  4615 Jan  4 23:24 VPS-DEPLOYMENT-F11.md
+drwxr-xr-x  3 root root  4096 Jan  4 22:49 alembic

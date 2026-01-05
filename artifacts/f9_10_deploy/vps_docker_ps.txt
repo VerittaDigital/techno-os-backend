@@ -1,0 +1,20 @@
+EIXO 3 — BLOQUEIO DETECTADO
+============================
+
+TENTATIVAS DE DEPLOY NO VPS:
+1. git fetch: "Permission denied" (FETCH_HEAD)
+2. sudo git: "password required" (não configurado NOPASSWD)
+3. root SSH: "Permission denied (publickey)"
+
+CAUSA RAIZ:
+- /app/techno-os-backend pertence a root (owner: root)
+- Usuário SSH atual não possui permissões de escrita em .git/
+- Alias veritta-vps não está configurado para root
+- sudo requer senha interativa
+
+IMPACTO:
+- Não é possível executar git pull origin main
+- EIXO 3 (deploy) BLOQUEADO
+- EIXOS 4-7 (validações runtime) IMPOSSÍVEIS de executar
+
+STATUS: ABORTADO (fail-closed)
