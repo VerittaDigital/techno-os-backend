@@ -180,14 +180,18 @@ async def run_f21_chain(
     # Uses evaluate_gate to check if action matches profile
     gate_input = GateInput(
         action=action,
-        payload=body,
+        payload=body.get("payload", body),
         allow_external=False,
         deny_unknown_fields=False,
     )
     try:
         gate_result = app.gate_engine.evaluate_gate(gate_input)
+        print(f"DEBUG: gate_result.decision = {gate_result.decision}")
+        print(f"DEBUG: ALLOW = {app.gate_engine.GateDecision.ALLOW}")
+        print(f"DEBUG: equal = {gate_result.decision == app.gate_engine.GateDecision.ALLOW}")
     except Exception as e:
         # Gate evaluation failed; default to DENY
+        print(f"DEBUG: exception in evaluate_gate: {e}")
         reason_codes = ["GATE_EXCEPTION"]
         log_decision(
             DecisionRecord(

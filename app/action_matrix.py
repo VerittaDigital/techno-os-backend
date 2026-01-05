@@ -47,6 +47,7 @@ def get_action_matrix() -> ActionMatrix:
                 "preferences.delete",
                 "preferences.get",
                 "preferences.put",
+                "llm_generate",
             ],
         )
 

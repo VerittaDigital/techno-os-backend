@@ -29,6 +29,7 @@ ACTION_PROCESS = "process"
 ACTION_PREFERENCES_GET = "preferences.get"
 ACTION_PREFERENCES_PUT = "preferences.put"
 ACTION_PREFERENCES_DELETE = "preferences.delete"
+ACTION_LLM_GENERATE = "llm_generate"
 
 DEFAULT_PROFILES: Dict[str, PolicyProfile] = {
     ACTION_AGENT_RUN: PolicyProfile(
@@ -70,6 +71,13 @@ DEFAULT_PROFILES: Dict[str, PolicyProfile] = {
     ACTION_PREFERENCES_DELETE: PolicyProfile(
         name="preferences_delete.v1",
         allowlist=frozenset({"user_id"}),
+        deny_unknown_fields=True,
+        allow_external=False,
+        forbidden_keys=frozenset(),
+    ),
+    "llm_generate": PolicyProfile(
+        name="llm_generate.v1",
+        allowlist=frozenset({"prompt", "model", "max_tokens"}),
         deny_unknown_fields=True,
         allow_external=False,
         forbidden_keys=frozenset(),
