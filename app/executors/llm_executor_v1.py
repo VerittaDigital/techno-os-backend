@@ -43,6 +43,8 @@ class LLMExecutorV1(Executor):
 
     def execute(self, req: ActionRequest) -> Any:
         # F8.6.1 FASE 3: Instrument executor at boundaries (fail-closed, wrapper-only)
+        logger = logging.getLogger(__name__)
+        logger.error("Executor called")
         with observed_span(
             f"executor.{self.executor_id}",
             attributes={
@@ -80,6 +82,7 @@ class LLMExecutorV1(Executor):
                 # Any unexpected errors should surface as runtime error
                 logger = logging.getLogger(__name__)
                 logger.error(f"LLM provider error: {type(e).__name__}: {str(e)}")
+                print(f"LLM provider error: {type(e).__name__}: {str(e)}")
                 raise RuntimeError("PROVIDER_ERROR") from e
 
             # Return only the allowed fields
