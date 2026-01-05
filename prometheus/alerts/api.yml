@@ -1,0 +1,18 @@
+# F9.10: API Health Alert Rules
+# Métrica base: up (Prometheus builtin)
+# Nota: APIHighErrorRate removido (métrica http_requests_total inexistente - F9.11+)
+
+groups:
+  - name: api_health
+    interval: 30s
+    rules:
+      - alert: APIDown
+        expr: up{job="techno-os-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Techno OS API indisponível"
+          description: "API não responde por mais de 1 minuto"
+          runbook_url: "https://github.com/VerittaDigital/techno-os-backend/blob/main/docs/RUNBOOK_OBSERVABILITY.md#health-checks"

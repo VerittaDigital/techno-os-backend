@@ -1,0 +1,47 @@
+# F9.10: LLM Health Alert Rules
+# Métricas base: llm_request_latency_seconds, llm_tokens_total, llm_errors_total (F9.9-B)
+
+groups:
+  - name: llm_health
+    interval: 30s
+    rules:
+      - alert: LLMHighLatency
+        expr: histogram_quantile(0.95, rate(llm_request_latency_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "LLM latência p95 acima de 5s"
+          description: "Latência p95 está em {{ $value }}s (threshold: 5s)"
+
+      - alert: LLMErrorRateHigh
+        expr: rate(llm_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "Taxa de erro LLM acima de 5%"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+
+      - alert: CircuitBreakerOpen
+        expr: llm_errors_total{error_type="circuit_open"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit breaker OPEN detectado"
+          description: "Circuit breaker para {{ $labels.provider }} está OPEN"
+          runbook_url: "https://github.com/VerittaDigital/techno-os-backend/blob/main/docs/RUNBOOK_OBSERVABILITY.md#circuit-breaker-diagnostics"
+
+      - alert: LLMProviderDown
+        expr: rate(llm_errors_total{error_type="provider_unavailable"}[1m]) > 0
+        for: 30s
+        labels:
+          severity: critical
+          component: llm
+        annotations:
+          summary: "LLM provider indisponível"
+          description: "Provider {{ $labels.provider }} reportando indisponibilidade"

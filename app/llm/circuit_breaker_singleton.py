@@ -1,11 +1,12 @@
-"""Circuit breaker singleton for LLM calls (F9.9-C).
+"""Circuit breaker singleton for LLM calls (F9.10 - ENV configuration).
 
 Provides global circuit breaker instance shared across executors.
-Thread-safe, fail-closed, configured via constants (ENV support planned for F9.10+).
+Thread-safe, fail-closed, configured via ENV variables.
 """
 
 from __future__ import annotations
 
+import os
 from threading import Lock
 
 from .circuit_breaker import CircuitBreaker
@@ -14,16 +15,17 @@ from .circuit_breaker import CircuitBreaker
 _circuit_breaker_instance: CircuitBreaker | None = None
 _lock = Lock()
 
-# Configuration (F9.9-C: constants, ENV support planned for F9.10+)
-CIRCUIT_BREAKER_THRESHOLD = 3  # Falhas consecutivas para abrir
-CIRCUIT_BREAKER_TIMEOUT = 60  # Cooldown em segundos
+# F9.10: Configuration via ENV (with fallback to defaults)
+CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("VERITTA_CB_THRESHOLD", "3"))
+CIRCUIT_BREAKER_TIMEOUT = int(os.getenv("VERITTA_CB_TIMEOUT", "60"))
 
 
 def get_circuit_breaker() -> CircuitBreaker:
     """Get global circuit breaker instance (thread-safe singleton).
     
-    F9.9-C: Configuração via constantes.
-    Planejado para F9.10+: VERITTA_CB_THRESHOLD e VERITTA_CB_TIMEOUT via ENV.
+    F9.10: Configuração via ENV variables:
+    - VERITTA_CB_THRESHOLD: Falhas consecutivas para abrir (default: 3)
+    - VERITTA_CB_TIMEOUT: Cooldown em segundos (default: 60)
     
     Returns:
         CircuitBreaker: Instância global compartilhada

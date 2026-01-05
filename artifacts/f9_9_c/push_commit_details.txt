@@ -1,0 +1,36 @@
+commit a44edccf8ca5647ba3d1a45ca09ac4a156d3aabd
+Author:     Vinícius Soares <0bolinhasports0@gmail.com>
+AuthorDate: Sun Jan 4 22:51:32 2026 -0300
+Commit:     Vinícius Soares <0bolinhasports0@gmail.com>
+CommitDate: Sun Jan 4 22:51:32 2026 -0300
+
+    feat(F9.9-C): Integration + observability
+    
+    - EIXO 1: Integração retry + circuit breaker no executor LLM
+      - Circuit breaker singleton thread-safe (double-check locking)
+      - LLMExecutorV1 agora envolve chamadas em CB → Retry → Provider
+      - Policy.TIMEOUT_S atualizado para 30s (alinhamento hardening)
+    
+    - EIXO 2: Prometheus alerts BLOQUEADO
+      - Prometheus não está em docker-compose.yml (standalone)
+      - Blocker documentado para F9.10+
+    
+    - EIXO 3: Backup automation
+      - Script backup_observability.sh (postgres, 7-day retention)
+      - Fail-closed (set -e), executável
+    
+    - EIXO 4: Documentation
+      - RUNBOOK_OBSERVABILITY.md (352 linhas: health, metrics, CB diagnostics, backup/restore)
+      - README.md atualizado (Observability Stack, métricas PromQL, ENV vars)
+    
+    - EIXO 5: Tests
+      - test_f9_9_c_integration.py (8 cenários, 100% pass)
+      - Circuit breaker: 3 falhas → OPEN, bloqueio, HALF_OPEN cooldown
+      - Retry: 429 max 2 retries, timeout fail-fast
+      - Timeout policy: 30s efetivo
+    
+    Evidências: artifacts/f9_9_c/
+    SEAL: sessions/f9.9-c/SEAL-F9.9-C.md
+    
+    Base: F9.9-B-SEALED (7141cad)
+    Governança V-COF: fail-closed, human-in-the-loop, LGPD by design

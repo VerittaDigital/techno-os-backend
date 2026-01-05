@@ -1,56 +1,56 @@
-#!/bin/bash
-# F9.9-C: Backup automatizado de dados observabilidade
-# 
-# Gera backups compactados de volumes Docker:
-# - postgres_data (database)
-# - Futuro: prometheus_data, grafana_data (quando docker-compose incluir)
-#
-# Retenção: 7 dias
-# Cron sugerido: 0 2 * * * /opt/techno-os/scripts/backup_observability.sh
+#!/usr/bin/env bash
+# F9.10: Backup automatizado completo (PostgreSQL + Prometheus + Grafana)
+# Base: F9.9-C (apenas postgres) → F9.10 (3 volumes)
+# Governança: fail-closed (set -e), retention 7 dias
 
-set -e  # Fail-closed: abort on error
+set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/opt/techno-os/backups/observability}"
+BACKUP_DIR="/opt/techno-os/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-# Criar diretório se não existir
 mkdir -p "${BACKUP_DIR}"
 
-echo "✅ Iniciando backup: ${TIMESTAMP}"
+echo "=== F9.10 BACKUP OBSERVABILITY (3 volumes) ==="
+echo "Timestamp: ${TIMESTAMP}"
 
-# Backup PostgreSQL data
-echo "📦 Backup PostgreSQL..."
+# 1. PostgreSQL (dados estruturados)
+echo "Backing up postgres_data..."
 docker run --rm \
   -v techno-os-backend_postgres_data:/data:ro \
   -v "${BACKUP_DIR}":/backup \
-  alpine:latest \
+  alpine:3.20 \
   tar czf /backup/postgres_${TIMESTAMP}.tar.gz -C /data .
 
+ln -sf postgres_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/postgres_latest.tar.gz"
 echo "✅ PostgreSQL backup: postgres_${TIMESTAMP}.tar.gz"
 
-# Futuro (F9.10+): Prometheus e Grafana
-# Quando docker-compose incluir esses services:
-# docker run --rm \
-#   -v techno-os-backend_prometheus_data:/data:ro \
-#   -v "${BACKUP_DIR}":/backup \
-#   alpine:latest \
-#   tar czf /backup/prometheus_${TIMESTAMP}.tar.gz -C /data .
-#
-# docker run --rm \
-#   -v techno-os-backend_grafana_data:/data:ro \
-#   -v "${BACKUP_DIR}":/backup \
-#   alpine:latest \
-#   tar czf /backup/grafana_${TIMESTAMP}.tar.gz -C /data .
+# 2. Prometheus (métricas históricas)
+echo "Backing up prometheus_data..."
+docker run --rm \
+  -v techno-os-backend_prometheus_data:/data:ro \
+  -v "${BACKUP_DIR}":/backup \
+  alpine:3.20 \
+  tar czf /backup/prometheus_${TIMESTAMP}.tar.gz -C /data .
 
-# Retenção: remover backups > 7 dias
-echo "🗑️ Aplicando retenção (7 dias)..."
-find "${BACKUP_DIR}" -name "*.tar.gz" -mtime +7 -delete
+ln -sf prometheus_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/prometheus_latest.tar.gz"
+echo "✅ Prometheus backup: prometheus_${TIMESTAMP}.tar.gz"
 
-# Atualizar symlinks latest
-ln -sf postgres_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/postgres_latest.tar.gz"
-# ln -sf prometheus_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/prometheus_latest.tar.gz"
-# ln -sf grafana_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/grafana_latest.tar.gz"
+# 3. Grafana (dashboards + datasources)
+echo "Backing up grafana_data..."
+docker run --rm \
+  -v techno-os-backend_grafana_data:/data:ro \
+  -v "${BACKUP_DIR}":/backup \
+  alpine:3.20 \
+  tar czf /backup/grafana_${TIMESTAMP}.tar.gz -C /data .
 
-echo "✅ Backup concluído: ${TIMESTAMP}"
-echo "📁 Diretório: ${BACKUP_DIR}"
-ls -lh "${BACKUP_DIR}"/postgres_${TIMESTAMP}.tar.gz
+ln -sf grafana_${TIMESTAMP}.tar.gz "${BACKUP_DIR}/grafana_latest.tar.gz"
+echo "✅ Grafana backup: grafana_${TIMESTAMP}.tar.gz"
+
+# Retention: 7 dias
+echo "Applying 7-day retention policy..."
+find "${BACKUP_DIR}" -name "postgres_*.tar.gz" -mtime +7 -delete
+find "${BACKUP_DIR}" -name "prometheus_*.tar.gz" -mtime +7 -delete
+find "${BACKUP_DIR}" -name "grafana_*.tar.gz" -mtime +7 -delete
+
+echo "=== BACKUP COMPLETO (3 volumes) ==="
+ls -lh "${BACKUP_DIR}"/*_latest.tar.gz 2>/dev/null || echo "No backups yet (first run)"
