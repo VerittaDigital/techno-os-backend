@@ -6,7 +6,7 @@ from typing import ClassVar
 
 @dataclass(frozen=True)
 class Policy:
-    ALLOWED_MODELS: ClassVar[list[str]] = ["gpt-4", "gpt-3.5-turbo"]
+    ALLOWED_MODELS: ClassVar[list[str]] = ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"]
     TEMPERATURE: ClassVar[float] = 0.0
     MAX_PROMPT_CHARS: ClassVar[int] = 10000
     MAX_TOKENS_TOTAL: ClassVar[int] = 4096
