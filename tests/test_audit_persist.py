@@ -104,9 +104,9 @@ class TestAuditPersist:
         Note: TestClient raises the exception directly since it's an unhandled dependency error.
         In production with a real HTTP client, this would manifest as HTTP 500.
         """
-        # Set invalid audit path (directory doesn't exist, cannot be created)
-        invalid_path = tmp_path / "no_such_dir" / "audit.log"
-        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_path))
+        # Set invalid audit path (directory doesn't exist and cannot be created)
+        invalid_path = "/invalid/path/audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", invalid_path)
         monkeypatch.setenv("VERITTA_BETA_API_KEY", "test-key")
         
         from app.main import app
@@ -124,4 +124,4 @@ class TestAuditPersist:
         
         # Verify exception message contains trace_id and file error
         assert "Failed to log gate decision" in str(exc_info.value)
-        assert "No such file or directory" in str(exc_info.value)
+        assert "Permission denied" in str(exc_info.value) or "No such file or directory" in str(exc_info.value)

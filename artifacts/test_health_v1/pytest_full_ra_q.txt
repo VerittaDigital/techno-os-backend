@@ -1,0 +1,558 @@
+........................................................................ [ 16%]
+..................................F.......F.....FF...................... [ 32%]
+.....................................................FFssss............. [ 49%]
+........................................................................ [ 65%]
+...............................................FFFFFFFF................. [ 82%]
+........................................................................ [ 98%]
+.......                                                                  [100%]
+=================================== FAILURES ===================================
+______________ TestAuditPersist.test_audit_persist_failure_blocks ______________
+
+self = <test_audit_persist.TestAuditPersist object at 0x7aeacf5f00d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7aeacdd203d0>
+tmp_path = PosixPath('/tmp/pytest-of-vinicius/pytest-21/test_audit_persist_failure_blo0')
+
+    def test_audit_persist_failure_blocks(self, monkeypatch, tmp_path):
+        """
+        Audit write failure results in fail-closed behavior.
+    
+        Scenario:
+        - VERITTA_AUDIT_LOG_PATH set to invalid path (non-existent directory)
+        - POST /process with valid payload and auth
+        - Expected: Gate audit fails -> exception raised by TestClient
+    
+        This test verifies that audit persistence failures trigger fail-closed behavior
+        at the gate level (FastAPI dependency), preventing silent failures.
+    
+        Note: TestClient raises the exception directly since it's an unhandled dependency error.
+        In production with a real HTTP client, this would manifest as HTTP 500.
+        """
+        # Set invalid audit path (directory doesn't exist, cannot be created)
+        invalid_path = tmp_path / "no_such_dir" / "audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_path))
+        monkeypatch.setenv("VERITTA_BETA_API_KEY", "test-key")
+    
+        from app.main import app
+        from app.audit_log import AuditLogError
+        client = TestClient(app)
+    
+        # Make request (gate audit write will fail)
+        # TestClient raises the exception directly (fail-closed verified)
+>       with pytest.raises(AuditLogError) as exc_info:
+E       Failed: DID NOT RAISE <class 'app.audit_log.AuditLogError'>
+
+tests/test_audit_persist.py:118: Failed
+----------------------------- Captured stdout call -----------------------------
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+___________ TestConcurrentMatrixReads.test_concurrent_reads_are_safe ___________
+
+self = <test_concurrency_matrix_lock.TestConcurrentMatrixReads object at 0x7aeacf5f2380>
+
+    def test_concurrent_reads_are_safe(self):
+        """
+        Test that 20 threads can safely read the action matrix 200 times each.
+    
+        Scenario:
+        - Fixed matrix in global state
+        - 20 threads, each doing 200 read iterations
+        - Assert: No exceptions, consistent values, no corruption
+        """
+        # Reset to default state
+        reset_action_matrix()
+    
+        # Track read results and exceptions
+        read_results = []
+        exceptions = []
+        lock_for_results = threading.Lock()
+    
+        def reader_thread(thread_id: int):
+            """Each thread reads the matrix 200 times."""
+            try:
+                for iteration in range(200):
+                    matrix = get_action_matrix()
+    
+                    # Verify structure consistency
+                    assert hasattr(matrix, "profile")
+                    assert hasattr(matrix, "allowed_actions")
+                    assert isinstance(matrix.profile, str)
+                    assert isinstance(matrix.allowed_actions, list)
+    
+                    # Verify default values (F11: added 3 preferences actions)
+                    assert matrix.profile == "default"
+                    assert matrix.allowed_actions == ["process", "preferences.delete", "preferences.get", "preferences.put"]
+    
+                    with lock_for_results:
+                        read_results.append({
+                            "thread_id": thread_id,
+                            "iteration": iteration,
+                            "profile": matrix.profile,
+                            "actions": len(matrix.allowed_actions),
+                        })
+            except Exception as e:
+                with lock_for_results:
+                    exceptions.append((thread_id, str(e)))
+    
+        # Create and start 20 threads
+        threads = []
+        for tid in range(20):
+            t = threading.Thread(target=reader_thread, args=(tid,))
+            threads.append(t)
+            t.start()
+    
+        # Wait for all threads
+        for t in threads:
+            t.join()
+    
+        # Assertions
+>       assert len(exceptions) == 0, f"Exceptions during concurrent reads: {exceptions}"
+E       AssertionError: Exceptions during concurrent reads: [(0, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (1, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (2, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (3, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (4, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (5, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (6, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (7, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (8, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (9, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (10, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (11, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (12, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (13, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (14, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (15, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (16, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (17, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (18, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), (19, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff")]
+E       assert 20 == 0
+E        +  where 20 = len([(0, "assert ['process', '...llm_generate'] == ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm...== ['process', '...ferences.put']\n  \n  Left contains one more item: 'llm_generate'\n  Use -v to get more diff"), ...])
+
+tests/test_concurrency_matrix_lock.py:77: AssertionError
+_ TestP16ConcurrentE2EProcessFlow.test_p1_6_concurrent_audit_logging_fail_closed_blocks_without_silent_success _
+
+self = <test_concurrency_request_flow_p1_6_aggressive.TestP16ConcurrentE2EProcessFlow object at 0x7aeacf11d600>
+client = <starlette.testclient.TestClient object at 0x7aeace5de710>
+tmp_path = PosixPath('/tmp/pytest-of-vinicius/pytest-21/test_p1_6_concurrent_audit_log0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7aeacddb7070>
+
+    def test_p1_6_concurrent_audit_logging_fail_closed_blocks_without_silent_success(self, client, tmp_path, monkeypatch):
+        """
+        TESTE D (AGRESSIVO): Audit logging failure under concurrency must be fail-closed.
+    
+        Force audit persistence to fail by setting invalid VERITTA_AUDIT_LOG_PATH.
+        Fire N=30 concurrent /process requests with invalid audit path.
+    
+        Assert:
+        - Gate audit failures prevent request processing (fail-closed)
+        - All requests blocked at gate audit (no results reach queue)
+        - No deadlock occurs
+        """
+        # Force audit persistence failure with invalid path (deterministic)
+        invalid_audit_path = tmp_path / "no_such_dir" / "audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_audit_path))
+    
+        N = 30
+        barrier = threading.Barrier(N)
+        results_queue: Queue[Dict[str, Any]] = Queue()
+        exceptions_queue: Queue[Exception] = Queue()
+    
+        def worker():
+            try:
+                barrier.wait(timeout=30)
+                payload = {"text": "audit fail test"}
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
+                result_data = {
+                    "status_code": response.status_code,
+                    "body": response.json(),
+                }
+                results_queue.put(result_data)
+            except Exception as e:
+                exceptions_queue.put(e)
+    
+        threads = [threading.Thread(target=worker) for _ in range(N)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    
+        # Validate: gate audit failures are expected (captured by TestClient)
+        exceptions_list = []
+        while not exceptions_queue.empty():
+            exceptions_list.append(exceptions_queue.get())
+    
+        # All exceptions should be AuditLogError from gate audit failure
+        assert all(isinstance(e, Exception) and "Failed to log gate decision" in str(e) for e in exceptions_list), \
+            f"Expected all exceptions to be gate audit failures, got: {exceptions_list}"
+    
+        # Since gate audit fails, no results reach queue (fail-closed at gate)
+        results = []
+        while not results_queue.empty():
+            results.append(results_queue.get())
+    
+        # All requests blocked at gate audit
+>       assert len(results) == 0, \
+            f"Expected 0 results (all blocked at gate audit), got {len(results)}"
+E       AssertionError: Expected 0 results (all blocked at gate audit), got 30
+E       assert 30 == 0
+E        +  where 30 = len([{'body': {'action': 'process', 'executor_id': 'text_process_v1', 'executor_version': '1.0.0', 'input_digest': 'e6d260...0', 'input_digest': 'e6d260a2b158f967f35b07ae01f2e877ae8e34f590823ae024c5345d33ddcf8e', ...}, 'status_code': 200}, ...])
+
+tests/test_concurrency_request_flow_p1_6_aggressive.py:324: AssertionError
+----------------------------- Captured stdout call -----------------------------
+DEBUG: gate_result.decision = ALLOWDEBUG: gate_result.decision = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOWDEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: equal = TrueDEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOWDEBUG: equal = True
+DEBUG: equal = True
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+
+DEBUG: equal = TrueDEBUG: equal = True
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOW
+
+DEBUG: ALLOW = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOWDEBUG: ALLOW = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOWDEBUG: equal = True
+
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: equal = TrueDEBUG: equal = True
+DEBUG: ALLOW = ALLOW
+
+
+
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+
+
+DEBUG: equal = TrueDEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+
+
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+DEBUG: gate_result.decision = ALLOW
+
+DEBUG: equal = True
+DEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+
+
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOWDEBUG: equal = True
+
+
+
+DEBUG: gate_result.decision = ALLOW
+
+DEBUG: ALLOW = ALLOW
+
+DEBUG: equal = TrueDEBUG: equal = True
+DEBUG: ALLOW = ALLOWDEBUG: equal = TrueDEBUG: equal = TrueDEBUG: equal = True
+DEBUG: gate_result.decision = ALLOW
+
+
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: equal = True
+
+
+
+DEBUG: equal = True
+_ TestP16ConcurrentE2EProcessFlow.test_p1_6_concurrent_combined_matrix_toggle_and_audit_fail_does_not_deadlock _
+
+self = <test_concurrency_request_flow_p1_6_aggressive.TestP16ConcurrentE2EProcessFlow object at 0x7aeacf11d9f0>
+client = <starlette.testclient.TestClient object at 0x7aeace5dece0>
+tmp_path = PosixPath('/tmp/pytest-of-vinicius/pytest-21/test_p1_6_concurrent_combined_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7aeacf1764a0>
+
+    def test_p1_6_concurrent_combined_matrix_toggle_and_audit_fail_does_not_deadlock(self, client, tmp_path, monkeypatch):
+        """
+        TESTE E (AGRESSIVO): Combine matrix toggle + audit failure; no deadlock.
+    
+        - Toggle ActionMatrix in writer thread (200 iterations)
+        - Force audit sink to fail by setting invalid VERITTA_AUDIT_LOG_PATH
+        - Fire N=20 concurrent /process requests
+    
+        Assert:
+        - Terminates without deadlock
+        - At least 1 BLOCKED with AUDIT_LOG_FAILED
+        - No 500 errors; all responses valid
+        """
+        from app.action_matrix import ActionMatrix
+    
+        # Force audit persistence failure with invalid path (deterministic)
+        invalid_audit_path = tmp_path / "no_such_dir" / "audit.log"
+        monkeypatch.setenv("VERITTA_AUDIT_LOG_PATH", str(invalid_audit_path))
+    
+        N = 20
+        barrier = threading.Barrier(N + 1)  # +1 for writer
+        results_queue: Queue[Dict[str, Any]] = Queue()
+        exceptions_queue: Queue[Exception] = Queue()
+        stop_event = threading.Event()
+    
+        matrix_a = ActionMatrix(profile="default", allowed_actions=["process"])
+        matrix_b = ActionMatrix(profile="default", allowed_actions=["process"])
+    
+        def writer_toggle():
+            try:
+                barrier.wait()
+                for iteration in range(200):
+                    matrix = matrix_a if iteration % 2 == 0 else matrix_b
+                    set_action_matrix(matrix)
+                stop_event.set()
+            except Exception as e:
+                exceptions_queue.put(e)
+    
+        def reader_request():
+            try:
+                barrier.wait(timeout=30)
+                payload = {"text": "combined stress test"}
+                response = client.post("/process", json=payload, headers={"X-API-Key": "TEST_BETA_API_KEY_VALID_FOR_TESTING"})
+                result_data = {
+                    "status_code": response.status_code,
+                    "body": response.json(),
+                }
+                results_queue.put(result_data)
+            except Exception as e:
+                exceptions_queue.put(e)
+    
+        # Setup
+        set_action_matrix(matrix_a)
+    
+        # Run concurrent test (audit failures will occur due to invalid path)
+        writer = threading.Thread(target=writer_toggle)
+        readers = [threading.Thread(target=reader_request) for _ in range(N)]
+    
+        writer.start()
+        for r in readers:
+            r.start()
+    
+        writer.join()
+        for r in readers:
+            r.join()
+    
+        # Cleanup
+        reset_action_matrix()
+    
+        # Validate: gate audit failures are expected (captured by TestClient)
+        # All 20 threads got AuditLogError from gate (FastAPI dependency)
+        # This is correct fail-closed behavior - gate audit cannot persist
+        exceptions_list = []
+        while not exceptions_queue.empty():
+            exceptions_list.append(exceptions_queue.get())
+    
+        # All exceptions should be AuditLogError from gate audit failure
+        assert all(isinstance(e, Exception) and "Failed to log gate decision" in str(e) for e in exceptions_list), \
+            f"Expected all exceptions to be gate audit failures, got: {exceptions_list}"
+    
+        # Since gate audit fails (TestClient captures exception), no results reach queue
+        # This is correct behavior: gate audit failure prevents request processing
+        results = []
+        while not results_queue.empty():
+            results.append(results_queue.get())
+    
+        # With gate audit failing for all requests, we expect 0 results (all blocked at gate)
+        # This proves fail-closed: invalid audit path -> no requests proceed
+>       assert len(results) == 0, \
+            f"Expected 0 results (all blocked at gate audit), got {len(results)}"
+E       AssertionError: Expected 0 results (all blocked at gate audit), got 20
+E       assert 20 == 0
+E        +  where 20 = len([{'body': {'action': 'process', 'executor_id': 'text_process_v1', 'executor_version': '1.0.0', 'input_digest': 'ec1fe4...0', 'input_digest': 'ec1fe46631697dd73a7413951e8a239e421f7caba9bbeb02e194ac492e4d0d82', ...}, 'status_code': 200}, ...])
+
+tests/test_concurrency_request_flow_p1_6_aggressive.py:420: AssertionError
+----------------------------- Captured stdout call -----------------------------
+DEBUG: gate_result.decision = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOWDEBUG: gate_result.decision = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+
+
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: equal = True
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: equal = True
+
+
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOW
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOW
+DEBUG: equal = TrueDEBUG: gate_result.decision = ALLOWDEBUG: ALLOW = ALLOW
+DEBUG: equal = True
+
+
+
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOW
+
+
+
+DEBUG: equal = True
+DEBUG: ALLOW = ALLOWDEBUG: gate_result.decision = ALLOW
+DEBUG: gate_result.decision = ALLOW
+DEBUG: equal = True
+DEBUG: ALLOW = ALLOWDEBUG: equal = True
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOW
+
+DEBUG: equal = True
+
+DEBUG: gate_result.decision = ALLOWDEBUG: equal = True
+DEBUG: ALLOW = ALLOWDEBUG: equal = TrueDEBUG: equal = True
+DEBUG: equal = TrueDEBUG: equal = True
+
+
+DEBUG: gate_result.decision = ALLOW
+DEBUG: ALLOW = ALLOWDEBUG: ALLOW = ALLOW
+
+
+
+DEBUG: equal = TrueDEBUG: equal = True
+DEBUG: equal = True
+
+________________________ test_prometheus_containerized _________________________
+
+    def test_prometheus_containerized():
+        """Prometheus deve estar rodando como container."""
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "name=techno-os-prometheus", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        )
+>       assert "techno-os-prometheus" in result.stdout
+E       AssertionError: assert 'techno-os-prometheus' in ''
+E        +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-prometheus', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+
+tests/test_f9_10_observability.py:24: AssertionError
+_______________________ test_alertmanager_containerized ________________________
+
+    def test_alertmanager_containerized():
+        """Alertmanager deve estar rodando como container."""
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "name=techno-os-alertmanager", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        )
+>       assert "techno-os-alertmanager" in result.stdout
+E       AssertionError: assert 'techno-os-alertmanager' in ''
+E        +  where '' = CompletedProcess(args=['docker', 'ps', '--filter', 'name=techno-os-alertmanager', '--format', '{{.Names}}'], returncode=0, stdout='', stderr='').stdout
+
+tests/test_f9_10_observability.py:34: AssertionError
+_______________________ test_get_user_from_gate_success ________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________________ test_get_user_from_gate_missing_header ____________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________________ test_get_preferences_not_found ________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________________ test_get_preferences_existing _________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________________ test_put_preferences_create __________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________________ test_put_preferences_update __________________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________________ test_put_preferences_partial_update ______________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_put_preferences_reject_user_id_in_payload ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+=============================== warnings summary ===============================
+tests/test_agentic_pipeline_tracing.py: 4 warnings
+tests/test_executor_tracing.py: 6 warnings
+tests/test_tracing.py: 4 warnings
+tests/test_tracing_integration.py: 1 warning
+  /mnt/d/Projects/techno-os-backend/app/tracing.py:59: DeprecationWarning: Call to deprecated method __init__. (Since v1.35, the Jaeger supports OTLP natively. Please use the OTLP exporter instead. Support for this exporter will end July 2023.) -- Deprecated since version 1.16.0.
+    jaeger_exporter = JaegerExporter(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_f9_10_observability.py:43: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:54: Alertmanager não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:78: Prometheus não acessível (containers não iniciados)
+SKIPPED [1] tests/test_f9_10_observability.py:99: Grafana não acessível (containers não iniciados)
+FAILED tests/test_audit_persist.py::TestAuditPersist::test_audit_persist_failure_blocks
+FAILED tests/test_concurrency_matrix_lock.py::TestConcurrentMatrixReads::test_concurrent_reads_are_safe
+FAILED tests/test_concurrency_request_flow_p1_6_aggressive.py::TestP16ConcurrentE2EProcessFlow::test_p1_6_concurrent_audit_logging_fail_closed_blocks_without_silent_success
+FAILED tests/test_concurrency_request_flow_p1_6_aggressive.py::TestP16ConcurrentE2EProcessFlow::test_p1_6_concurrent_combined_matrix_toggle_and_audit_fail_does_not_deadlock
+FAILED tests/test_f9_10_observability.py::test_prometheus_containerized - Ass...
+FAILED tests/test_f9_10_observability.py::test_alertmanager_containerized - A...
+FAILED tests/test_preferences.py::test_get_user_from_gate_success - Failed: a...
+FAILED tests/test_preferences.py::test_get_user_from_gate_missing_header - Fa...
+FAILED tests/test_preferences.py::test_get_preferences_not_found - Failed: as...
+FAILED tests/test_preferences.py::test_get_preferences_existing - Failed: asy...
+FAILED tests/test_preferences.py::test_put_preferences_create - Failed: async...
+FAILED tests/test_preferences.py::test_put_preferences_update - Failed: async...
+FAILED tests/test_preferences.py::test_put_preferences_partial_update - Faile...
+FAILED tests/test_preferences.py::test_put_preferences_reject_user_id_in_payload
+14 failed, 421 passed, 4 skipped, 15 warnings in 19.90s

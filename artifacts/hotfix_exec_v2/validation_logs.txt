@@ -1,0 +1,38 @@
+ℹ️ Tracing disabled (TRACING_ENABLED=0)
+DEBUG: gate_result.decision = GateDecision.ALLOW
+DEBUG: ALLOW = GateDecision.ALLOW
+DEBUG: equal = True
+INFO:     172.18.0.1:46762 - "POST /process HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58316 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60322 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41522 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51774 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34654 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54144 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57214 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51454 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50022 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33552 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60476 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47992 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60212 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59040 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51988 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46920 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35864 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50982 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60660 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43812 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37240 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55024 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56496 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43994 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44406 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42644 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58138 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49676 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59888 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56932 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52646 - "GET /health HTTP/1.1" 200 OK
