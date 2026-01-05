@@ -75,7 +75,8 @@ class LLMExecutorV1(Executor):
                 raise
             except Exception as e:
                 # Any unexpected errors should surface as runtime error
-                logging.error(f"LLM provider error: {type(e).__name__}: {str(e)}")
+                logger = logging.getLogger(__name__)
+                logger.error(f"LLM provider error: {type(e).__name__}: {str(e)}")
                 raise RuntimeError("PROVIDER_ERROR") from e
 
             # Return only the allowed fields
