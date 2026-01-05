@@ -55,10 +55,17 @@ class OpenAIClient(LLMClient):
                 timeout=t,
             )
 
+            print(f"[OPENAI_CLIENT] response type: {type(response)}", flush=True)
+
             latency_ms = (time.perf_counter() - start) * 1000
 
             # F9.9-B: Construir LLMResponse normalizado
-            text = response.choices[0].message.content or ""
+            try:
+                text = response.choices[0].message.content or ""
+            except Exception as e:
+                print(f"[OPENAI_CLIENT_PARSE_ERROR] type={type(e).__name__} msg={str(e)[:200]}", flush=True)
+                raise
+
             usage = TokenUsage(
                 prompt_tokens=response.usage.prompt_tokens,
                 completion_tokens=response.usage.completion_tokens,
