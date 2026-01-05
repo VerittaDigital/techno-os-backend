@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -74,6 +75,7 @@ class LLMExecutorV1(Executor):
                 raise
             except Exception as e:
                 # Any unexpected errors should surface as runtime error
+                logging.error(f"LLM provider error: {type(e).__name__}: {str(e)}")
                 raise RuntimeError("PROVIDER_ERROR") from e
 
             # Return only the allowed fields
