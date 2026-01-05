@@ -1,0 +1,6 @@
+/usr/bin/docker
+Docker version 28.2.2, build 28.2.2-0ubuntu1~24.04.1
+/usr/bin/docker-compose
+docker-compose version 1.29.2, build unknown
+/usr/bin/git
+git version 2.43.0
