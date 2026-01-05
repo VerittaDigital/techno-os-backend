@@ -1,0 +1,3 @@
+deploy
+uid=1001(deploy) gid=1001(deploy) groups=1001(deploy),27(sudo),100(users),112(docker)
+deploy sudo users docker

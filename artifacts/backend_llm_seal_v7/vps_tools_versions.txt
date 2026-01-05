@@ -1,0 +1,4 @@
+Docker version 28.2.2, build 28.2.2-0ubuntu1~24.04.1
+Docker Compose version v5.0.1
+jq-1.7
+git version 2.43.0

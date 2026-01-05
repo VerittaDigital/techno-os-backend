@@ -1,0 +1,6 @@
+# HELP llm_request_latency_seconds LLM request latency in seconds
+# TYPE llm_request_latency_seconds histogram
+# HELP llm_tokens_total Total LLM tokens consumed
+# TYPE llm_tokens_total counter
+# HELP llm_errors_total Total LLM errors
+# TYPE llm_errors_total counter
