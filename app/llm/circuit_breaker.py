@@ -72,6 +72,7 @@ class CircuitBreaker:
                     self._failure_count = 0
                 else:
                     logging.error(f"Circuit breaker open: too many failures, retry later")
+                    print(f"Circuit breaker open: too many failures, retry later")
                     raise ProviderError("CIRCUIT_OPEN: Too many failures, retry later")
 
         # Executar função
