@@ -1,0 +1,12 @@
+ .../189a213f209b_f9_9_a_preferences_validation.py  |  73 ++++
+ app/dependencies/__init__.py                       |   1 +
+ app/dependencies/auth.py                           |  42 +++
+ app/env.py                                         |  14 +
+ app/main.py                                        |   4 +
+ app/models/user_preference.py                      |  66 ++++
+ app/routes/preferences.py                          | 227 +++++++++++++
+ app/schemas/__init__.py                            |   1 +
+ app/schemas/preferences.py                         |  82 +++++
+ planning/MEMORY-ROADMAP.md                         | 265 +++++++++++++++
+ tests/test_preferences.py                          | 374 +++++++++++++++++++++
+ 11 files changed, 1149 insertions(+)
