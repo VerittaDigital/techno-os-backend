@@ -8,6 +8,8 @@ Implementa circuit breaker para proteger sistema de falhas em cascata.
 
 from __future__ import annotations
 
+import logging
+
 import time
 from enum import Enum
 from threading import Lock
@@ -67,6 +69,7 @@ class CircuitBreaker:
                     self._state = CircuitState.HALF_OPEN
                     self._failure_count = 0
                 else:
+                    logging.error(f"Circuit breaker open: too many failures, retry later")
                     raise ProviderError("CIRCUIT_OPEN: Too many failures, retry later")
 
         # Executar função
