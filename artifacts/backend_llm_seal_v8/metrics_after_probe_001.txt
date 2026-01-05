@@ -1,0 +1,25 @@
+# HELP llm_request_latency_seconds LLM request latency in seconds
+# TYPE llm_request_latency_seconds histogram
+llm_request_latency_seconds_bucket{le="0.1",model="gpt-4o-mini",provider="openai"} 0.0
+llm_request_latency_seconds_bucket{le="0.5",model="gpt-4o-mini",provider="openai"} 0.0
+llm_request_latency_seconds_bucket{le="1.0",model="gpt-4o-mini",provider="openai"} 0.0
+llm_request_latency_seconds_bucket{le="2.0",model="gpt-4o-mini",provider="openai"} 0.0
+llm_request_latency_seconds_bucket{le="5.0",model="gpt-4o-mini",provider="openai"} 1.0
+llm_request_latency_seconds_bucket{le="10.0",model="gpt-4o-mini",provider="openai"} 1.0
+llm_request_latency_seconds_bucket{le="30.0",model="gpt-4o-mini",provider="openai"} 1.0
+llm_request_latency_seconds_bucket{le="+Inf",model="gpt-4o-mini",provider="openai"} 1.0
+llm_request_latency_seconds_count{model="gpt-4o-mini",provider="openai"} 1.0
+llm_request_latency_seconds_sum{model="gpt-4o-mini",provider="openai"} 2.417494530993281
+# HELP llm_request_latency_seconds_created LLM request latency in seconds
+# TYPE llm_request_latency_seconds_created gauge
+llm_request_latency_seconds_created{model="gpt-4o-mini",provider="openai"} 1.7676338026054494e+09
+# HELP llm_tokens_total Total LLM tokens consumed
+# TYPE llm_tokens_total counter
+llm_tokens_total{model="gpt-4o-mini",provider="openai",type="prompt"} 15.0
+llm_tokens_total{model="gpt-4o-mini",provider="openai",type="completion"} 40.0
+# HELP llm_tokens_created Total LLM tokens consumed
+# TYPE llm_tokens_created gauge
+llm_tokens_created{model="gpt-4o-mini",provider="openai",type="prompt"} 1.7676338026055157e+09
+llm_tokens_created{model="gpt-4o-mini",provider="openai",type="completion"} 1.7676338026055298e+09
+# HELP llm_errors_total Total LLM errors
+# TYPE llm_errors_total counter
