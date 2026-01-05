@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+
+logging.basicConfig(level=logging.ERROR)
+
 from typing import Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field
