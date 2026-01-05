@@ -263,6 +263,12 @@ async def process(
     action = gate_data.get("action", "process")
     trace_id = gate_data.get("trace_id", str(uuid.uuid4()))
     
+    # Extract inner payload for F2.1 (body has action and payload keys)
+    if isinstance(payload, dict) and "payload" in payload:
+        inner_payload = payload.get("payload", {})
+    else:
+        inner_payload = payload
+    
     # F8.6.1: Create root span for request (fail-closed, wrapper-only)
     with observed_span(
         "process_action",
@@ -316,7 +322,7 @@ async def process(
         # Run pipeline
         result, output = run_agentic_action(
             action=action,
-            payload=payload,
+            payload=inner_payload,
             trace_id=trace_id,
         )
 
