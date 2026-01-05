@@ -19,3 +19,9 @@ Any change to `app/gate_profiles.py::DEFAULT_PROFILES` MUST include:
    - Owner / Reviewer: Verittà / Samurai team
    - Commit: c98c3ed seal(p3+): executor contract, checklist and template (A3→P3+)
    - Notes: This change is strictly contractual; no runtime, gate, or auth behavior modified. Reviewers must follow `docs/contracts/EXECUTOR_CHECKLIST.md` before accepting any new executor.
+- 2026-01-05: SEAL B — Added "llm_generate" to allowed actions for OpenAI cutover functional.
+   - What: Added "llm_generate" to DEFAULT_PROFILES.allowed_actions.
+   - Why: Enable /process action=llm_generate for OpenAI LLM integration (SEAL B).
+   - Owner / Reviewer: Architect-Samurai / V-COF
+   - Commit: merge commit from debug-seal-b-exception-logging
+   - Notes: Fail-closed; no API contract changes; payload extraction fix applied.
