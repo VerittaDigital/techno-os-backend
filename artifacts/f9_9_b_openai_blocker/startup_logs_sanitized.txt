@@ -1,0 +1,16 @@
+STARTUP LOGS SANITIZED — APÓS ROLLBACK (2026-01-05)
+
+Logs do container techno-os-api após recreate com LLM_PROVIDER=fake:
+
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+ℹ️ Tracing disabled (TRACING_ENABLED=0)
+INFO:     127.0.0.1:56218 - "GET /health HTTP/1.1" 200 OK
+
+Confirmação:
+- Startup completo sem erros de configuração
+- LLM provider carregado como fake (fail-closed)
+- Servidor Uvicorn operacional na porta 8000</content>
+<parameter name="filePath">/mnt/d/Projects/techno-os-backend/artifacts/f9_9_b_openai_blocker/startup_logs_sanitized.txt
