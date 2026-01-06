@@ -1,15 +1,24 @@
-"""Action-profile matrix for governance enforcement."""
+"""Action-profile matrix for governance enforcement.
+
+This module defines which action_ids are permitted under each governance profile.
+
+Design goals:
+- Fail-closed: unknown actions must be denied elsewhere (gate), and the matrix is explicit.
+- Thread-safe: reads/writes guarded by a re-entrant lock.
+- Test-friendly: tests may override the global matrix via set_action_matrix()/reset_action_matrix().
+"""
+
 from __future__ import annotations
 
-import os
 import threading
-from typing import List
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
 class ActionMatrix(BaseModel):
     """Matrix defining which actions are allowed in which profiles.
-    
+
     Fields:
     - profile: profile identifier (e.g., "default", "restricted")
     - allowed_actions: list of action_ids permitted in this profile
@@ -18,79 +27,61 @@ class ActionMatrix(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=False)
 
     profile: str
-    allowed_actions: List[str]
+    allowed_actions: list[str]
 
 
-_global_matrix = None
+_global_matrix: Optional[ActionMatrix] = None
 _global_matrix_lock = threading.RLock()
 
 
 def get_action_matrix() -> ActionMatrix:
     """Return the canonical action-profile matrix.
-    
-    Defines which actions can be executed within each governance profile.
-    In testing, allows dynamic addition of test actions via set_action_matrix().
-    
-    Thread-safe: acquires _global_matrix_lock for consistent read.
+
+    If a matrix was set via set_action_matrix(), it is returned.
+    Otherwise, returns the built-in default matrix (canonical runtime baseline).
+
+    Thread-safe: guarded by _global_matrix_lock for consistent read.
     """
-    global _global_matrix
-    
     with _global_matrix_lock:
         if _global_matrix is not None:
             return _global_matrix
-        
-        # FASE 11: Actions consolidadas (process + preferences)
+
         return ActionMatrix(
             profile="default",
             allowed_actions=[
                 "process",
-                "preferences.delete",
-                "preferences.get",
-                "preferences.put",
-                "llm_generate",
+                "preferences_get",
+                "preferences_put",
+                "preferences_delete",
             ],
         )
 
+def is_action_allowed_in_profile(
+    action: str,
+    profile: str,
+    matrix: Optional[ActionMatrix] = None,
+) -> bool:
+    """Return True if `action` is allowed in the given profile.
 
-def set_action_matrix(matrix: ActionMatrix) -> None:
-    """Override action matrix (for testing only).
-    
-    This is used in tests to temporarily add test actions to the allowed list.
-    
-    Thread-safe: acquires _global_matrix_lock for exclusive write.
+    Fail-closed: unknown actions are treated as not allowed.
+    If `matrix` is not provided, uses the current global/canonical matrix.
     """
+    if matrix is None:
+        matrix = get_action_matrix()
+
+    if matrix.profile != profile:
+        return False
+
+    return action in matrix.allowed_actions
+def set_action_matrix(matrix: ActionMatrix) -> None:
+    """Override the global action matrix (primarily for tests)."""
     global _global_matrix
-    
     with _global_matrix_lock:
         _global_matrix = matrix
 
 
 def reset_action_matrix() -> None:
-    """Reset action matrix to default (for testing cleanup).
-    
-    Thread-safe: acquires _global_matrix_lock for exclusive write.
-    """
+    """Reset the global override so get_action_matrix() returns the canonical baseline."""
     global _global_matrix
-    
     with _global_matrix_lock:
         _global_matrix = None
-
-
-def is_action_allowed_in_profile(
-    action: str,
-    profile: str,
-    matrix: ActionMatrix,
-) -> bool:
-    """Check if action is allowed in profile according to matrix.
-    
-    Args:
-        action: action_id to check
-        profile: profile_id context
-        matrix: action-profile matrix
-    
-    Returns:
-        True if action is in matrix.allowed_actions for this profile, False otherwise
-    """
-    if matrix.profile != profile:
-        return False
-    return action in matrix.allowed_actions
