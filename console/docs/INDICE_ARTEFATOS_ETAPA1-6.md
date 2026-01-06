@@ -137,7 +137,7 @@
 **Verificados/Validados:**
 
 10. **.env.example** (VERIFIED)
-    - Completo com NEXT_PUBLIC_API_URL
+    - Completo com NEXT_PUBLIC_API_BASE_URL
     - Completo com NEXT_PUBLIC_API_KEY
     - Feature flags (INCIDENT_PREFILL, MULTI_USER, MEMORY_PANEL)
     - Optional integrations (NOTION)
