@@ -196,6 +196,34 @@ else
 fi
 ```
 
+### 2.6 Console Beta Smoke Tests (HTTPS Staging)
+
+Run automated smoke tests for the console beta deployment on VPS.
+
+```bash
+# On VPS (veritta-vps), run the smoke script
+ssh veritta-vps "/home/deploy/smoke.sh"
+
+# Expected output:
+# Running smoke tests...
+# /beta: PASS (200)
+# /api/health: PASS (200)
+# /api/process no key: PASS (401)
+# /api/process with key: PASS (200)
+# Smoke tests complete.
+```
+
+**What it tests:**
+- Console static files served correctly (HTTPS 200 on /beta)
+- API health endpoint accessible (HTTPS 200 on /api/health)
+- API auth gates working (401 without key, 200 with VERITTA_BETA_API_KEY)
+- End-to-end process endpoint functional
+
+**Prerequisites:**
+- VPS deployment complete (nginx + docker containers)
+- VERITTA_BETA_API_KEY set in environment
+- HTTPS certificate valid (Let's Encrypt)
+
 ---
 
 ## Part 3: Production Diagnostics
@@ -396,6 +424,11 @@ echo "6. Verifying audit invariants..."
 python scripts/verify_audit_invariants.py
 
 echo ""
+echo "7. Console Beta Smoke Tests (if deployed)..."
+echo "   Run: ssh veritta-vps '/home/deploy/smoke.sh'"
+echo "   Expected: All PASS (200/401/200)"
+
+echo ""
 echo "========== ALL CHECKS PASSED =========="
 
 kill $API_PID 2>/dev/null || true
@@ -414,3 +447,4 @@ kill $API_PID 2>/dev/null || true
 | Trace lookup | `grep "550e8400..." "$VERITTA_AUDIT_LOG_PATH" \| jq .` |
 | Rate limits | `grep "G10_rate_limit" "$VERITTA_AUDIT_LOG_PATH" \| wc -l` |
 | Profile hash | `jq -c '.profile_hash' "$VERITTA_AUDIT_LOG_PATH" \| sort \| uniq` |
+| Console smoke | `ssh veritta-vps "/home/deploy/smoke.sh"` |
