@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERITTA_LLM_ALLOWED_PROVIDERS: fake
+      ENV: test
     
     services:
       postgres:
@@ -102,7 +103,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
