@@ -50,9 +50,10 @@ def get_action_matrix() -> ActionMatrix:
             profile="default",
             allowed_actions=[
                 "process",
-                "preferences_get",
-                "preferences_put",
-                "preferences_delete",
+                "preferences.delete",
+                "preferences.get",
+                "preferences.put",
+                "llm_generate",
             ],
         )
 
