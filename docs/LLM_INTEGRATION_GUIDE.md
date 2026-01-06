@@ -36,11 +36,8 @@ pip install google-generativeai
 Adicionar ao `.env`:
 
 ```env
-# Allowlist obrigatória de providers (fail-closed se vazio)
-VERITTA_LLM_ALLOWED_PROVIDERS=openai,anthropic,grok
-
-# Provider escolhido (openai, anthropic, gemini, grok, deepseek, fake)
-LLM_PROVIDER=fake
+# Provider escolhido (openai, anthropic, gemini, grok, deepseek)
+LLM_PROVIDER=openai
 
 # API Keys (usar apenas a do provider escolhido)
 OPENAI_API_KEY=sk-...
@@ -51,19 +48,14 @@ DEEPSEEK_API_KEY=sk-...
 
 # Modelo padrão (depende do provider)
 LLM_MODEL=gpt-4  # ou claude-3-opus-20240229, gemini-pro, etc
-
-# Timeout em segundos
-LLM_TIMEOUT_S=30.0
+LLM_TIMEOUT_S=10.0
 ```
 
 ### 3️⃣ Criar factory de clients
 
 ```python
 # app/llm/factory.py
-"""LLM Client Factory (V-COF governed, fail-closed).
-
-F9.9-B: Factory endurecida com allowlists obrigatórias e fail-closed.
-"""
+"""LLM Client Factory (V-COF governed)."""
 
 import os
 from typing import Optional
@@ -75,50 +67,30 @@ from .gemini_client import GeminiClient
 from .grok_client import GrokClient
 from .deepseek_client import DeepSeekClient
 from .fake_client import FakeLLMClient
-from .errors import ConfigurationError
 
 
 def create_llm_client(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
-    timeout_s: float = 30.0,
+    timeout_s: float = 10.0,
 ) -> LLMClient:
     """
-    Factory para criar LLM client baseado em provider (fail-closed).
-    
-    F9.9-B: Implementa allowlist obrigatória de providers via ENV.
-    Se VERITTA_LLM_ALLOWED_PROVIDERS não configurado: ConfigurationError.
-    Se provider não estiver na allowlist: ConfigurationError.
+    Factory para criar LLM client baseado em provider.
     
     Args:
-        provider: "openai", "anthropic", "gemini", "grok", "deepseek", "fake"
+        provider: "openai", "anthropic", "gemini", "grok", "deepseek" ou None (usa env)
         api_key: API key do provider ou None (usa env)
-        timeout_s: Timeout padrão (default 30s conforme F9.9-B)
+        timeout_s: Timeout padrão
         
     Returns:
-        LLMClient instance
+        LLMClient instance (ou FakeLLMClient se não configurado)
         
     Raises:
-        ConfigurationError: ENV ausente, provider bloqueado, api_key ausente
+        RuntimeError: Se provider inválido ou API key ausente
     """
-    # F9.9-B: Validar allowlist obrigatória (fail-closed)
-    allowed_providers_raw = os.getenv("VERITTA_LLM_ALLOWED_PROVIDERS")
-    if not allowed_providers_raw:
-        raise ConfigurationError("VERITTA_LLM_ALLOWED_PROVIDERS not configured (fail-closed)")
-    
-    allowed_providers = [p.strip().lower() for p in allowed_providers_raw.split(",") if p.strip()]
-    if not allowed_providers:
-        raise ConfigurationError("VERITTA_LLM_ALLOWED_PROVIDERS is empty (fail-closed)")
-    
     # Detectar provider via env se não fornecido
     provider = provider or os.getenv("LLM_PROVIDER", "fake")
     provider = provider.lower()
-    
-    # Validar provider contra allowlist (fail-closed)
-    if provider not in allowed_providers:
-        raise ConfigurationError(
-            f"Provider '{provider}' not in allowlist {allowed_providers} (fail-closed)"
-        )
     
     # Fake client para desenvolvimento/testes
     if provider == "fake":
@@ -135,11 +107,11 @@ def create_llm_client(
         }
         env_var = key_map.get(provider)
         if not env_var:
-            raise ConfigurationError(f"Unknown LLM provider: {provider}")
+            raise RuntimeError(f"Unknown LLM provider: {provider}")
         
         api_key = os.getenv(env_var)
         if not api_key:
-            raise ConfigurationError(f"Missing {env_var} for provider {provider}")
+            raise RuntimeError(f"Missing {env_var} for provider {provider}")
     
     # Instanciar client
     clients = {
@@ -152,7 +124,7 @@ def create_llm_client(
     
     client_class = clients.get(provider)
     if not client_class:
-        raise ConfigurationError(f"Unknown LLM provider: {provider}")
+        raise RuntimeError(f"Unknown LLM provider: {provider}")
     
     return client_class(api_key=api_key, default_timeout_s=timeout_s)
 ```
@@ -236,15 +208,11 @@ print(result["text"])
 
 Todos os clients implementam:
 
-✅ **Fail-closed**: Erro → ConfigurationError("PROVIDER_ERROR")  
-✅ **Timeout**: Configurável por chamada (default 30s)  
+✅ **Fail-closed**: Erro → RuntimeError("PROVIDER_ERROR")  
+✅ **Timeout**: Configurável por chamada  
 ✅ **Privacy**: Prompts não são logados  
-✅ **Rate limiting**: Respeitado via policies (Policy class)  
-✅ **Allowlist**: VERITTA_LLM_ALLOWED_PROVIDERS obrigatório  
-✅ **Normalização**: Interface uniforme independente do provider  
-✅ **Circuit Breaker**: Singleton para resiliência (F9.9-C)  
-✅ **Métricas**: Prometheus histograms/counters  
-✅ **Retry**: with_retry decorator
+✅ **Rate limiting**: Respeitado via policies  
+✅ **Normalização**: Interface uniforme independente do provider
 
 ---
 
@@ -289,14 +257,14 @@ export OPENAI_API_KEY=sk-...
 
 ## 📚 PRÓXIMOS PASSOS
 
-1. ✅ Adicionar `llm/factory.py` (com allowlist fail-closed)
+1. ✅ Adicionar `llm/factory.py`
 2. ✅ Atualizar `requirements.txt` com dependências opcionais
-3. ✅ Criar testes de integração (test_a4_1_llm_executor_v1.py, test_f9_9_b_llm_hardening.py)
-4. ✅ Configurar rate limiting por provider (app/llm/policy.py)
+3. ✅ Criar testes de integração
+4. ⚠️ Configurar rate limiting por provider
 5. ⚠️ Implementar fallback entre providers
-6. ✅ Adicionar métricas de latência por provider (app/llm/metrics.py)
+6. ⚠️ Adicionar métricas de latência por provider
 
 ---
 
 **Governança:** V-COF · Fail-Closed · Human-in-the-Loop  
-**Última atualização:** F9.9-B (2026-01-05)
+**Última atualização:** F9.8 (2026-01-03)
