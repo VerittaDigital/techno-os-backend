@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from typing import List, Dict
 import uuid
 import json
+import os
 
 from app.integrations.notion_client import (
     get_agents, get_arcontes, get_audit, get_actions, get_evidence, get_pipelines, get_docs, get_governance_summary, self_test
@@ -15,18 +16,28 @@ async def validate_headers(request: Request):
     """Fail-closed: require all headers, return trace_id."""
     trace_id = str(uuid.uuid4())
     missing = []
+    x_api_key = request.headers.get("X-API-Key")
     if not request.headers.get("X-Request-ID"):
         missing.append("X-Request-ID")
     if not request.headers.get("X-Timestamp"):
         missing.append("X-Timestamp")
     if not request.headers.get("X-Client-Version"):
         missing.append("X-Client-Version")
-    if not request.headers.get("X-API-Key"):
+    if not x_api_key:
         missing.append("X-API-Key")
     if missing:
         return Response(
             status_code=200,
             content='{"status": "blocked", "reason": "Missing required headers: ' + ', '.join(missing) + '", "trace_id": "' + trace_id + '"}',
+            media_type="application/json",
+            headers={"X-Trace-Id": trace_id}
+        )
+    # Check API key value if env is set
+    expected_key = os.environ.get("VERITTA_BETA_API_KEY")
+    if expected_key and x_api_key != expected_key:
+        return Response(
+            status_code=200,
+            content='{"status": "blocked", "reason": "Invalid API key", "trace_id": "' + trace_id + '"}',
             media_type="application/json",
             headers={"X-Trace-Id": trace_id}
         )
