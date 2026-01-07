@@ -278,7 +278,12 @@ async def get_pipelines() -> List[Dict]:
 async def get_docs() -> List[Dict]:
     if not NOTION_PAGE_DOCS_ID:
         raise Exception("MISSING_CONFIG")
-    page = await client.get_page(NOTION_PAGE_DOCS_ID)
+    try:
+        page = await client.get_page(NOTION_PAGE_DOCS_ID)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 400:
+            raise
+        # If 400, skip page retrieval, proceed with blocks
     blocks = await client.get_block_children(NOTION_PAGE_DOCS_ID)
     # Placeholder: extract child pages
     docs = [{'title': block.get('child_page', {}).get('title', 'unknown'), 'notion_url': f"https://www.notion.so/{block['id'].replace('-', '')}"} for block in blocks if block.get('type') == 'child_page']
