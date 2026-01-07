@@ -42,6 +42,7 @@ from app.gates_f21 import run_f21_chain
 from app.gates_f23 import run_f23_chain
 from app.api.admin import router as admin_router
 from app.routes.preferences import router as preferences_router
+from app.routes.notion import router as notion_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,6 +59,9 @@ app.include_router(admin_router)
 
 # Register preferences API router (F9.9-A)
 app.include_router(preferences_router)
+
+# Register notion read-only API router (Phase 4)
+app.include_router(notion_router)
 
 # Register middleware (T1: G6 trace correlation)
 app.add_middleware(TraceCorrelationMiddleware)
