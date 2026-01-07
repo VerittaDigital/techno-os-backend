@@ -253,6 +253,13 @@ async def self_test_endpoint(trace_id_or_response = Depends(validate_headers)):
             media_type="application/json",
             headers={"X-Trace-Id": trace_id}
         )
+    except Exception as e:
+        return Response(
+            status_code=200,
+            content=json.dumps({"status": "error", "message": "Internal error", "trace_id": trace_id}),
+            media_type="application/json",
+            headers={"X-Trace-Id": trace_id}
+        )
 @router.get("/config_summary")
 async def config_summary_endpoint(trace_id_or_response = Depends(validate_headers)):
     if isinstance(trace_id_or_response, Response):
