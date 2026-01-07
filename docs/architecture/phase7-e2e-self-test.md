@@ -42,3 +42,17 @@ Provide deterministic, fail-closed validation of Notion read-only integration en
 
 ## SEAL
 Phase 7 implemented and sealed.
+
+**Backend Commit Hash:** 94ebda86cb4ba766bbf01944e27ab26edf8168d4
+
+**Console Commit Hash:** 55af3cd
+
+**Evidence:**
+- /v1/notion/self_test endpoint added, fail-closed.
+- Checks restricted to existing whitelist only (agents, arcontes, audit, actions, evidence, pipelines, docs, governance).
+- No secrets in repo; git grep clean.
+- Tests pass.
+- Smoke script works.
+- Doc created.
+- Repo clean post-commit.
+- Console uses gatewayClient only, no localStorage, anti-network passes, no logs/raw rendering.

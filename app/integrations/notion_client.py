@@ -48,6 +48,49 @@ REDACTION_PATTERNS = [
     (r'(\w+)://([^:/@]+):([^@]+)@', r'\1://\2:***REDACTED***@'),  # user:pass in URLs
 ]
 
+# In-memory cache for self_test (TTL 30s)
+CACHE_TTL = 30
+_cache = {}
+
+
+def get_cached_result(name: str) -> Optional[Dict[str, Any]]:
+    """Get cached result if not expired."""
+    if name in _cache:
+        result, timestamp = _cache[name]
+        if time.time() - timestamp < CACHE_TTL:
+            return result
+        else:
+            del _cache[name]
+    return None
+
+
+def set_cached_result(name: str, result: Dict[str, Any]) -> None:
+    """Set cached result with timestamp."""
+    _cache[name] = (result, time.time())
+
+def sanitize_trace_id(trace_id: str) -> str:
+    if not trace_id:
+        return trace_id
+    # Mask sensitive query params
+    trace_id = re.sub(r'([?&])(token|apikey|signature|secret|password|pwd)=([^&]*)', r'\1\2=***', trace_id)
+    # Mask embedded credentials
+    trace_id = re.sub(r'(\w+):([^@]+)@', r'\1:***@', trace_id)
+    return trace_id
+
+# Cache for self_test
+SELF_TEST_CACHE = {}
+CACHE_TTL = 30  # seconds
+
+def get_cached_result(check_name: str):
+    if check_name in SELF_TEST_CACHE:
+        cached = SELF_TEST_CACHE[check_name]
+        if time.time() - cached['timestamp'] < CACHE_TTL:
+            return cached['result']
+    return None
+
+def set_cached_result(check_name: str, result):
+    SELF_TEST_CACHE[check_name] = {'result': result, 'timestamp': time.time()}
+
 # Simple cache (in-memory, TTL 60s)
 _cache: Dict[str, Dict[str, Any]] = {}
 
@@ -267,10 +310,11 @@ async def self_test() -> List[Dict[str, Any]]:
     missing_envs = [env for env in REQUIRED_ENVS if not os.getenv(env)]
     if missing_envs:
         results.append({
-            "check_name": "env_validation",
+            "name": "env_validation",
             "status": "blocked",
-            "safe_counts": None,
-            "reason_code": "MISSING_ENV_VARS"
+            "code": "ENV_MISSING",
+            "message_safe": "Required environment variables missing",
+            "duration_ms": 0
         })
         return results  # Fail-closed
 
@@ -287,36 +331,79 @@ async def self_test() -> List[Dict[str, Any]]:
     ]
 
     for name, func in surfaces:
+        cached = get_cached_result(name)
+        if cached:
+            results.append(cached)
+            continue
+
+        start_time = time.time()
         try:
             data = await func()
-            # Safe counts: len for lists, total_policies for governance, else 1
+            duration_ms = int((time.time() - start_time) * 1000)
+            # Safe counts
             if isinstance(data, list):
                 count = len(data)
             elif isinstance(data, dict) and "total_policies" in data:
                 count = data.get("total_policies", 0)
             else:
                 count = 1
-            results.append({
-                "check_name": name,
+            result = {
+                "name": name,
                 "status": "pass",
-                "safe_counts": count,
-                "reason_code": None
-            })
-        except Exception as e:
-            reason = str(e)
-            if "MISSING_CONFIG" in reason:
-                reason_code = "MISSING_CONFIG"
-            elif "429" in reason or "rate limit" in reason.lower():
-                reason_code = "RATE_LIMITED"
-            elif "timeout" in reason.lower() or "connect" in reason.lower():
-                reason_code = "TIMEOUT"
+                "code": None,
+                "message_safe": None,
+                "duration_ms": duration_ms
+            }
+        except httpx.HTTPStatusError as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            if e.response.status_code == 401:
+                code = "NOTION_AUTH_FAILED"
+                message_safe = "Notion integration authentication failed"
+            elif e.response.status_code == 403:
+                code = "NOTION_FORBIDDEN"
+                message_safe = "Notion integration likely not shared to this database/page (Share → Connections → Can read)"
+            elif e.response.status_code == 404:
+                code = "NOTION_NOT_SHARED"
+                message_safe = "Notion integration likely not shared to this database/page (Share → Connections → Can read)"
+            elif e.response.status_code == 429:
+                code = "RATE_LIMITED"
+                message_safe = "Rate limited by Notion API"
             else:
-                reason_code = "INTERNAL_ERROR"
-            results.append({
-                "check_name": name,
+                code = "HTTP_ERROR"
+                message_safe = "Notion API error"
+            result = {
+                "name": name,
                 "status": "blocked",
-                "safe_counts": None,
-                "reason_code": reason_code
-            })
+                "code": code,
+                "message_safe": message_safe,
+                "duration_ms": duration_ms
+            }
+        except httpx.TimeoutException:
+            duration_ms = int((time.time() - start_time) * 1000)
+            result = {
+                "name": name,
+                "status": "blocked",
+                "code": "TIMEOUT",
+                "message_safe": "Request timeout",
+                "duration_ms": duration_ms
+            }
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            if str(e) == "MISSING_CONFIG":
+                code = "NOTION_TOKEN_MISSING"
+                message_safe = "Notion token or database ID missing"
+            else:
+                code = "PARSE_ERROR"
+                message_safe = "Data parsing error"
+            result = {
+                "name": name,
+                "status": "blocked",
+                "code": code,
+                "message_safe": message_safe,
+                "duration_ms": duration_ms
+            }
+
+        set_cached_result(name, result)
+        results.append(result)
 
     return results

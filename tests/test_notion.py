@@ -60,9 +60,11 @@ async def test_self_test_missing_env():
         from app.integrations.notion_client import self_test
         results = await self_test()
         assert len(results) == 1
-        assert results[0]["check_name"] == "env_validation"
+        assert results[0]["name"] == "env_validation"
         assert results[0]["status"] == "blocked"
-        assert results[0]["reason_code"] == "MISSING_ENV_VARS"
+        assert results[0]["code"] == "ENV_MISSING"
+        assert results[0]["message_safe"] == "Required environment variables missing"
+        assert results[0]["duration_ms"] == 0
     finally:
         if original:
             os.environ["NOTION_TOKEN"] = original
@@ -70,13 +72,23 @@ async def test_self_test_missing_env():
 
 @pytest.mark.asyncio
 async def test_self_test_all_pass():
-    # Assuming envs are set (in test env), and mocks succeed
-    from app.integrations.notion_client import self_test
-    results = await self_test()
-    assert len(results) > 1  # env + surfaces
-    # In real, mock the functions to pass
-    # For now, depends on actual env
-    assert not any("rows" in k for k in summary.keys())
+    # Set required envs temporarily
+    import os
+    original_envs = {}
+    for env in ["NOTION_TOKEN", "NOTION_DB_ARCONTES_ID", "NOTION_DB_ORDO36_AGENTS_ID", "NOTION_DB_AUDIT_ID", "NOTION_DB_ACTIONS_ID", "NOTION_DB_EVIDENCE_ID", "NOTION_DB_PIPELINES_ID"]:
+        original_envs[env] = os.environ.get(env)
+        os.environ[env] = "test_value"
+    try:
+        from app.integrations.notion_client import self_test
+        results = await self_test()
+        assert len(results) > 1  # env + surfaces
+        # In real, mock the functions to pass
+    finally:
+        for env, val in original_envs.items():
+            if val is not None:
+                os.environ[env] = val
+            else:
+                os.environ.pop(env, None)
 
 
 # Smoke test placeholder
