@@ -247,7 +247,7 @@ docker-compose.yml configuration:
   ├─ Expected backend: https://api.verittadigital.com
   ├─ Network: techno-net (external, must exist)
   ├─ API Key: X-API-Key header (how is it provisioned?)
-  └─ Environment: NEXT_PUBLIC_API_URL (configurable)
+  └─ Environment: NEXT_PUBLIC_API_BASE_URL (configurable)
 ```
 
 **Questions:**

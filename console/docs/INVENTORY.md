@@ -10,7 +10,7 @@
 
 **Discovery Method:** `.next/static/chunks/app/page.js` (webpack-bundled client API)  
 **Evidence Chains:** 3 primary function exports (`executeCommand`, `fetchAuditLog`, `fetchMemory`)  
-**API Base URL:** Configured via `NEXT_PUBLIC_API_URL` (gated: `http://localhost:8000`, prod: `https://api.verittadigital.com`)  
+**API Base URL:** Configured via `NEXT_PUBLIC_API_BASE_URL` (gated: `http://localhost:8000`, prod: `https://api.verittadigital.com`)  
 **Auth Method:** `X-API-Key` header (from `NEXT_PUBLIC_API_KEY`)  
 **Timeout:** 15 seconds (AbortController + `DEFAULT_TIMEOUT`)  
 **Fail-Closed:** Missing/invalid responses → `status: 'BLOCKED'`
@@ -196,7 +196,7 @@ Array<{
 
 | Setting | Source | Value |
 |---------|--------|-------|
-| **API_BASE_URL** | `NEXT_PUBLIC_API_URL` env var | Gated: `http://localhost:8000` |
+| **API_BASE_URL** | `NEXT_PUBLIC_API_BASE_URL` env var | Gated: `http://localhost:8000` |
 | **API_KEY** | `NEXT_PUBLIC_API_KEY` env var | From build; injected at compile time |
 | **DEFAULT_TIMEOUT** | Hardcoded constant | 15000 ms (15 seconds) |
 | **Fail-Closed Fallback** | Hardcoded logic | `status: 'BLOCKED'` if any error |

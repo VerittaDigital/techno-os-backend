@@ -290,7 +290,7 @@ docker-compose down
 - ✅ Docker installed (24.x+)
 - ✅ docker-compose installed (2.x+)
 - ✅ Network created: `docker network create techno-net`
-- ✅ Backend API endpoint configured (NEXT_PUBLIC_API_URL)
+- ✅ Backend API endpoint configured (NEXT_PUBLIC_API_BASE_URL)
 
 ### Deployment Steps
 ```bash

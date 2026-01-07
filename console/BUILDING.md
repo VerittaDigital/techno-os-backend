@@ -96,7 +96,7 @@ docker-compose down
 **Environment Variables (docker-compose.yml):**
 ```yaml
 NODE_ENV: production
-NEXT_PUBLIC_API_URL: https://api.verittadigital.com
+NEXT_PUBLIC_API_BASE_URL: https://api.verittadigital.com
 NEXT_TELEMETRY_DISABLED: 1
 ```
 
@@ -169,7 +169,7 @@ const nextConfig = {
 - `NODE_ENV=production` — Production mode
 
 ### Runtime Variables (in docker-compose.yml)
-- `NEXT_PUBLIC_API_URL` — Backend API endpoint
+- `NEXT_PUBLIC_API_BASE_URL` — Backend API endpoint
 - Can be overridden via `-e` flag in docker run
 
 ### Local Development (.env.local)
@@ -198,7 +198,7 @@ node_modules/
 **Solution:**
 ```bash
 docker logs techno-console
-# Check NEXT_PUBLIC_API_URL is set
+# Check NEXT_PUBLIC_API_BASE_URL is set
 docker-compose down && docker-compose up
 ```
 

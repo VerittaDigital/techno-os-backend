@@ -113,7 +113,7 @@ When removing an endpoint (MAJOR version):
 - If parse error → return null
 
 ### /process (Legacy)
-- Missing `NEXT_PUBLIC_API_URL` → Error before fetch
+- Missing `NEXT_PUBLIC_API_BASE_URL` → Error before fetch
 - 401/403 → Mapped to "Autenticacao falhou"
 
 ---
