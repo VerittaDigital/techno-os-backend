@@ -95,3 +95,19 @@ async def test_self_test_all_pass():
 def test_smoke_health():
     # In real, call /health then /v1/notion/agents
     pass
+
+
+def test_no_forbidden_log_patterns():
+    """Guard: Ensure no forbidden patterns in logger calls."""
+    import subprocess
+    forbidden_patterns = [
+        r'Authorization:',
+        r'X-API-Key',
+        r'notion\.so/',
+        r'api\.notion\.com/',
+        r'Bearer\s+[A-Za-z0-9._=-]{16,}'
+    ]
+    for pattern in forbidden_patterns:
+        # Check only in logger calls
+        result = subprocess.run(f'grep -r "logger\." app/ | grep "{pattern}"', shell=True, capture_output=True, text=True)
+        assert result.returncode != 0, f"Forbidden pattern '{pattern}' found in logger calls: {result.stdout}"

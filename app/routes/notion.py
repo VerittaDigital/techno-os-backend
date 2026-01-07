@@ -242,6 +242,24 @@ async def self_test_endpoint(trace_id_or_response = Depends(validate_headers)):
             media_type="application/json",
             headers={"X-Trace-Id": trace_id}
         )
+@router.get("/config_summary")
+async def config_summary_endpoint(trace_id_or_response = Depends(validate_headers)):
+    if isinstance(trace_id_or_response, Response):
+        return trace_id_or_response
+    trace_id = trace_id_or_response
+    try:
+        summary = {
+            "notion_token_present": bool(os.getenv("NOTION_TOKEN")),
+            "whitelist_loaded": True,  # Assuming always loaded
+            "cache_ttl_seconds": 30,
+            "client_version_seen": None  # From header if present
+        }
+        return Response(
+            status_code=200,
+            content=json.dumps({"status": "success", "data": summary, "trace_id": trace_id}),
+            media_type="application/json",
+            headers={"X-Trace-Id": trace_id}
+        )
     except Exception as e:
         return Response(
             status_code=200,

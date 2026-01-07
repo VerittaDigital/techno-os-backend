@@ -52,7 +52,20 @@ async def lifespan(app: FastAPI):
     yield
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
+# ... existing imports ...
+
 app = FastAPI(title="Techno OS API", version="0.1.0", lifespan=lifespan)
+
+# CORS for console origins (fail-closed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://techno-os-console.vercel.app"],  # Specify console origins
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 # Register admin API router
 app.include_router(admin_router)
