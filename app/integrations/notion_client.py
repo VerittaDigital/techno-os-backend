@@ -38,13 +38,14 @@ REQUIRED_ENVS = [
 # Redaction patterns for Tier-2
 REDACTION_PATTERNS = [
     (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '***@***'),  # emails
-    (r'\b\d{3}\.\d{3}\.\d{3}-\d{2}\b', '***.***.***-**'),  # CPF-like
-    (r'\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b', '**.***.***/****-**'),  # CNPJ-like
-    (r'\b\d{10,11}\b', '***********'),  # phone-like
+    (r'\b\d{3}\.\d{3}\.\d{3}-\d{2}\b', '***.***.***-**'),  # CPF
+    (r'\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b', '**.***.***/****-**'),  # CNPJ
+    (r'\b\d{10,11}\b', '***********'),  # phone
     (r'Authorization:\s*Bearer\s+[A-Za-z0-9._=-]{16,}', 'Authorization: Bearer ***REDACTED***'),
     (r'X-API-Key:\s*[A-Za-z0-9._=-]{12,}', 'X-API-Key: ***REDACTED***'),
-    (r'\b[A-Za-z0-9_-]{20,}\b', '***REDACTED***'),  # high entropy tokens
-    (r'[?&](token|apikey|signature)=[^&\s]+', '?***=***REDACTED***'),  # URL params
+    (r'\b[A-Za-z0-9_-]{20,}\b', '***REDACTED***'),  # high entropy
+    (r'[?&](token|apikey|signature|password)=[^&\s]+', '?***=***REDACTED***'),  # URL params
+    (r'(\w+)://([^:/@]+):([^@]+)@', r'\1://\2:***REDACTED***@'),  # user:pass in URLs
 ]
 
 # Simple cache (in-memory, TTL 60s)
@@ -240,10 +241,19 @@ async def get_docs() -> List[Dict]:
     docs = [{'title': block.get('child_page', {}).get('title', 'unknown'), 'notion_url': f"https://www.notion.so/{block['id'].replace('-', '')}"} for block in blocks if block.get('type') == 'child_page']
     return docs
 
-async def get_governance() -> List[Dict]:
-    # Placeholder: list of pages
-    pages = []
-    if NOTION_PAGE_CICLO_SUPERIOR_ID:
-        pages.append({'title': 'Ciclo Superior', 'notion_url': f"https://www.notion.so/{NOTION_PAGE_CICLO_SUPERIOR_ID.replace('-', '')}"})
-    # Add others similarly
-    return pages
+async def get_governance_summary() -> Dict:
+    # High-level summary: counts + deep-links, no row listing
+    summary = {
+        "logos_count": 0,  # placeholder
+        "noesis_count": 0,
+        "synchronos_count": 0,
+        "deep_links": {
+            "logos": NOTION_PAGE_LOGOS_ID and f"https://www.notion.so/{NOTION_PAGE_LOGOS_ID.replace('-', '')}" or None,
+            "principios_logos": NOTION_PAGE_PRINCIPIOS_LOGOS_ID and f"https://www.notion.so/{NOTION_PAGE_PRINCIPIOS_LOGOS_ID.replace('-', '')}" or None,
+            "noesis": NOTION_PAGE_NOESIS_ID and f"https://www.notion.so/{NOTION_PAGE_NOESIS_ID.replace('-', '')}" or None,
+            "synchronos": NOTION_PAGE_SYNCHRONOS_ID and f"https://www.notion.so/{NOTION_PAGE_SYNCHRONOS_ID.replace('-', '')}" or None,
+            "nucleo_interno": NOTION_PAGE_NUCLEO_INTERNO_ID and f"https://www.notion.so/{NOTION_PAGE_NUCLEO_INTERNO_ID.replace('-', '')}" or None
+        }
+    }
+    # In real, query for counts, but placeholder
+    return summary

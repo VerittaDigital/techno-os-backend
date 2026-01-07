@@ -41,6 +41,16 @@ async def test_agents_endpoint_missing_config():
             os.environ["NOTION_DB_ORDO36_AGENTS_ID"] = original
 
 
+@pytest.mark.asyncio
+async def test_governance_summary_no_rows():
+    from app.integrations.notion_client import get_governance_summary
+    summary = await get_governance_summary()
+    assert "logos_count" in summary
+    assert "deep_links" in summary
+    # No row listing
+    assert not any("rows" in k for k in summary.keys())
+
+
 # Smoke test placeholder
 def test_smoke_health():
     # In real, call /health then /v1/notion/agents
