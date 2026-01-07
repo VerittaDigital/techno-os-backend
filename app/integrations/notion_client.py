@@ -257,3 +257,66 @@ async def get_governance_summary() -> Dict:
     }
     # In real, query for counts, but placeholder
     return summary
+
+
+async def self_test() -> List[Dict[str, Any]]:
+    """Self-test for Notion read-only integration (fail-closed)."""
+    results = []
+
+    # Check required env vars (boolean only, no exposure)
+    missing_envs = [env for env in REQUIRED_ENVS if not os.getenv(env)]
+    if missing_envs:
+        results.append({
+            "check_name": "env_validation",
+            "status": "blocked",
+            "safe_counts": None,
+            "reason_code": "MISSING_ENV_VARS"
+        })
+        return results  # Fail-closed
+
+    # Surfaces to check (read-only, minimal)
+    surfaces = [
+        ("agents", get_agents),
+        ("arcontes", get_arcontes),
+        ("audit", get_audit),
+        ("actions", get_actions),
+        ("evidence", get_evidence),
+        ("pipelines", get_pipelines),
+        ("docs", get_docs),
+        ("governance_summary", get_governance_summary)
+    ]
+
+    for name, func in surfaces:
+        try:
+            data = await func()
+            # Safe counts: len for lists, total_policies for governance, else 1
+            if isinstance(data, list):
+                count = len(data)
+            elif isinstance(data, dict) and "total_policies" in data:
+                count = data.get("total_policies", 0)
+            else:
+                count = 1
+            results.append({
+                "check_name": name,
+                "status": "pass",
+                "safe_counts": count,
+                "reason_code": None
+            })
+        except Exception as e:
+            reason = str(e)
+            if "MISSING_CONFIG" in reason:
+                reason_code = "MISSING_CONFIG"
+            elif "429" in reason or "rate limit" in reason.lower():
+                reason_code = "RATE_LIMITED"
+            elif "timeout" in reason.lower() or "connect" in reason.lower():
+                reason_code = "TIMEOUT"
+            else:
+                reason_code = "INTERNAL_ERROR"
+            results.append({
+                "check_name": name,
+                "status": "blocked",
+                "safe_counts": None,
+                "reason_code": reason_code
+            })
+
+    return results

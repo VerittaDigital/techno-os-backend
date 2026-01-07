@@ -6,7 +6,7 @@ import uuid
 import json
 
 from app.integrations.notion_client import (
-    get_agents, get_arcontes, get_audit, get_actions, get_evidence, get_pipelines, get_docs, get_governance_summary
+    get_agents, get_arcontes, get_audit, get_actions, get_evidence, get_pipelines, get_docs, get_governance_summary, self_test
 )
 
 router = APIRouter(prefix="/v1/notion", tags=["notion"])
@@ -224,6 +224,28 @@ async def list_governance_summary(trace_id_or_response = Depends(validate_header
         return Response(
             status_code=200,
             content='{"status": "error", "message": "Internal error", "trace_id": "' + trace_id + '"}',
+            media_type="application/json",
+            headers={"X-Trace-Id": trace_id}
+        )
+
+@router.get("/self_test")
+async def self_test_endpoint(trace_id_or_response = Depends(validate_headers)):
+    if isinstance(trace_id_or_response, Response):
+        return trace_id_or_response
+    trace_id = trace_id_or_response
+    try:
+        checks = await self_test()
+        overall_status = "success" if all(c["status"] == "pass" for c in checks) else "blocked"
+        return Response(
+            status_code=200,
+            content=json.dumps({"status": overall_status, "data": checks, "trace_id": trace_id}),
+            media_type="application/json",
+            headers={"X-Trace-Id": trace_id}
+        )
+    except Exception as e:
+        return Response(
+            status_code=200,
+            content=json.dumps({"status": "error", "message": "Internal error", "trace_id": trace_id}),
             media_type="application/json",
             headers={"X-Trace-Id": trace_id}
         )
